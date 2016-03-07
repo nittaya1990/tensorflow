@@ -251,6 +251,8 @@ def import_graph_def(graph_def, input_map=None, return_elements=None,
           class_values = value.list
           new_class_values = []
           for class_value in class_values.s:
+            if isinstance(class_value, bytes):
+              class_value = class_value.decode()
             if class_value.startswith('loc:@'):
               op_to_bind_to = class_value[5:]
               # Find the op by its original name.
