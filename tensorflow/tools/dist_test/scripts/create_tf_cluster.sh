@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+# Copyright 2016 Google Inc. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+#
+# Create a Kubernetes (k8s) cluster of TensorFlow workers
+#
+# Usage:
+#   create_tf_cluster.sh <num_workers> <num_parameter_servers>
+#
+# In addition, this script obeys values in the folllowing environment variables:
+#   TF_DIST_GCLOUD_PROJECT:       gcloud project in which the GKE cluster
+#                                 will be created (valid only if aforementioned
+#                                 TF_DIST_GRPC_SERVER_URL is empty).
+#   TF_DIST_GCLOUD_COMPUTE_ZONE:  gcloud compute zone.
+#   TF_DIST_CONTAINER_CLUSTER:    name of the GKE cluster
+#   TF_DIST_GCLOUD_KEY_FILE:      if non-empty, will override GCLOUD_KEY_FILE
+#   TF_DIST_GRPC_PORT:            overrides the default port (2222)
+#                                 to run the GRPC servers on
+
+# Helper functions
+die() {
+  echo $@
+  exit 1
+}
+
+# Configurations
+# gcloud operation timeout (steps)
+GCLOUD_OP_MAX_STEPS=240
+
+GRPC_PORT=2222
+
+DEFAULT_GCLOUD_BIN=/var/gcloud/google-cloud-sdk/bin/gcloud
+GCLOUD_KEY_FILE=/var/gcloud/secrets/tensorflow-testing.json
+GCLOUD_PROJECT=${TF_DIST_GCLOUD_PROJECT:-"tensorflow-testing"}
+
+GCLOUD_COMPUTE_ZONE=${TF_DIST_GCLOUD_COMPUTE_ZONE:-"us-central1-f"}
+CONTAINER_CLUSTER=${TF_DIST_CONTAINER_CLUSTER:-"test-cluster"}
+
+# Check input arguments
+if [[ $# != 2 ]]; then
+  die "Usage: $0 <num_workers> <num_parameter_servers>"
+fi
+
+NUM_WORKERS=$1
+NUM_PARAMETER_SERVERS=$2
+
+# Get current script directory
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Locate gcloud binary path
+GCLOUD_BIN=$(which gcloud)
+if [[ -z "${GCLOUD_BIN}" ]]; then
+  GCLOUD_BIN="${DEFAULT_GCLOUD_BIN}"
+fi
+
+if [[ ! -f "${GCLOUD_BIN}" ]]; then
+  die "gcloud binary cannot be found at: ${GCLOUD_BIN}"
+fi
+echo "Path to gcloud binary: ${GCLOUD_BIN}"
+
+# Path to kubectl binary
+KUBECTL_BIN=$(dirname "${GCLOUD_BIN}")/kubectl
+if [[ ! -f "${KUBECTL_BIN}" ]]; then
+  die "kubectl binary cannot be found at: ${KUBECTL_BIN}"
+fi
+echo "Path to kubectl binary: ${KUBECTL_BIN}"
+
+# Path to gcloud service key file
+if [[ ! -z "${TF_DIST_GCLOUD_KEY_FILE}" ]]; then
+  GCLOUD_KEY_FILE="${TF_DIST_GCLOUD_KEY_FILE}"
+fi
+
+if [[ ! -f "${GCLOUD_KEY_FILE}" ]]; then
+  die "gcloud service account key file cannot be found at: ${GCLOUD_KEY_FILE}"
+fi
+echo "Path to gcloud key file: ${GCLOUD_KEY_FILE}"
+
+echo "GCLOUD_PROJECT: ${GCLOUD_PROJECT}"
+echo "GCLOUD_COMPUTER_ZONE: ${GCLOUD_COMPUTE_ZONE}"
+echo "CONTAINER_CLUSTER: ${CONTAINER_CLUSTER}"
+
+# GRPC port
+if [[ ! -z "${TF_DIST_GRPC_PORT}" ]]; then
+  GRPC_PORT=${TF_DIST_GRPC_PORT}
+fi
+# Verify port string
+if [[ -z $(echo "${GRPC_PORT}" | grep -E "^[0-9]{1,5}") ]]; then
+  die "Invalid GRPC port: \"${GRPC_PORT}\""
+fi
+echo "GRPC port to be used when creating the k8s TensorFlow cluster: "\
+"${GRPC_PORT}"
+
+# Activate gcloud service account
+"${GCLOUD_BIN}" auth activate-service-account --key-file "${GCLOUD_KEY_FILE}"
+
+# Set gcloud project
+"${GCLOUD_BIN}" config set project "${GCLOUD_PROJECT}"
+
+# Set compute zone
+"${GCLOUD_BIN}" config set compute/zone "${GCLOUD_COMPUTE_ZONE}"
+
+# Set container cluster
+"${GCLOUD_BIN}" config set container/cluster "${CONTAINER_CLUSTER}"
+
+# Get container cluster credentials
+"${GCLOUD_BIN}" container clusters get-credentials "${CONTAINER_CLUSTER}"
+if [[ $? != "0" ]]; then
+  die "FAILED to get credentials for container cluster: ${CONTAINER_CLUSTER}"
+fi
+
+# If there is any existing tf k8s cluster, delete it first
+"${DIR}/delete_tf_cluster.sh" "${GCLOUD_OP_MAX_STEPS}"
+
+# Create yaml file for k8s TensorFlow cluster creation
+# Path to the (Python) script for generating k8s yaml file
+K8S_GEN_TF_YAML="${DIR}/k8s_tensorflow.py"
+if [[ ! -f ${K8S_GEN_TF_YAML} ]]; then
+  die "FAILED to find yaml-generating script at: ${K8S_GEN_TF_YAML}"
+fi
+
+# TODO(cais): Do not hard-code number of workers and parameter servers
+K8S_YAML="/tmp/k8s_tf_lb.yaml"
+rm -f "${K8S_YAML}"
+
+${K8S_GEN_TF_YAML} \
+    --num_workers=${NUM_WORKERS} \
+    --num_parameter_servers=${NUM_PARAMETER_SERVERS} \
+    --grpc_port=${GRPC_PORT} \
+    --request_load_balancer=True \
+    > "${K8S_YAML}" || \
+    die "Generation of the yaml configuration file for k8s cluster FAILED"
+
+if [[ ! -f "${K8S_YAML}" ]]; then
+  die "FAILED to generate yaml file for TensorFlow k8s container cluster"
+fi
+
+# Create tf k8s container cluster
+"${KUBECTL_BIN}" create -f "${K8S_YAML}"
+
+# Wait for external IP of worker services to become available
+get_tf_worker_external_ip() {
+  echo $("${KUBECTL_BIN}" get svc | grep "^tf-worker0" | \
+         awk '{print $3}' | grep -E "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")
+}
+
+echo "Waiting for external IP of tf-worker0 service to emerge..."
+
+COUNTER=0
+while true; do
+  sleep 1
+  ((COUNTER++))
+  if [[ $(echo "${COUNTER}>${GCLOUD_OP_MAX_STEPS}" | bc -l) == "1" ]]; then
+    die "Reached maximum polling steps while waiting for external IP "\
+"of tf-worker0 service to emerge"
+  fi
+
+  SVC_EXTERN_IP=$(get_tf_worker_external_ip)
+
+  if [[ ! -z "${SVC_EXTERN_IP}" ]]; then
+    break
+  fi
+done
+
+GRPC_SERVER_URL="grpc://${SVC_EXTERN_IP}:${GRPC_PORT}"
+echo "GRPC URL of tf-worker0: ${GRPC_SERVER_URL}"
+echo "Cluster setup complete."
