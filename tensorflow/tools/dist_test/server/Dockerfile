@@ -27,8 +27,7 @@ Run pip install ipython
 RUN pip --no-cache-dir install \
     http://ci.tensorflow.org/view/Nightly/job/nightly-matrix-cpu/TF_BUILD_CONTAINER_TYPE=CPU,TF_BUILD_IS_OPT=OPT,TF_BUILD_IS_PIP=PIP,TF_BUILD_PYTHON_VERSION=PYTHON2,label=cpu-slave/lastSuccessfulBuild/artifact/pip_test/whl/tensorflow-0.7.1-cp27-none-linux_x86_64.whl
 
-# Copy the GRPC server binary
-# TODO(cais): Use grpc python library
+# Copy GRPC server binary
 ADD server/grpc_tensorflow_server.py /tensorflow/grpc_tensorflow_server.py
 
 ADD . /var/tf-k8s

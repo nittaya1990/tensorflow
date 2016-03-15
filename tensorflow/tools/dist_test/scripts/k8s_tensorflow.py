@@ -22,8 +22,7 @@ The workers will be run in a Kubernetes (k8s) container cluster.
 import argparse
 import sys
 
-# TODO(cais): Do not hard-code
-DOCKER_IMAGE = 'cais/tf_grpc_test_server'
+DEFAULT_DOCKER_IMAGE = 'tensorflow/tf_grpc_test_server'
 DEFAULT_PORT = 2222
 
 # TODO(cais): Consider adding resource requests/limits to the pods.
@@ -135,6 +134,11 @@ def Main():
                       help='To request worker0 to be exposed on a public IP '
                       'address via an external load balancer, enabling you to '
                       'run client processes from outside the cluster')
+  parser.add_argument('--docker_image',
+                      type=str,
+                      default=DEFAULT_DOCKER_IMAGE,
+                      help='Override default docker image for the TensorFlow '
+                      'GRPC server')
   args = parser.parse_args()
 
   if args.num_workers <= 0:
@@ -151,18 +155,23 @@ def Main():
   yaml_config = GenerateConfig(args.num_workers,
                                args.num_parameter_servers,
                                args.grpc_port,
-                               args.request_load_balancer)
+                               args.request_load_balancer,
+                               args.docker_image )
   print yaml_config
 
 
-def GenerateConfig(num_workers, num_param_servers, port, request_load_balancer):
+def GenerateConfig(num_workers,
+                   num_param_servers,
+                   port,
+                   request_load_balancer,
+                   docker_image):
   """Generate configuration strings."""
   config = ''
   for worker in range(num_workers):
     config += WORKER_RC.format(
         port=port,
         worker_id=worker,
-        docker_image=DOCKER_IMAGE,
+        docker_image=docker_image,
         cluster_spec=WorkerClusterSpec(num_workers,
                                        num_param_servers,
                                        port))
@@ -179,7 +188,7 @@ def GenerateConfig(num_workers, num_param_servers, port, request_load_balancer):
     config += PARAM_SERVER_RC.format(
         port=port,
         param_server_id=param_server,
-        docker_image=DOCKER_IMAGE,
+        docker_image=docker_image,
         cluster_spec=ParamServerClusterSpec(num_workers,
                                             num_param_servers,
                                             port))

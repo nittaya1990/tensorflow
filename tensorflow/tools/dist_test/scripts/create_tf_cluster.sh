@@ -21,6 +21,8 @@
 #
 # In addition, this script obeys values in the folllowing environment variables:
 #   TF_DIST_LOCAL_CLUSTER:        create TensorFlow cluster on local machine
+#   TF_DIST_SERVER_DOCKER_IMAGE:  overrides the default docker image to launch
+#                                 TensorFlow (GRPC) servers with
 #   TF_DIST_GCLOUD_PROJECT:       gcloud project in which the GKE cluster
 #                                 will be created (valid only if aforementioned
 #                                 TF_DIST_GRPC_SERVER_URL is empty).
@@ -48,6 +50,9 @@ GCLOUD_PROJECT=${TF_DIST_GCLOUD_PROJECT:-"tensorflow-testing"}
 
 GCLOUD_COMPUTE_ZONE=${TF_DIST_GCLOUD_COMPUTE_ZONE:-"us-central1-f"}
 CONTAINER_CLUSTER=${TF_DIST_CONTAINER_CLUSTER:-"test-cluster"}
+
+SERVER_DOCKER_IMAGE=\
+    ${TF_DIST_SERVER_DOCKER_IMAGE:-"tensorflow/tf_grpc_test_server"}
 
 # Check input arguments
 if [[ $# != 2 ]]; then
@@ -144,7 +149,11 @@ fi
 K8S_YAML="/tmp/k8s_tf_lb.yaml"
 rm -f "${K8S_YAML}"
 
+echo "Generating k8s cluster yaml config file with server docker image: "\
+"${SERVER_DOCKER_IMAGE}"
+
 ${K8S_GEN_TF_YAML} \
+    --docker_image=${SERVER_DOCKER_IMAGE} \
     --num_workers=${NUM_WORKERS} \
     --num_parameter_servers=${NUM_PARAMETER_SERVERS} \
     --grpc_port=${GRPC_PORT} \
