@@ -132,7 +132,7 @@ if [[ ${IS_LOCAL_CLUSTER} == "0" ]]; then
   # If there is any existing tf k8s cluster, delete it first
   "${DIR}/delete_tf_cluster.sh" "${GCLOUD_OP_MAX_STEPS}"
 fi
-  
+
 # Create yaml file for k8s TensorFlow cluster creation
 # Path to the (Python) script for generating k8s yaml file
 K8S_GEN_TF_YAML="${DIR}/k8s_tensorflow.py"
@@ -175,20 +175,21 @@ are_all_pods_running() {
   else
     NS_FLAG="--namespace=$1"
   fi
-    
+
   NPODS=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | wc -l)
   NRUNNING=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | \
 		    grep "Running" | wc -l)
-  
+
   if [[ ${NPODS} == ${NRUNNING} ]]; then
     echo "1"
   else
     echo "0"
-  fi  
+  fi
 }
 
 if [[ ${IS_LOCAL_CLUSTER} == "0" ]]; then
   echo "Waiting for external IP of tf-worker0 service to emerge..."
+  echo ""
 
   COUNTER=0
   while true; do
@@ -211,7 +212,8 @@ if [[ ${IS_LOCAL_CLUSTER} == "0" ]]; then
 
 else
   echo "Waiting for tf pods to be all running..."
-    
+  echo ""
+
   COUNTER=0
   while true; do
     sleep 1
