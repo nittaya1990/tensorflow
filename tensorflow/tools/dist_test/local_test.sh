@@ -141,6 +141,6 @@ if [[ "${TEST_RES}" != "0" ]]; then
     die "Test of distributed TensorFlow runtime on docker-in-docker local "\
 "k8s cluster FAILED"
 else
-    echo "Test of distributed TensorFlow runtime on docker-in-docker local "
+    echo "Test of distributed TensorFlow runtime on docker-in-docker local "\
 "k8s cluster PASSED"
 fi
