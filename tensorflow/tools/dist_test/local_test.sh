@@ -24,8 +24,11 @@
 # 3) Call a script to launch a k8s TensorFlow GRPC cluster inside the container
 #    and run the distributed test suite.
 #
-# Usage: local_test.sh
+# Usage: local_test.sh [--leave-container-running]
 #
+# Arguments:
+# --leave-container-running:  Do not stop the docker-in-docker container after
+#                             the termination of the tests, e.g., for debugging
 
 # Configurations
 DOCKER_IMG_NAME="tensorflow/tf-dist-test-local-cluster"
@@ -122,15 +125,19 @@ docker exec ${DIND_ID} \
 TEST_RES=$?
 
 # Tear down: stop docker-in-docker container
-echo ""
-echo "Stopping docker-in-docker container ${DIND_ID}"
+if [[ $1 != "--leave-container-running" ]]; then
+  echo ""
+  echo "Stopping docker-in-docker container ${DIND_ID}"
 
-docker stop --time=1 ${DIND_ID} || \
-    echo "WARNING: Failed to stop container ${DIND_ID} !!"
+  docker stop --time=1 ${DIND_ID} || \
+      echo "WARNING: Failed to stop container ${DIND_ID} !!"
 
-echo ""
+  echo ""
+else
+  echo "Will not terminate DIND container ${DIND_ID}"
+fi
 
-if [[ TEST_RES != "0" ]]; then
+if [[ "${TEST_RES}" != "0" ]]; then
     die "Test of distributed TensorFlow runtime on docker-in-docker local "\
 "k8s cluster FAILED"
 else

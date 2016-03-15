@@ -29,11 +29,11 @@ RUN pip --no-cache-dir install \
 
 # Copy the GRPC server binary
 # TODO(cais): Use grpc python library
-ADD grpc_tensorflow_server /tensorflow/grpc_tensorflow_server
+ADD server/grpc_tensorflow_server.py /tensorflow/grpc_tensorflow_server.py
 
 ADD . /var/tf-k8s
 
 # Copy MNIST data for tests
 ADD server/mnist-data /tmp/mnist-data
 
-ENTRYPOINT ["/tensorflow/grpc_tensorflow_server"]
+ENTRYPOINT ["/tensorflow/grpc_tensorflow_server.py"]

@@ -67,7 +67,7 @@ while true; do
   timeout ${TIMEOUT} \
     "${MNIST_REPLICA}" \
         --worker_grpc_url="${WORKER_GRPC_URL}" \
-        --worker_index=${IDX} > \
+        --worker_index=${IDX} 2>&1 > \
     "${WKR_LOG_PREFIX}${IDX}.log" &
 
   INDICES="${INDICES} ${IDX}"

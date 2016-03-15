@@ -26,8 +26,7 @@ die() {
 
 # Check arguments
 if [[ $# != 1 ]]; then
-  echo "Usage: $0 <docker_image_name>"
-  exit 1
+  die "Usage: $0 <docker_image_name>"
 fi
 
 DOCKER_IMG_NAME=$1
