@@ -210,22 +210,6 @@ if [[ ${IS_LOCAL_CLUSTER} == "0" ]]; then
   echo "GRPC URL of tf-worker0: ${GRPC_SERVER_URL}"
 
 else
-  echo "Waiting for kube-system pods to be all running..."
-
-  COUNTER=0
-  while true; do
-    sleep 1
-    ((COUNTER++))
-    if [[ $(echo "${COUNTER}>${GCLOUD_OP_MAX_STEPS}" | bc -l) == "1" ]]; then
-      die "Reached maximum polling steps while waiting for all pods in "\
-"kube-system to be running in local k8s TensorFlow cluster"
-    fi
-
-    if [[ $(are_all_pods_running "kube-system") == "1" ]]; then
-      break
-    fi
-  done
-  
   echo "Waiting for tf pods to be all running..."
     
   COUNTER=0

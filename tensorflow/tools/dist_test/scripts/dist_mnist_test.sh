@@ -105,6 +105,15 @@ while true; do
   done
 
   if [[ "${N_AVAIL}" == "2" ]]; then
+    # Print out the content of the log files
+    for M in ${INDICES}; do
+      echo "==================================================="
+      echo "===        Log file from worker ${M}               ==="
+      cat "${WKR_LOG_PREFIX}${M}.log"
+      echo "==================================================="
+      echo ""
+    done
+
     break
   else
     sleep 1

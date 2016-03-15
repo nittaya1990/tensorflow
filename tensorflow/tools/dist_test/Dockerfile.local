@@ -18,6 +18,3 @@ RUN rm -f go1.4.2.linux-amd64.tar.gz
 RUN echo 'PATH=/usr/local/go/bin:${PATH}' >> /root/.bashrc
 
 ADD . /var/tf-k8s
-# ADD local /var/tf-k8s/local
-# ADD scripts /var/tf-k8s/scripts
-# ADD python /var/tf-k8s/python

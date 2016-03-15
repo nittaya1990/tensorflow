@@ -23,7 +23,7 @@ import argparse
 import sys
 
 # TODO(cais): Do not hard-code
-DOCKER_IMAGE = 'cais/grpc_tf_server'
+DOCKER_IMAGE = 'cais/tf_grpc_test_server'
 DEFAULT_PORT = 2222
 
 # TODO(cais): Consider adding resource requests/limits to the pods.

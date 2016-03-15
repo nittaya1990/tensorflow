@@ -31,7 +31,9 @@ RUN pip --no-cache-dir install \
 # TODO(cais): Use grpc python library
 ADD grpc_tensorflow_server /tensorflow/grpc_tensorflow_server
 
-# COPY gh-test.py /tensorflow/gh-test.py
 ADD . /var/tf-k8s
+
+# Copy MNIST data for tests
+ADD server/mnist-data /tmp/mnist-data
 
 ENTRYPOINT ["/tensorflow/grpc_tensorflow_server"]
