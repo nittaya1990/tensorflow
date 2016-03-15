@@ -63,7 +63,7 @@ if [[ ! -z "${GRPC_SERVER_URL}" ]]; then
   TEARDOWN_WHEN_DONE=0
   # Verify the validity of the GRPC URL
   if [[ -z $(echo "${GRPC_SERVER_URL}" | \
-      grep -E "^grpc://[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+") ]]; then
+      grep -E "^grpc://.+:[0-9]+") ]]; then
     die "Invalid GRPC_SERVER_URL: \"${GRPC_SERVER_URL}\""
   else
     echo "The preset GRPC_SERVER_URL appears to be valid: ${GRPC_SERVER_URL}"
@@ -90,7 +90,7 @@ else
   fi
 fi
 
-# Invoke the manager to perform distributed MNIST training
+# Invoke script to perform distributed MNIST training
 MNIST_DIST_TEST_BIN="${DIR}/dist_mnist_test.sh"
 if [[ ! -f "${MNIST_DIST_TEST_BIN}" ]]; then
   die "FAILED to find distributed mnist client test script at "\

@@ -20,6 +20,7 @@
 #   create_tf_cluster.sh <num_workers> <num_parameter_servers>
 #
 # In addition, this script obeys values in the folllowing environment variables:
+#   TF_DIST_LOCAL_CLUSTER:        create TensorFlow cluster on local machine
 #   TF_DIST_GCLOUD_PROJECT:       gcloud project in which the GKE cluster
 #                                 will be created (valid only if aforementioned
 #                                 TF_DIST_GRPC_SERVER_URL is empty).
@@ -59,37 +60,12 @@ NUM_PARAMETER_SERVERS=$2
 # Get current script directory
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Locate gcloud binary path
-GCLOUD_BIN=$(which gcloud)
-if [[ -z "${GCLOUD_BIN}" ]]; then
-  GCLOUD_BIN="${DEFAULT_GCLOUD_BIN}"
-fi
-
-if [[ ! -f "${GCLOUD_BIN}" ]]; then
-  die "gcloud binary cannot be found at: ${GCLOUD_BIN}"
-fi
-echo "Path to gcloud binary: ${GCLOUD_BIN}"
-
 # Path to kubectl binary
 KUBECTL_BIN=$(dirname "${GCLOUD_BIN}")/kubectl
 if [[ ! -f "${KUBECTL_BIN}" ]]; then
   die "kubectl binary cannot be found at: ${KUBECTL_BIN}"
 fi
 echo "Path to kubectl binary: ${KUBECTL_BIN}"
-
-# Path to gcloud service key file
-if [[ ! -z "${TF_DIST_GCLOUD_KEY_FILE}" ]]; then
-  GCLOUD_KEY_FILE="${TF_DIST_GCLOUD_KEY_FILE}"
-fi
-
-if [[ ! -f "${GCLOUD_KEY_FILE}" ]]; then
-  die "gcloud service account key file cannot be found at: ${GCLOUD_KEY_FILE}"
-fi
-echo "Path to gcloud key file: ${GCLOUD_KEY_FILE}"
-
-echo "GCLOUD_PROJECT: ${GCLOUD_PROJECT}"
-echo "GCLOUD_COMPUTER_ZONE: ${GCLOUD_COMPUTE_ZONE}"
-echo "CONTAINER_CLUSTER: ${CONTAINER_CLUSTER}"
 
 # GRPC port
 if [[ ! -z "${TF_DIST_GRPC_PORT}" ]]; then
@@ -102,27 +78,61 @@ fi
 echo "GRPC port to be used when creating the k8s TensorFlow cluster: "\
 "${GRPC_PORT}"
 
-# Activate gcloud service account
-"${GCLOUD_BIN}" auth activate-service-account --key-file "${GCLOUD_KEY_FILE}"
-
-# Set gcloud project
-"${GCLOUD_BIN}" config set project "${GCLOUD_PROJECT}"
-
-# Set compute zone
-"${GCLOUD_BIN}" config set compute/zone "${GCLOUD_COMPUTE_ZONE}"
-
-# Set container cluster
-"${GCLOUD_BIN}" config set container/cluster "${CONTAINER_CLUSTER}"
-
-# Get container cluster credentials
-"${GCLOUD_BIN}" container clusters get-credentials "${CONTAINER_CLUSTER}"
-if [[ $? != "0" ]]; then
-  die "FAILED to get credentials for container cluster: ${CONTAINER_CLUSTER}"
+if [[ -z "TF_DIST_LOCAL_CLUSTER" ]] ||
+   [[ "${TF_DIST_LOCAL_CLUSTER}" == "0" ]]; then
+  IS_LOCAL_CLUSTER="0"
+else
+  IS_LOCAL_CLUSTER="1"
 fi
 
-# If there is any existing tf k8s cluster, delete it first
-"${DIR}/delete_tf_cluster.sh" "${GCLOUD_OP_MAX_STEPS}"
+if [[ ${IS_LOCAL_CLUSTER} == "0" ]]; then
+  # Locate gcloud binary path
+  GCLOUD_BIN=$(which gcloud)
+  if [[ -z "${GCLOUD_BIN}" ]]; then
+    GCLOUD_BIN="${DEFAULT_GCLOUD_BIN}"
+  fi
 
+  if [[ ! -f "${GCLOUD_BIN}" ]]; then
+    die "gcloud binary cannot be found at: ${GCLOUD_BIN}"
+  fi
+  echo "Path to gcloud binary: ${GCLOUD_BIN}"
+
+  # Path to gcloud service key file
+  if [[ ! -z "${TF_DIST_GCLOUD_KEY_FILE}" ]]; then
+    GCLOUD_KEY_FILE="${TF_DIST_GCLOUD_KEY_FILE}"
+  fi
+
+  if [[ ! -f "${GCLOUD_KEY_FILE}" ]]; then
+    die "gcloud service account key file cannot be found at: ${GCLOUD_KEY_FILE}"
+  fi
+  echo "Path to gcloud key file: ${GCLOUD_KEY_FILE}"
+
+  echo "GCLOUD_PROJECT: ${GCLOUD_PROJECT}"
+  echo "GCLOUD_COMPUTER_ZONE: ${GCLOUD_COMPUTE_ZONE}"
+  echo "CONTAINER_CLUSTER: ${CONTAINER_CLUSTER}"
+
+  # Activate gcloud service account
+  "${GCLOUD_BIN}" auth activate-service-account --key-file "${GCLOUD_KEY_FILE}"
+
+  # Set gcloud project
+  "${GCLOUD_BIN}" config set project "${GCLOUD_PROJECT}"
+
+  # Set compute zone
+  "${GCLOUD_BIN}" config set compute/zone "${GCLOUD_COMPUTE_ZONE}"
+
+  # Set container cluster
+  "${GCLOUD_BIN}" config set container/cluster "${CONTAINER_CLUSTER}"
+
+  # Get container cluster credentials
+  "${GCLOUD_BIN}" container clusters get-credentials "${CONTAINER_CLUSTER}"
+  if [[ $? != "0" ]]; then
+    die "FAILED to get credentials for container cluster: ${CONTAINER_CLUSTER}"
+  fi
+
+  # If there is any existing tf k8s cluster, delete it first
+  "${DIR}/delete_tf_cluster.sh" "${GCLOUD_OP_MAX_STEPS}"
+fi
+  
 # Create yaml file for k8s TensorFlow cluster creation
 # Path to the (Python) script for generating k8s yaml file
 K8S_GEN_TF_YAML="${DIR}/k8s_tensorflow.py"
@@ -143,7 +153,10 @@ ${K8S_GEN_TF_YAML} \
     die "Generation of the yaml configuration file for k8s cluster FAILED"
 
 if [[ ! -f "${K8S_YAML}" ]]; then
-  die "FAILED to generate yaml file for TensorFlow k8s container cluster"
+    die "FAILED to generate yaml file for TensorFlow k8s container cluster"
+else
+    echo "Generated yaml configuration file for k8s TensorFlow cluster: "\
+"${K8S_YAML}"
 fi
 
 # Create tf k8s container cluster
@@ -155,24 +168,85 @@ get_tf_worker_external_ip() {
          awk '{print $3}' | grep -E "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")
 }
 
-echo "Waiting for external IP of tf-worker0 service to emerge..."
+are_all_pods_running() {
+  # Usage: area_all_pods_running ${namespace}
+  if [[ -z "$1" ]]; then
+    NS_FLAG=""
+  else
+    NS_FLAG="--namespace=$1"
+  fi
+    
+  NPODS=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | wc -l)
+  NRUNNING=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | \
+		    grep "Running" | wc -l)
+  
+  if [[ ${NPODS} == ${NRUNNING} ]]; then
+    echo "1"
+  else
+    echo "0"
+  fi  
+}
 
-COUNTER=0
-while true; do
-  sleep 1
-  ((COUNTER++))
-  if [[ $(echo "${COUNTER}>${GCLOUD_OP_MAX_STEPS}" | bc -l) == "1" ]]; then
-    die "Reached maximum polling steps while waiting for external IP "\
+if [[ ${IS_LOCAL_CLUSTER} == "0" ]]; then
+  echo "Waiting for external IP of tf-worker0 service to emerge..."
+
+  COUNTER=0
+  while true; do
+    sleep 1
+    ((COUNTER++))
+    if [[ $(echo "${COUNTER}>${GCLOUD_OP_MAX_STEPS}" | bc -l) == "1" ]]; then
+      die "Reached maximum polling steps while waiting for external IP "\
 "of tf-worker0 service to emerge"
-  fi
+    fi
 
-  SVC_EXTERN_IP=$(get_tf_worker_external_ip)
+    SVC_EXTERN_IP=$(get_tf_worker_external_ip)
 
-  if [[ ! -z "${SVC_EXTERN_IP}" ]]; then
-    break
-  fi
-done
+    if [[ ! -z "${SVC_EXTERN_IP}" ]]; then
+      break
+    fi
+  done
 
-GRPC_SERVER_URL="grpc://${SVC_EXTERN_IP}:${GRPC_PORT}"
-echo "GRPC URL of tf-worker0: ${GRPC_SERVER_URL}"
+  GRPC_SERVER_URL="grpc://${SVC_EXTERN_IP}:${GRPC_PORT}"
+  echo "GRPC URL of tf-worker0: ${GRPC_SERVER_URL}"
+
+else
+  echo "Waiting for kube-system pods to be all running..."
+
+  COUNTER=0
+  while true; do
+    sleep 1
+    ((COUNTER++))
+    if [[ $(echo "${COUNTER}>${GCLOUD_OP_MAX_STEPS}" | bc -l) == "1" ]]; then
+      die "Reached maximum polling steps while waiting for all pods in "\
+"kube-system to be running in local k8s TensorFlow cluster"
+    fi
+
+    if [[ $(are_all_pods_running "kube-system") == "1" ]]; then
+      break
+    fi
+  done
+  
+  echo "Waiting for tf pods to be all running..."
+    
+  COUNTER=0
+  while true; do
+    sleep 1
+    ((COUNTER++))
+    if [[ $(echo "${COUNTER}>${GCLOUD_OP_MAX_STEPS}" | bc -l) == "1" ]]; then
+      die "Reached maximum polling steps while waiting for all tf pods to "\
+"be running in local k8s TensorFlow cluster"
+    fi
+
+    if [[ $(are_all_pods_running) == "1" ]]; then
+      break
+    fi
+  done
+
+  # Determine the tf-worker0 docker container id
+  WORKER0_ID=$(docker ps | grep "k8s_tf-worker0" | awk '{print $1}')
+  echo "WORKER0 Docker container ID: ${WORKER0_ID}"
+
+fi
+
+
 echo "Cluster setup complete."

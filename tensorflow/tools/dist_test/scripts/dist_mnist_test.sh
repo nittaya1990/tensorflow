@@ -41,7 +41,7 @@ WORKER_GRPC_URL=$1
 
 # Verify the validity of the GRPC URL
 if [[ -z $(echo "${WORKER_GRPC_URL}" | \
-    grep -E "^grpc://[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+") ]]; then
+    grep -E "^grpc://.+:[0-9]+") ]]; then
   die "Invalid worker GRPC URL: \"${WORKER_GRPC_URL}\""
 fi
 

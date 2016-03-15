@@ -47,7 +47,7 @@
 #   TF_DIST_GRPC_PORT:            port on which to create the TensorFlow GRPC
 #                                 servers
 
-DOCKER_IMG_NAME="tf-dist-test-client"
+DOCKER_IMG_NAME="tensorflow/tf-dist-test-client"
 
 # Get current script directory
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
