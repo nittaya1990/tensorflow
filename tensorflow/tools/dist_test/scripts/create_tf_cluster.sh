@@ -38,7 +38,7 @@ die() {
 
 # Configurations
 # gcloud operation timeout (steps)
-GCLOUD_OP_MAX_STEPS=240
+GCLOUD_OP_MAX_STEPS=360
 
 GRPC_PORT=2222
 

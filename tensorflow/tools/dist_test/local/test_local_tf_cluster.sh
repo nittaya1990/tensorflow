@@ -68,7 +68,7 @@ are_all_pods_running() {
 echo "Waiting for kube-system pods to be all running..."
 echo ""
 
-MAX_ATTEMPTS=240
+MAX_ATTEMPTS=360
 COUNTER=0
 while true; do
   sleep 1
