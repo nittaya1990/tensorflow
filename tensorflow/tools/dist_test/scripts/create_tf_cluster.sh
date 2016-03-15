@@ -178,7 +178,7 @@ are_all_pods_running() {
 
   NPODS=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | wc -l)
   NRUNNING=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | \
-		    grep "Running" | wc -l)
+      grep "Running" | wc -l)
 
   if [[ ${NPODS} == ${NRUNNING} ]]; then
     echo "1"

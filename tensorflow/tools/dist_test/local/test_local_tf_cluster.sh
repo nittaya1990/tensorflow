@@ -56,7 +56,7 @@ are_all_pods_running() {
 
   NPODS=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | wc -l)
   NRUNNING=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | \
-	       grep "Running" | wc -l)
+      grep "Running" | wc -l)
 
   if [[ ${NPODS} == ${NRUNNING} ]]; then
     echo "1"
@@ -90,8 +90,8 @@ ${DIR}/../scripts/create_tf_cluster.sh \
     die "FAILED to create local tf cluster"
 
 DOCKER_CONTAINER_ID=$(cat /tmp/tf_cluster.log | \
-		          grep "Docker container ID" |
-			  awk '{print $NF}')
+    grep "Docker container ID" |
+    awk '{print $NF}')
 if [[ -z "${DOCKER_CONTAINER_ID}" ]]; then
   die "FAILED to determine worker0 Docker container ID"
 fi

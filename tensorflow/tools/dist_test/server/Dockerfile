@@ -4,7 +4,7 @@ FROM ubuntu:14.04
 RUN apt-get update && apt-get install -y \
         bc \
         curl \
-	dnsutils \
+        dnsutils \
         libfreetype6-dev \
         libpng12-dev \
         libzmq3-dev \
