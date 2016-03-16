@@ -17,6 +17,9 @@
 # Builds the test server for distributed (GRPC) TensorFlow
 #
 # Usage: build_server.sh <docker_image_name>
+#
+# This script obeys the following environment variables
+#   TF_DIST_DOCKER_NO_CACHE:      do not use cache when building docker images
 
 # Helper functions
 die() {
@@ -47,8 +50,14 @@ wget http://yann.lecun.com/exdb/mnist/t10k-labels-idx1-ubyte.gz \
 wget http://yann.lecun.com/exdb/mnist/t10k-images-idx3-ubyte.gz \
     -P ${TMP_DATA_DIR}/
 
+NO_CACHE_FLAG=""
+if [[ ! -z "${TF_DIST_DOCKER_NO_CACHE}" ]] &&
+   [[ "${TF_DIST_DOCKER_NO_CACHE}" != "0" ]]; then
+  NO_CACHE_FLAG="--no-cache"
+fi
+
 # Call docker build
-docker build -t "${DOCKER_IMG_NAME}" \
+docker build ${NO_CACHE_FLAG} -t "${DOCKER_IMG_NAME}" \
    -f "${DIR}/server/Dockerfile" \
    "${DIR}"
 
