@@ -42,10 +42,11 @@ die() {
 # gcloud operation timeout (steps)
 GCLOUD_OP_MAX_STEPS=360
 
-GRPC_PORT=2222
+GRPC_PORT=${TF_DIST_GRPC_PORT:-2222}
 
 DEFAULT_GCLOUD_BIN=/var/gcloud/google-cloud-sdk/bin/gcloud
-GCLOUD_KEY_FILE=/var/gcloud/secrets/tensorflow-testing.json
+GCLOUD_KEY_FILE=${TF_DIST_GCLOUD_KEY_FILE:-\
+    /var/gcloud/secrets/tensorflow-testing.json}
 GCLOUD_PROJECT=${TF_DIST_GCLOUD_PROJECT:-"tensorflow-testing"}
 
 GCLOUD_COMPUTE_ZONE=${TF_DIST_GCLOUD_COMPUTE_ZONE:-"us-central1-f"}
@@ -72,10 +73,6 @@ if [[ ! -f "${KUBECTL_BIN}" ]]; then
 fi
 echo "Path to kubectl binary: ${KUBECTL_BIN}"
 
-# GRPC port
-if [[ ! -z "${TF_DIST_GRPC_PORT}" ]]; then
-  GRPC_PORT=${TF_DIST_GRPC_PORT}
-fi
 # Verify port string
 if [[ -z $(echo "${GRPC_PORT}" | grep -E "^[0-9]{1,5}") ]]; then
   die "Invalid GRPC port: \"${GRPC_PORT}\""
@@ -103,10 +100,6 @@ if [[ ${IS_LOCAL_CLUSTER} == "0" ]]; then
   echo "Path to gcloud binary: ${GCLOUD_BIN}"
 
   # Path to gcloud service key file
-  if [[ ! -z "${TF_DIST_GCLOUD_KEY_FILE}" ]]; then
-    GCLOUD_KEY_FILE="${TF_DIST_GCLOUD_KEY_FILE}"
-  fi
-
   if [[ ! -f "${GCLOUD_KEY_FILE}" ]]; then
     die "gcloud service account key file cannot be found at: ${GCLOUD_KEY_FILE}"
   fi

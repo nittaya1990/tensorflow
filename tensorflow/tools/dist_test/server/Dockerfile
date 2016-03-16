@@ -1,5 +1,7 @@
 FROM ubuntu:14.04
 
+MAINTAINER Shanqing Cai <cais@google.com>
+
 # Pick up some TF dependencies
 RUN apt-get update && apt-get install -y \
         bc \
@@ -19,9 +21,6 @@ RUN apt-get update && apt-get install -y \
 RUN curl -O https://bootstrap.pypa.io/get-pip.py && \
     python get-pip.py && \
     rm get-pip.py
-
-# Install ipython
-Run pip install ipython
 
 # Install TensorFlow CPU version.
 RUN pip --no-cache-dir install \

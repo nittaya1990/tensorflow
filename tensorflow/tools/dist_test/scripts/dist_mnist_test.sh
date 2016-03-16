@@ -120,10 +120,6 @@ while true; do
   fi
 done
 
-# if [[ $? != "0" ]]; then
-#   die "At least one of the MNIST replica sessions FAILED"
-# fi
-
 # Sanity check on the validation entropies
 # TODO(cais): In addition to this basic sanity check, we could run the training
 # with 1 and 2 workers, each for a few times and use scipy.stats to do a t-test

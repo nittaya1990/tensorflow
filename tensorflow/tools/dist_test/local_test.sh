@@ -39,10 +39,6 @@
 DOCKER_IMG_NAME="tensorflow/tf-dist-test-local-cluster"
 LOCAL_K8S_CACHE=${HOME}/kubernetes
 
-# Arguments
-NUM_WORKERS=2
-NUM_PARAMETER_SERVERS=2
-
 # Helper function
 die() {
     echo $@
