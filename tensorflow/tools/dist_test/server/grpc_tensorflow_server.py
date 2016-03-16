@@ -31,6 +31,9 @@ Where:
     HOST is a hostname or IP address
     PORT is a port number
 """
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
 import tensorflow as tf
 

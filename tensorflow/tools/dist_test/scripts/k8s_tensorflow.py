@@ -18,6 +18,9 @@
 
 The workers will be run in a Kubernetes (k8s) container cluster.
 """
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
 import argparse
 import sys
@@ -157,7 +160,7 @@ def Main():
                                args.grpc_port,
                                args.request_load_balancer,
                                args.docker_image )
-  print yaml_config
+  print(yaml_config) # pylint: disable=superfluous-parens
 
 
 def GenerateConfig(num_workers,
