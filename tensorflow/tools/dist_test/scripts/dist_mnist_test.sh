@@ -55,7 +55,7 @@ WKR_LOG_PREFIX="/tmp/worker"
 
 # First, download the data from a single process, to avoid race-condition
 # during data downloading
-timeout ${TIMEOUT} "${MNIST_REPLICA}" \
+timeout ${TIMEOUT} python "${MNIST_REPLICA}" \
     --download_only=True || \
     die "Download-only step of MNIST replica FAILED"
 
@@ -65,7 +65,7 @@ INDICES=""
 IDX=0
 while true; do
   timeout ${TIMEOUT} \
-    "${MNIST_REPLICA}" \
+    python "${MNIST_REPLICA}" \
         --worker_grpc_url="${WORKER_GRPC_URL}" \
         --worker_index=${IDX} 2>&1 > \
     "${WKR_LOG_PREFIX}${IDX}.log" &

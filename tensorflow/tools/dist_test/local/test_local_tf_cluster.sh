@@ -54,6 +54,7 @@ are_all_pods_running() {
     NS_FLAG="--namespace=$1"
   fi
 
+  sleep 1  # Wait for the status to settle
   NPODS=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | wc -l)
   NRUNNING=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | \
       grep "Running" | wc -l)

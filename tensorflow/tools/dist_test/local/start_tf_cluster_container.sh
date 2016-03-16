@@ -51,6 +51,14 @@ if [[ ! -z "${TF_DIST_SERVER_DOCKER_IMAGE}" ]]; then
   DOCKER_ENV="-e TF_DIST_SERVER_DOCKER_IMAGE=${TF_DIST_SERVER_DOCKER_IMAGE}"
 fi
 
+# Verify that the promisc (promiscuous mode) flag is set on docker0 network
+# interface
+if [[ -z $(netstat -i | grep "^docker0" | awk '{print $NF}' | grep -o P) ]];
+then
+  die "FAILED: Cannot proceed with dind k8s container creation because "\
+"network interface 'docker0' is not set to promisc on the host."
+fi
+
 # Create cache for k8s source
 if [[ ! -d ${HOST_K8S_DIR} ]]; then
   umask 000
