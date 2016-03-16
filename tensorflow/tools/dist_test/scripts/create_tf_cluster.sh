@@ -51,8 +51,8 @@ GCLOUD_PROJECT=${TF_DIST_GCLOUD_PROJECT:-"tensorflow-testing"}
 GCLOUD_COMPUTE_ZONE=${TF_DIST_GCLOUD_COMPUTE_ZONE:-"us-central1-f"}
 CONTAINER_CLUSTER=${TF_DIST_CONTAINER_CLUSTER:-"test-cluster"}
 
-SERVER_DOCKER_IMAGE=\
-    ${TF_DIST_SERVER_DOCKER_IMAGE:-"tensorflow/tf_grpc_test_server"}
+SERVER_DOCKER_IMAGE=${TF_DIST_SERVER_DOCKER_IMAGE:-\
+    "tensorflow/tf_grpc_test_server"}
 
 # Check input arguments
 if [[ $# != 2 ]]; then
@@ -149,14 +149,19 @@ fi
 K8S_YAML="/tmp/k8s_tf_lb.yaml"
 rm -f "${K8S_YAML}"
 
-echo "Generating k8s cluster yaml config file with server docker image: "\
-"${SERVER_DOCKER_IMAGE}"
+echo ""
+echo "Generating k8s cluster yaml config file with the following settings"
+echo "  Server docker image: ${SERVER_DOCKER_IMAGE}"
+echo "  Number of workers: ${NUM_WORKERS}"
+echo "  Number of parameter servers: ${NUM_PARAMETER_SERVERS}"
+echo "  GRPC port: ${GRPC_PORT}"
+echo ""
 
 ${K8S_GEN_TF_YAML} \
-    --docker_image=${SERVER_DOCKER_IMAGE} \
-    --num_workers=${NUM_WORKERS} \
-    --num_parameter_servers=${NUM_PARAMETER_SERVERS} \
-    --grpc_port=${GRPC_PORT} \
+    --docker_image "${SERVER_DOCKER_IMAGE}" \
+    --num_workers "${NUM_WORKERS}" \
+    --num_parameter_servers "${NUM_PARAMETER_SERVERS}" \
+    --grpc_port "${GRPC_PORT}" \
     --request_load_balancer=True \
     > "${K8S_YAML}" || \
     die "Generation of the yaml configuration file for k8s cluster FAILED"
@@ -188,10 +193,18 @@ are_all_pods_running() {
   NPODS=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | wc -l)
   NRUNNING=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | \
       grep "Running" | wc -l)
+  NERR=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | \
+      grep "Err" | wc -l)
 
-  if [[ ${NPODS} == ${NRUNNING} ]]; then
+  if [[ ${NERR} != "0" ]]; then
+    # "2" signifies that error has occurred
+    echo "2"
+  elif [[ ${NPODS} == ${NRUNNING} ]]; then
+    # "1" signifies that all pods are in Running state
     echo "1"
   else
+    # "0" signifies that some pods have not entered Running state, but
+    # no error has occurred
     echo "0"
   fi
 }
@@ -232,7 +245,14 @@ else
 "be running in local k8s TensorFlow cluster"
     fi
 
-    if [[ $(are_all_pods_running) == "1" ]]; then
+    PODS_STAT=$(are_all_pods_running)
+
+    if [[ ${PODS_STAT} == "2" ]]; then
+      # Error has occurred
+      die "Error(s) occurred while tring to launch tf k8s cluster"
+    fi
+
+    if [[ ${PODS_STAT} == "1" ]]; then
       break
     fi
   done

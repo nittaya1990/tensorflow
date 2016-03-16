@@ -21,7 +21,12 @@
 #
 # local_k8s_dir:   Kubernetes (k8s) source directory on the host
 # docker_img_name: Name of the docker image to start
+#
+# In addition, this script obeys the following environment variables:
+# TF_DIST_SERVER_DOCKER_IMAGE:  overrides the default docker image to launch
+#                                 TensorFlow (GRPC) servers with
 
+# Parse input arguments
 if [[ $# != "2" ]]; then
   echo "Usage: $0 <host_k8s_dir> <docker_img_name>"
   exit 1
@@ -30,19 +35,37 @@ fi
 HOST_K8S_DIR=$1
 DOCKER_IMG_NAME=$2
 
+# Helper functions
+die() {
+  echo $@
+  exit 1
+}
+
 # Maximum number of tries to start the docker container with docker running
 # inside
 MAX_ATTEMPTS=100
+
+# Map environment variables into the docker-in-docker (dind) container
+DOCKER_ENV=""
+if [[ ! -z "${TF_DIST_SERVER_DOCKER_IMAGE}" ]]; then
+  DOCKER_ENV="-e TF_DIST_SERVER_DOCKER_IMAGE=${TF_DIST_SERVER_DOCKER_IMAGE}"
+fi
+
+# Create cache for k8s source
+if [[ ! -d ${HOST_K8S_DIR} ]]; then
+  umask 000
+  mkdir -p ${HOST_K8S_DIR} || die "FAILED to create directory for k8s source"
+fi
 
 # Attempt to start docker service in docker container.
 # Try multiple times if necessary.
 COUNTER=1
 while true; do
   ((COUNTER++))
-  docker run --net=host --privileged \
-      -v ${HOME}/${HOST_K8S_DIR}:/local/kubernetes \
-       ${DOCKER_IMG_NAME} \
-       /var/tf-k8s/local/start_local_k8s_service.sh
+  docker run --net=host --privileged ${DOCKER_ENV} \
+      -v ${HOST_K8S_DIR}:/local/kubernetes \
+      ${DOCKER_IMG_NAME} \
+      /var/tf-k8s/local/start_local_k8s_service.sh
 
   if [[ $? == "23" ]]; then
     if [[ $(echo "${COUNTER}>=${MAX_ATTEMPTS} | bc -l") == "1" ]]; then

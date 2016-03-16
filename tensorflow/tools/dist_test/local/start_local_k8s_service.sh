@@ -79,6 +79,7 @@ echo "Turned promisc on for docker0"
 # Check promiscuous mode of docker0
 netstat -i
 
+umask 000
 if [[ ! -d "${K8S_SRC_DIR}/.git" ]]; then
   mkdir -p ${K8S_SRC_DIR}
   git clone ${K8S_SRC_REPO} ${K8S_SRC_DIR} || \

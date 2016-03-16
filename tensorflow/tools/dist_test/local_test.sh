@@ -29,6 +29,11 @@
 # Arguments:
 # --leave-container-running:  Do not stop the docker-in-docker container after
 #                             the termination of the tests, e.g., for debugging
+#
+# In addition, this script obeys the following environment variables:
+# TF_DIST_SERVER_DOCKER_IMAGE:  overrides the default docker image to launch
+#                                 TensorFlow (GRPC) servers with
+
 
 # Configurations
 DOCKER_IMG_NAME="tensorflow/tf-dist-test-local-cluster"
@@ -89,25 +94,25 @@ echo "Waiting for docker-in-docker container for local k8s TensorFlow "\
 
 COUNTER=0
 while true; do
-    sleep 1
+  sleep 1
 
-    ((COUNTER++))
-    if [[ $(echo "${COUNTER}>=${MAX_ATTEMPTS} | bc -l") == "1" ]]; then
-	die "Reached maximum number of attempts (${MAX_ATTEMPTS}) "\
+  ((COUNTER++))
+  if [[ $(echo "${COUNTER}>=${MAX_ATTEMPTS} | bc -l") == "1" ]]; then
+    die "Reached maximum number of attempts (${MAX_ATTEMPTS}) "\
 "while waiting for docker-in-docker for local k8s TensorFlow cluster to start"
-    fi
+  fi
 
-    # Check for hitting max attempt while trying to start docker-in-docker
-    if [[ $(grep -i "Reached maximum number of attempts" \
-	         "${CONTAINER_START_LOG}" | wc -l) == "1" ]]; then
-	die "Docker-in-docker container for local k8s TensorFlow cluster "\
+  # Check for hitting max attempt while trying to start docker-in-docker
+  if [[ $(grep -i "Reached maximum number of attempts" \
+                  "${CONTAINER_START_LOG}" | wc -l) == "1" ]]; then
+    die "Docker-in-docker container for local k8s TensorFlow cluster "\
 "FAILED to start"
-    fi
+  fi
 
-    if [[ $(grep -i "Local Kubernetes cluster is running" \
-		 "${CONTAINER_START_LOG}" | wc -l) == "1" ]]; then
-	break
-    fi
+  if [[ $(grep -i "Local Kubernetes cluster is running" \
+          "${CONTAINER_START_LOG}" | wc -l) == "1" ]]; then
+    break
+  fi
 done
 
 # Determine the id of the docker-in-docker container
