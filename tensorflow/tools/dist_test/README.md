@@ -7,7 +7,7 @@ There are three general modes of testing:
 For example:
 
     export TF_DIST_SERVER_DOCKER_IMAGE="cais/tf_grpc_test_server"
-        ./local_test.sh
+    ./local_test.sh
 
 Here the environment variable TF_DIST_SERVER_DOCKER_IMAGE overrides the default Docker image used to generate the TensorFlow GRPC server pods ("tensorflow/tf_grpc_test_server").
 This option makes use of the docker-in-docker (dind) containers. It requires that the docker0 network interface is set to promiscuous mode on the host:
@@ -18,10 +18,10 @@ This option makes use of the docker-in-docker (dind) containers. It requires tha
 For example:
 
     export TF_DIST_GCLOUD_PROJECT="tensorflow-testing"
-        export TF_DIST_GCLOUD_COMPUTE_ZONE="us-central1-f"
-	    export CONTAINER_CLUSTER="test-cluster-1"
-	        export TF_DIST_GCLOUD_KEY_FILE_DIR="/tmp/gcloud-secrets"
-		    ./remote_test.sh
+    export TF_DIST_GCLOUD_COMPUTE_ZONE="us-central1-f"
+    export CONTAINER_CLUSTER="test-cluster-1"
+    export TF_DIST_GCLOUD_KEY_FILE_DIR="/tmp/gcloud-secrets"
+    ./remote_test.sh
 
 Here you specify the Google Compute Engine (GCE) project, compute zone and container cluster with the first three environment variables, in that order. The environment variable "TF_DIST_GCLOUD_KEY_FILE_DIR" is a directory in which the JSON service account key file named "tensorflow-testing.json" is located. You can use the flag "--setup_cluster_only" to perform only the cluster set up step and skip the test step:
 
@@ -31,7 +31,7 @@ Here you specify the Google Compute Engine (GCE) project, compute zone and conta
 For example:
 
     export TF_DIST_GRPC_SERVER_URL="grpc://11.22.33.44:2222"
-        ./remote_test.sh
+    ./remote_test.sh
 
 Such a cluster may have been set up using the command describe in the previous section.
 
