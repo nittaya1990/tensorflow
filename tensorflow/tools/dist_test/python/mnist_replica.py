@@ -39,6 +39,7 @@ from __future__ import print_function
 
 import math
 import sys
+import tempfile
 import time
 
 from six.moves import xrange  # pylint: disable=redefined-builtin
@@ -63,7 +64,8 @@ flags.DEFINE_integer("train_steps", 50, "Number of training steps")
 flags.DEFINE_integer("batch_size", 100, "Training batch size")
 flags.DEFINE_float("learning_rate", 0.01, "Learning rate")
 flags.DEFINE_string("worker_grpc_url", None,
-                    "Worker GRPC URL xrange(e.g., grpc://1.2.3.4:2222)")
+                    "Worker GRPC URL xrange (e.g., grpc://1.2.3.4:2222, or "
+                    "grpc://tf-worker0:2222)")
 FLAGS = flags.FLAGS
 
 IMAGE_PIXELS = 28
@@ -73,56 +75,49 @@ if __name__ == "__main__":
   if FLAGS.download_only:
     sys.exit(0)
 
-  worker_grpc_url = FLAGS.worker_grpc_url
-  print("Worker GRPC URL: %s" % worker_grpc_url)
+  print("Worker GRPC URL: %s" % FLAGS.worker_grpc_url)
+  print("Worker index = %d" % FLAGS.worker_index)
 
-  # Variables of the hidden layer
-  with tf.device("/job:ps/task:0"):
-    hid_w = tf.Variable(
-        tf.truncated_normal([IMAGE_PIXELS * IMAGE_PIXELS, FLAGS.hidden_units],
-                            stddev=1.0 / IMAGE_PIXELS), name="hid_w")
-    hid_b = tf.Variable(tf.zeros([FLAGS.hidden_units]), name="hid_b")
+  with tf.Graph().as_default():
+    # Variables of the hidden layer
+    with tf.device("/job:ps/task:0"):
+      hid_w = tf.Variable(
+          tf.truncated_normal([IMAGE_PIXELS * IMAGE_PIXELS, FLAGS.hidden_units],
+                              stddev=1.0 / IMAGE_PIXELS), name="hid_w")
+      hid_b = tf.Variable(tf.zeros([FLAGS.hidden_units]), name="hid_b")
 
-  # Variables of the softmax layer
-  with tf.device("/job:ps/task:1"):
-    sm_w = tf.Variable(
-        tf.truncated_normal([FLAGS.hidden_units, 10],
-                            stddev=1.0 / math.sqrt(FLAGS.hidden_units)),
-        name="sm_w")
-    sm_b = tf.Variable(tf.zeros([10]), name="sm_b")
+    # Variables of the softmax layer
+    with tf.device("/job:ps/task:1"):
+      sm_w = tf.Variable(
+          tf.truncated_normal([FLAGS.hidden_units, 10],
+                              stddev=1.0 / math.sqrt(FLAGS.hidden_units)),
+          name="sm_w")
+      sm_b = tf.Variable(tf.zeros([10]), name="sm_b")
 
-  # Ops: located on the worker specified with FLAGS.worker_index
-  with tf.device("/job:worker/task:%d" % FLAGS.worker_index):
-    x = tf.placeholder(tf.float32, [None, IMAGE_PIXELS * IMAGE_PIXELS])
-    y_ = tf.placeholder(tf.float32, [None, 10])
+    # Ops: located on the worker specified with FLAGS.worker_index
+    with tf.device("/job:worker/task:%d" % FLAGS.worker_index):
+      x = tf.placeholder(tf.float32, [None, IMAGE_PIXELS * IMAGE_PIXELS])
+      y_ = tf.placeholder(tf.float32, [None, 10])
 
-    hid_lin = tf.nn.xw_plus_b(x, hid_w, hid_b)
-    hid = tf.nn.relu(hid_lin)
+      hid_lin = tf.nn.xw_plus_b(x, hid_w, hid_b)
+      hid = tf.nn.relu(hid_lin)
 
-    y = tf.nn.softmax(tf.nn.xw_plus_b(hid, sm_w, sm_b))
-    cross_entropy = -tf.reduce_sum(y_ * tf.log(tf.clip_by_value(y, 1e-10, 1.0)))
-    train_step = tf.train.AdamOptimizer(
-        FLAGS.learning_rate).minimize(cross_entropy)
+      y = tf.nn.softmax(tf.nn.xw_plus_b(hid, sm_w, sm_b))
+      cross_entropy = -tf.reduce_sum(y_ *
+                                     tf.log(tf.clip_by_value(y, 1e-10, 1.0)))
+      train_step = tf.train.AdamOptimizer(
+          FLAGS.learning_rate).minimize(cross_entropy)
 
-  with tf.Session(worker_grpc_url) as sess:
-    if FLAGS.worker_index == 0:
-      # The master session will perform the initialization.
-      print("This (master) session is performing variable initialization...")
-      sess.run(tf.initialize_all_variables())
-    else:
-      # The non-master sessions will wait for the initialization to finish
-      # before proceeding.
-      print("This (non-master) session is Waiting for variables to be "
-            "initialized by master session")
-      initialized = False
-      while not initialized:
-        try:
-          res = sess.run(tf.assert_variables_initialized())
-          initialized = True
-        except tf.errors.FailedPreconditionError:
-          time.sleep(1.0)
-      print("Variables have been initialized by master session")
+    train_dir = tempfile.mkdtemp()
+    print(FLAGS.worker_index)
+    sv = tf.train.Supervisor(logdir=train_dir,
+                             is_chief=(FLAGS.worker_index == 0))
 
+    # The chief worker (worker_index==0) session will prepare the session,
+    # while the remaining workers will wait for the preparation to complete.
+    sess = sv.prepare_or_wait_for_session(FLAGS.worker_grpc_url)
+
+    # Perform training
     time_begin = time.time()
     print("Training begins @ %f" % time_begin)
     for i in xrange(FLAGS.train_steps):
