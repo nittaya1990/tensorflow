@@ -159,7 +159,7 @@ def Main():
                                args.num_parameter_servers,
                                args.grpc_port,
                                args.request_load_balancer,
-                               args.docker_image )
+                               args.docker_image)
   print(yaml_config) # pylint: disable=superfluous-parens
 
 
