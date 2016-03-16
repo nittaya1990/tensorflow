@@ -46,7 +46,7 @@ To build the Docker image for the test GRPC TensorFlow distributed server, run:
     ./build_server.sh <docker_image_name>
 
 
-**Generating configuration file for TensorFlow k8s clusters"
+**Generating configuration file for TensorFlow k8s clusters**
 
 The script at "scripts/k8s_tensorflow.py" can be used to generate yaml configuration files for a TensorFlow k8s cluster consisting of a number of workers and prameter servers (ps). For example:
 
