@@ -160,7 +160,7 @@ def Main():
                                args.grpc_port,
                                args.request_load_balancer,
                                args.docker_image)
-  print(yaml_config) # pylint: disable=superfluous-parens
+  print(yaml_config)  # pylint: disable=superfluous-parens
 
 
 def GenerateConfig(num_workers,
