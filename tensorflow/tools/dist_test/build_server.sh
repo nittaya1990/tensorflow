@@ -17,6 +17,7 @@
 # Builds the test server for distributed (GRPC) TensorFlow
 #
 # Usage: build_server.sh <docker_image_name>
+#
 
 # Helper functions
 die() {
@@ -46,6 +47,7 @@ wget http://yann.lecun.com/exdb/mnist/t10k-labels-idx1-ubyte.gz \
     -P ${TMP_DATA_DIR}/
 wget http://yann.lecun.com/exdb/mnist/t10k-images-idx3-ubyte.gz \
     -P ${TMP_DATA_DIR}/
+
 
 # Call docker build
 docker build --no-cache -t "${DOCKER_IMG_NAME}" \

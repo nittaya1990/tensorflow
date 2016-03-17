@@ -46,6 +46,7 @@
 #                                 "tensorflow-testing.json"
 #   TF_DIST_GRPC_PORT:            port on which to create the TensorFlow GRPC
 #                                 servers
+#   TF_DIST_DOCKER_NO_CACHE:      do not use cache when building docker images
 
 DOCKER_IMG_NAME="tensorflow/tf-dist-test-client"
 
@@ -73,7 +74,14 @@ if [[ ! -z "$TF_DIST_GRPC_PORT" ]]; then
   DOCKER_ENV="${DOCKER_ENV} -e TF_DIST_GRPC_PORT=${TF_DIST_GRPC_PORT}"
 fi
 
-docker build -t ${DOCKER_IMG_NAME} -f "${DIR}/Dockerfile" "${DIR}"
+NO_CACHE_FLAG=""
+if [[ ! -z "${TF_DIST_DOCKER_NO_CACHE}" ]] &&
+   [[ "${TF_DIST_DOCKER_NO_CACHE}" != "0" ]]; then
+  NO_CACHE_FLAG="--no-cache"
+fi
+
+docker build ${NO_CACHE_FLAG} \
+    -t ${DOCKER_IMG_NAME} -f "${DIR}/Dockerfile" "${DIR}"
 KEY_FILE_DIR=${TF_DIST_GCLOUD_KEY_FILE_DIR:-"${HOME}/gcloud-secrets"}
 
 docker run -v ${KEY_FILE_DIR}:/var/gcloud/secrets \

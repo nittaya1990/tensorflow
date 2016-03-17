@@ -33,6 +33,7 @@
 # In addition, this script obeys the following environment variables:
 # TF_DIST_SERVER_DOCKER_IMAGE:  overrides the default docker image to launch
 #                                 TensorFlow (GRPC) servers with
+# TF_DIST_DOCKER_NO_CACHE:      do not use cache when building docker images
 
 
 # Configurations
@@ -55,7 +56,13 @@ get_container_id_by_image_name() {
 # Current working directory
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-docker build -t ${DOCKER_IMG_NAME} \
+NO_CACHE_FLAG=""
+if [[ ! -z "${TF_DIST_DOCKER_NO_CACHE}" ]] &&
+   [[ "${TF_DIST_DOCKER_NO_CACHE}" != "0" ]]; then
+  NO_CACHE_FLAG="--no-cache"
+fi
+
+docker build ${NO_CACHE_FLAG} -t ${DOCKER_IMG_NAME} \
    -f ${DIR}/Dockerfile.local ${DIR}
 
 
