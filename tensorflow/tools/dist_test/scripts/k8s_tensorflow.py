@@ -25,6 +25,11 @@ from __future__ import print_function
 import argparse
 import sys
 
+# Note: It is intentional that we do not import tensorflow in this script. The
+# machine that launches a TensorFlow k8s cluster does not have to have the
+# Python package of TensorFlow installed on it.
+
+
 DEFAULT_DOCKER_IMAGE = 'tensorflow/tf_grpc_test_server'
 DEFAULT_PORT = 2222
 
@@ -116,7 +121,7 @@ spec:
 """)
 
 
-def Main():
+def main():
   """Do arg parsing."""
   parser = argparse.ArgumentParser()
   parser.add_argument('--num_workers',
@@ -237,4 +242,4 @@ def ClusterSpec(num_workers,
 
 
 if __name__ == '__main__':
-  Main()
+  main()

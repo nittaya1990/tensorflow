@@ -26,45 +26,21 @@
 export GCLOUD_BIN=/usr/local/bin/gcloud
 export TF_DIST_LOCAL_CLUSTER=1
 
-# Helper functions
-die() {
-  echo $@
-  exit 1
-}
-
+# TODO(cais): Do not hard-code the numbers of workers and ps
 NUM_WORKERS=2
 NUM_PARAMETER_SERVERS=2
 
 # Get current script directory
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Get utility functions
+source "${DIR}/../scripts/utils.sh"
+
 # Wait for the kube-system pods to be running
 KUBECTL_BIN=$(which kubectl)
 if [[ -z ${KUBECTL_BIN} ]]; then
   die "FAILED to find path to kubectl"
 fi
-
-# Helper function to determine if all k8s pods in a namespace are all in the
-# "Running" state
-are_all_pods_running() {
-  # Usage: area_all_pods_running ${namespace}
-  if [[ -z "$1" ]]; then
-    NS_FLAG=""
-  else
-    NS_FLAG="--namespace=$1"
-  fi
-
-  sleep 1  # Wait for the status to settle
-  NPODS=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | wc -l)
-  NRUNNING=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | \
-      grep "Running" | wc -l)
-
-  if [[ ${NPODS} == ${NRUNNING} ]]; then
-    echo "1"
-  else
-    echo "0"
-  fi
-}
 
 echo "Waiting for kube-system pods to be all running..."
 echo ""
@@ -79,7 +55,7 @@ while true; do
 "kube-system to be running in local k8s TensorFlow cluster"
   fi
 
-  if [[ $(are_all_pods_running "kube-system") == "1" ]]; then
+  if [[ $(are_all_pods_running "${KUBECTL_BIN}" "kube-system") == "1" ]]; then
     break
   fi
 done

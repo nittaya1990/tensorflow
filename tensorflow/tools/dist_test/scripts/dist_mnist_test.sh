@@ -69,6 +69,8 @@ while true; do
         --worker_grpc_url="${WORKER_GRPC_URL}" \
         --worker_index=${IDX} 2>&1 > \
     "${WKR_LOG_PREFIX}${IDX}.log" &
+  # TODO(cais): have each trainer process contact a different worker once
+  # supervisor and sync_replicas etc. are all working in OSS TensorFlow.
 
   INDICES="${INDICES} ${IDX}"
 

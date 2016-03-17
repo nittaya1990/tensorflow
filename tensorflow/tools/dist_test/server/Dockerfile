@@ -43,9 +43,16 @@ RUN pip --no-cache-dir install \
 # Copy GRPC server binary
 ADD server/grpc_tensorflow_server.py /tensorflow/grpc_tensorflow_server.py
 
-ADD . /var/tf-k8s
+# Download MNIST data for tests
+RUN mkdir -p /tmp/mnist-data
+RUN curl -o train-labels-idx1-ubyte.gz \
+    http://yann.lecun.com/exdb/mnist/train-labels-idx1-ubyte.gz
+RUN curl -o train-images-idx3-ubyte.gz \
+    http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz
+RUN curl -o t10k-labels-idx1-ubyte.gz \
+    http://yann.lecun.com/exdb/mnist/t10k-labels-idx1-ubyte.gz
+RUN curl -o t10k-images-idx3-ubyte.gz \
+    http://yann.lecun.com/exdb/mnist/t10k-images-idx3-ubyte.gz
 
-# Copy MNIST data for tests
-ADD server/mnist-data /tmp/mnist-data
-
-ENTRYPOINT ["/tensorflow/grpc_tensorflow_server.py"]
+# Container entry point
+ENTRYPOINT ["/var/tf-k8s/server/grpc_tensorflow_server.py"]

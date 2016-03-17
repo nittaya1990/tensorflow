@@ -32,12 +32,6 @@
 #   TF_DIST_GRPC_PORT:            overrides the default port (2222)
 #                                 to run the GRPC servers on
 
-# Helper functions
-die() {
-  echo $@
-  exit 1
-}
-
 # Configurations
 # gcloud operation timeout (steps)
 GCLOUD_OP_MAX_STEPS=360
@@ -55,6 +49,12 @@ CONTAINER_CLUSTER=${TF_DIST_CONTAINER_CLUSTER:-"test-cluster"}
 SERVER_DOCKER_IMAGE=${TF_DIST_SERVER_DOCKER_IMAGE:-\
     "tensorflow/tf_grpc_test_server"}
 
+# Get current script directory
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Get utility functions
+source "${DIR}/utils.sh"
+
 # Check input arguments
 if [[ $# != 2 ]]; then
   die "Usage: $0 <num_workers> <num_parameter_servers>"
@@ -62,9 +62,6 @@ fi
 
 NUM_WORKERS=$1
 NUM_PARAMETER_SERVERS=$2
-
-# Get current script directory
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Path to kubectl binary
 KUBECTL_BIN=$(dirname "${GCLOUD_BIN}")/kubectl
@@ -138,7 +135,6 @@ if [[ ! -f ${K8S_GEN_TF_YAML} ]]; then
   die "FAILED to find yaml-generating script at: ${K8S_GEN_TF_YAML}"
 fi
 
-# TODO(cais): Do not hard-code number of workers and parameter servers
 K8S_YAML="/tmp/k8s_tf_lb.yaml"
 rm -f "${K8S_YAML}"
 
@@ -173,33 +169,6 @@ fi
 get_tf_worker_external_ip() {
   echo $("${KUBECTL_BIN}" get svc | grep "^tf-worker0" | \
          awk '{print $3}' | grep -E "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")
-}
-
-are_all_pods_running() {
-  # Usage: area_all_pods_running ${namespace}
-  if [[ -z "$1" ]]; then
-    NS_FLAG=""
-  else
-    NS_FLAG="--namespace=$1"
-  fi
-
-  NPODS=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | wc -l)
-  NRUNNING=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | \
-      grep "Running" | wc -l)
-  NERR=$("${KUBECTL_BIN}" "${NS_FLAG}" get pods | tail -n +2 | \
-      grep "Err" | wc -l)
-
-  if [[ ${NERR} != "0" ]]; then
-    # "2" signifies that error has occurred
-    echo "2"
-  elif [[ ${NPODS} == ${NRUNNING} ]]; then
-    # "1" signifies that all pods are in Running state
-    echo "1"
-  else
-    # "0" signifies that some pods have not entered Running state, but
-    # no error has occurred
-    echo "0"
-  fi
 }
 
 if [[ ${IS_LOCAL_CLUSTER} == "0" ]]; then
@@ -238,7 +207,7 @@ else
 "be running in local k8s TensorFlow cluster"
     fi
 
-    PODS_STAT=$(are_all_pods_running)
+    PODS_STAT=$(are_all_pods_running "${KUBECTL_BIN}")
 
     if [[ ${PODS_STAT} == "2" ]]; then
       # Error has occurred

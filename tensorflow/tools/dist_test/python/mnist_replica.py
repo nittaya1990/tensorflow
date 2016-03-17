@@ -64,7 +64,7 @@ flags.DEFINE_integer("train_steps", 50, "Number of training steps")
 flags.DEFINE_integer("batch_size", 100, "Training batch size")
 flags.DEFINE_float("learning_rate", 0.01, "Learning rate")
 flags.DEFINE_string("worker_grpc_url", None,
-                    "Worker GRPC URL xrange (e.g., grpc://1.2.3.4:2222, or "
+                    "Worker GRPC URL (e.g., grpc://1.2.3.4:2222, or "
                     "grpc://tf-worker0:2222)")
 FLAGS = flags.FLAGS
 
@@ -120,6 +120,8 @@ if __name__ == "__main__":
     # Perform training
     time_begin = time.time()
     print("Training begins @ %f" % time_begin)
+
+    # TODO(cais): terminate when a global step counter reaches FLAGS.train_steps
     for i in xrange(FLAGS.train_steps):
       # Training feed
       batch_xs, batch_ys = mnist.train.next_batch(FLAGS.batch_size)
@@ -139,3 +141,4 @@ if __name__ == "__main__":
     val_xent = sess.run(cross_entropy, feed_dict=val_feed)
     print("After %d training step(s), validation cross entropy = %g" %
           (FLAGS.train_steps, val_xent))
+

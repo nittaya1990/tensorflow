@@ -41,11 +41,6 @@ DOCKER_IMG_NAME="tensorflow/tf-dist-test-local-cluster"
 LOCAL_K8S_CACHE=${HOME}/kubernetes
 
 # Helper function
-die() {
-    echo $@
-    exit 1
-}
-
 get_container_id_by_image_name() {
     # Get the id of a container by image name
     # Usage: get_docker_container_id_by_image_name <img_name>
@@ -53,9 +48,21 @@ get_container_id_by_image_name() {
     echo $(docker ps | grep $1 | awk '{print $1}')
 }
 
-# Current working directory
+# Current script directory
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Get utility functions
+source ${DIR}/scripts/utils.sh
+
+
+# First, make sure that no docker-in-docker container of the same image
+# is already running
+if [[ ! -z $(get_container_id_by_image_name ${DOCKER_IMG_NAME}) ]]; then
+    die "It appears that there is already at least one Docker container "\
+"of image name ${DOCKER_IMG_NAME} running. Please stop it before trying again"
+fi
+
+# Build docker-in-docker image for local k8s cluster
 NO_CACHE_FLAG=""
 if [[ ! -z "${TF_DIST_DOCKER_NO_CACHE}" ]] &&
    [[ "${TF_DIST_DOCKER_NO_CACHE}" != "0" ]]; then
@@ -66,23 +73,14 @@ docker build ${NO_CACHE_FLAG} -t ${DOCKER_IMG_NAME} \
    -f ${DIR}/Dockerfile.local ${DIR}
 
 
-# Attempt to start the docker container with docker,
-# which will run the k8s cluster inside.
-
-# First, make sure that no docker-in-docker container of the same image
-# is already running
-if [[ ! -z $(get_container_id_by_image_name ${DOCKER_IMG_NAME}) ]]; then
-    die "It appears that there is already at least one Docker container "\
-"of image name ${DOCKER_IMG_NAME} running. Please stop it before trying again"
-fi
-
+# Attempt to start the docker container with docker, which will run the k8s
+# cluster inside.
 
 # Get current script directory
 CONTAINER_START_LOG=$(mktemp --suffix=.log)
 echo "Log file for starting cluster container: ${CONTAINER_START_LOG}"
 echo ""
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ${DIR}/local/start_tf_cluster_container.sh \
       ${LOCAL_K8S_CACHE} \
       ${DOCKER_IMG_NAME} | \
@@ -90,7 +88,7 @@ ${DIR}/local/start_tf_cluster_container.sh \
 
 # Poll start log until the k8s service is started properly or when maximum
 # attempt count is reached.
-MAX_ATTEMPTS=1200
+MAX_SERVER_POLLING_ATTEMPTS=600
 
 echo "Waiting for docker-in-docker container for local k8s TensorFlow "\
 "cluster to start and launch Kubernetes..."
@@ -100,8 +98,8 @@ while true; do
   sleep 1
 
   ((COUNTER++))
-  if [[ $(echo "${COUNTER}>=${MAX_ATTEMPTS} | bc -l") == "1" ]]; then
-    die "Reached maximum number of attempts (${MAX_ATTEMPTS}) "\
+  if [[ $(echo "${COUNTER}>=${MAX_SERVER_POLLING_ATTEMPTS}" | bc -l) == "1" ]]; then
+    die "Reached maximum number of attempts (${MAX_SERVER_POLLING_ATTEMPTS}) "\
 "while waiting for docker-in-docker for local k8s TensorFlow cluster to start"
   fi
 
