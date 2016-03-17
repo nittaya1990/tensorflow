@@ -242,7 +242,9 @@ else
 
     if [[ ${PODS_STAT} == "2" ]]; then
       # Error has occurred
-      die "Error(s) occurred while tring to launch tf k8s cluster"
+      die "Error(s) occurred while tring to launch tf k8s cluster. "\
+"One possible cause is that the Docker image used to launch the cluster is "\
+"invalid: \"${SERVER_DOCKER_IMAGE}\""
     fi
 
     if [[ ${PODS_STAT} == "1" ]]; then

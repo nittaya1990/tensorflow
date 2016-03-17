@@ -48,7 +48,7 @@ wget http://yann.lecun.com/exdb/mnist/t10k-images-idx3-ubyte.gz \
     -P ${TMP_DATA_DIR}/
 
 # Call docker build
-docker build -t "${DOCKER_IMG_NAME}" \
+docker build --no-cache -t "${DOCKER_IMG_NAME}" \
    -f "${DIR}/server/Dockerfile" \
    "${DIR}"
 
