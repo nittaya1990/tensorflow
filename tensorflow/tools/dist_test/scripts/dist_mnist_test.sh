@@ -26,7 +26,7 @@
 
 
 # Configurations
-TIMEOUT=60  # Timeout for MNIST replica sessions
+TIMEOUT=120  # Timeout for MNIST replica sessions
 
 # Helper functions
 die() {
