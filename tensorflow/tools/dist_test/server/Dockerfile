@@ -46,13 +46,13 @@ ADD . /var/tf-k8s
 
 # Download MNIST data for tests
 RUN mkdir -p /tmp/mnist-data
-RUN curl -o train-labels-idx1-ubyte.gz \
+RUN curl -o /tmp/mnist-data/train-labels-idx1-ubyte.gz \
     http://yann.lecun.com/exdb/mnist/train-labels-idx1-ubyte.gz
-RUN curl -o train-images-idx3-ubyte.gz \
+RUN curl -o /tmp/mnist-data/train-images-idx3-ubyte.gz \
     http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz
-RUN curl -o t10k-labels-idx1-ubyte.gz \
+RUN curl -o /tmp/mnist-data/t10k-labels-idx1-ubyte.gz \
     http://yann.lecun.com/exdb/mnist/t10k-labels-idx1-ubyte.gz
-RUN curl -o t10k-images-idx3-ubyte.gz \
+RUN curl -o /tmp/mnist-data/t10k-images-idx3-ubyte.gz \
     http://yann.lecun.com/exdb/mnist/t10k-images-idx3-ubyte.gz
 
 # Container entry point

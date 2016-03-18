@@ -20,9 +20,9 @@
 # runs from within a container based on the image.
 #
 # Usage:
-#   remote_test.sh [--setup_cluster_only]
+#   remote_test.sh [--setup-cluster-only]
 # Arguments:
-#   --setup_cluster_only:
+#   --setup-cluster-only:
 #       Setup the TensorFlow k8s cluster only, and do not perform testing of
 #       the distributed runtime.
 #

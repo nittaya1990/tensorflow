@@ -37,10 +37,10 @@ Here you specify the Google Compute Engine (GCE) project, compute zone and
 container cluster with the first three environment variables, in that order.
 The environment variable "TF_DIST_GCLOUD_KEY_FILE_DIR" is a directory in which
 the JSON service account key file named "tensorflow-testing.json" is located.
-You can use the flag "--setup_cluster_only" to perform only the cluster setup
+You can use the flag "--setup-cluster-only" to perform only the cluster setup
 step and skip the testing step:
 
-    ./remote_test.sh --setup_cluster_only
+    ./remote_test.sh --setup-cluster-only
 
 **3) Run the test suite on an existing k8s TensorFlow cluster**
 

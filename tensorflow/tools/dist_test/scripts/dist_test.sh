@@ -25,9 +25,9 @@
 # TensorFlow ops.
 #
 # Usage:
-#   dist_test.sh [--setup_cluster_only]
+#   dist_test.sh [--setup-cluster-only]
 #
-# --setup_cluster_only lets the script only set up the k8s container network
+# --setup-cluster-only lets the script only set up the k8s container network
 #
 # This script obeys values in the folllowing environment variables:
 #   TF_DIST_GRPC_SERVER_URL:      If it is set to a valid grpc server url (e.g.,
@@ -83,9 +83,9 @@ else
   fi
   rm -f ${TMP}
 
-  if [[ $1 == "--setup_cluster_only" ]]; then
+  if [[ $1 == "--setup-cluster-only" ]]; then
     echo "Skipping testing of distributed runtime due to "\
-"option flag --setup_cluster_only"
+"option flag --setup-cluster-only"
     exit 0
   fi
 fi
