@@ -40,7 +40,7 @@ GRPC_PORT=${TF_DIST_GRPC_PORT:-2222}
 
 DEFAULT_GCLOUD_BIN=/var/gcloud/google-cloud-sdk/bin/gcloud
 GCLOUD_KEY_FILE=${TF_DIST_GCLOUD_KEY_FILE:-\
-    /var/gcloud/secrets/tensorflow-testing.json}
+"/var/gcloud/secrets/tensorflow-testing.json"}
 GCLOUD_PROJECT=${TF_DIST_GCLOUD_PROJECT:-"tensorflow-testing"}
 
 GCLOUD_COMPUTE_ZONE=${TF_DIST_GCLOUD_COMPUTE_ZONE:-"us-central1-f"}
