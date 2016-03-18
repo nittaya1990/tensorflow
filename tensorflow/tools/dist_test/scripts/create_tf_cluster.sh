@@ -63,13 +63,6 @@ fi
 NUM_WORKERS=$1
 NUM_PARAMETER_SERVERS=$2
 
-# Path to kubectl binary
-KUBECTL_BIN=$(dirname "${GCLOUD_BIN}")/kubectl
-if [[ ! -f "${KUBECTL_BIN}" ]]; then
-  die "kubectl binary cannot be found at: ${KUBECTL_BIN}"
-fi
-echo "Path to kubectl binary: ${KUBECTL_BIN}"
-
 # Verify port string
 if [[ -z $(echo "${GRPC_PORT}" | grep -E "^[0-9]{1,5}") ]]; then
   die "Invalid GRPC port: \"${GRPC_PORT}\""
@@ -77,7 +70,7 @@ fi
 echo "GRPC port to be used when creating the k8s TensorFlow cluster: "\
 "${GRPC_PORT}"
 
-if [[ -z "TF_DIST_LOCAL_CLUSTER" ]] ||
+if [[ -z "${TF_DIST_LOCAL_CLUSTER}" ]] ||
    [[ "${TF_DIST_LOCAL_CLUSTER}" == "0" ]]; then
   IS_LOCAL_CLUSTER="0"
 else
@@ -127,6 +120,13 @@ if [[ ${IS_LOCAL_CLUSTER} == "0" ]]; then
   # If there is any existing tf k8s cluster, delete it first
   "${DIR}/delete_tf_cluster.sh" "${GCLOUD_OP_MAX_STEPS}"
 fi
+
+# Path to kubectl binary
+KUBECTL_BIN=$(dirname "${GCLOUD_BIN}")/kubectl
+if [[ ! -f "${KUBECTL_BIN}" ]]; then
+  die "kubectl binary cannot be found at: ${KUBECTL_BIN}"
+fi
+echo "Path to kubectl binary: ${KUBECTL_BIN}"
 
 # Create yaml file for k8s TensorFlow cluster creation
 # Path to the (Python) script for generating k8s yaml file
