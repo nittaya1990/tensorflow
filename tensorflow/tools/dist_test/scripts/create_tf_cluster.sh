@@ -47,7 +47,7 @@ GCLOUD_COMPUTE_ZONE=${TF_DIST_GCLOUD_COMPUTE_ZONE:-"us-central1-f"}
 CONTAINER_CLUSTER=${TF_DIST_CONTAINER_CLUSTER:-"test-cluster"}
 
 SERVER_DOCKER_IMAGE=${TF_DIST_SERVER_DOCKER_IMAGE:-\
-    "tensorflow/tf_grpc_test_server"}
+"tensorflow/tf_grpc_test_server"}
 
 # Get current script directory
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
