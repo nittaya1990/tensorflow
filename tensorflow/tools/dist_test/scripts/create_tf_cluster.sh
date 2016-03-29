@@ -167,7 +167,9 @@ fi
 
 # Wait for external IP of worker services to become available
 get_tf_worker_external_ip() {
-  echo $("${KUBECTL_BIN}" get svc | grep "^tf-worker0" | \
+  # Usage: gen_tf_worker_external_ip <WORKER_INDEX>
+  # E.g.,  gen_tf_worker_external_ip 2
+  echo $("${KUBECTL_BIN}" get svc | grep "^tf-worker${1}" | \
          awk '{print $3}' | grep -E "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")
 }
 
@@ -184,15 +186,34 @@ if [[ ${IS_LOCAL_CLUSTER} == "0" ]]; then
 "of tf-worker0 service to emerge"
     fi
 
-    SVC_EXTERN_IP=$(get_tf_worker_external_ip)
+    EXTERN_IPS=""
+    WORKER_INDEX=0
+    N_AVAILABLE_EXTERNAL_IPS=0
+    while true; do
+      SVC_EXTERN_IP=$(get_tf_worker_external_ip ${WORKER_INDEX})
 
-    if [[ ! -z "${SVC_EXTERN_IP}" ]]; then
-      break
+      if [[ ! -z "${SVC_EXTERN_IP}" ]]; then
+        EXTERN_IPS="${EXTERN_IPS} ${SVC_EXTERN_IP}"
+
+        ((N_AVAILABLE_EXTERNAL_IPS++))
+      fi
+
+      ((WORKER_INDEX++))
+      if [[ ${WORKER_INDEX} == ${NUM_WORKERS} ]]; then
+        break;
+      fi
+    done
+
+    if [[ ${N_AVAILABLE_EXTERNAL_IPS} == ${NUM_WORKERS} ]]; then
+      break;
     fi
   done
 
-  GRPC_SERVER_URL="grpc://${SVC_EXTERN_IP}:${GRPC_PORT}"
-  echo "GRPC URL of tf-worker0: ${GRPC_SERVER_URL}"
+  GRPC_SERVER_URLS=""
+  for IP in ${EXTERN_IPS}; do
+    GRPC_SERVER_URLS="${GRPC_SERVER_URLS} grpc://${IP}:${GRPC_PORT}"
+  done
+  echo "GRPC URLs of tf-workers: ${GRPC_SERVER_URLS}"
 
 else
   echo "Waiting for tf pods to be all running..."

@@ -21,10 +21,25 @@
 #
 # Usage:
 #   remote_test.sh [--setup-cluster-only]
+#                  [--num-workers <NUM_WORKERS>]
+#                  [--num-parameter-servers <NUM_PARAMETER_SERVERS>]
+#                  [--sync-replicas]
+#
 # Arguments:
 #   --setup-cluster-only:
 #       Setup the TensorFlow k8s cluster only, and do not perform testing of
 #       the distributed runtime.
+#
+# --num-workers <NUM_WORKERS>:
+#   Specifies the number of worker pods to start
+#
+# --num-parameter-server <NUM_PARAMETER_SERVERS>:
+#   Specifies the number of parameter servers to start
+#
+# --sync-replicas
+#   Use the synchronized-replica mode. The parameter updates from the replicas
+#   (workers) will be aggregated before applied, which avoids stale parameter
+#   updates.
 #
 #
 # If any of the following environment variable has non-empty values, it will

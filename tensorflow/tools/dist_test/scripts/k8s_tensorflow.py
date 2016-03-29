@@ -184,7 +184,7 @@ def GenerateConfig(num_workers,
                                        num_param_servers,
                                        port))
     config += '---\n'
-    if worker == 0 and request_load_balancer:
+    if request_load_balancer:
       config += WORKER_LB_SVC.format(port=port,
                                      worker_id=worker)
     else:

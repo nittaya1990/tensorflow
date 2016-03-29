@@ -53,6 +53,38 @@ The IP address above is a dummy example. Such a cluster may have been set up
 using the command described at the end of the previous section.
 
 
+**Asynchronous and synchronous parameter updates**
+
+There are two modes for the coordination of the parameters from multiple
+workers: asynchronous and synchrnous.
+
+In the asynchronous mode, the parameter updates (gradients) from the workers
+are applied to the parameters without any explicit coordination. This is the
+default mode in the tests.
+
+In the synchronous mode, a certain number of parameter updates are aggregated
+from the model replicas before the update is applied to the model parameters.
+To use this mode, do:
+
+    # For remote testing
+    ./remote_test.sh --sync-replicas
+
+    # For local testing
+    ./local_test.sh --sync-replicas
+
+
+**Specifying the number of workers**
+
+You can specify the number of workers by using the --num-workers option flag,
+e.g.,
+
+    # For remote testing
+    ./remote_test.sh --num-workers 4
+
+    # For local testing
+    ./local_test.sh --num-workers 4
+
+
 **Building the test server Docker image**
 
 To build the Docker image for a test server of TensorFlow distributed runtime,
