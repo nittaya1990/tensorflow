@@ -101,7 +101,7 @@ docker build ${NO_CACHE_FLAG} \
     -t ${DOCKER_IMG_NAME} -f "${DIR}/Dockerfile" "${DIR}"
 KEY_FILE_DIR=${TF_DIST_GCLOUD_KEY_FILE_DIR:-"${HOME}/gcloud-secrets"}
 
-docker run -v ${KEY_FILE_DIR}:/var/gcloud/secrets \
+docker run --rm -v ${KEY_FILE_DIR}:/var/gcloud/secrets \
   ${DOCKER_ENV_FLAGS} \
   ${DOCKER_IMG_NAME} \
   /var/tf-dist-test/scripts/dist_test.sh $@
