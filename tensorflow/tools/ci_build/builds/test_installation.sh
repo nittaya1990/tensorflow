@@ -44,6 +44,10 @@
 # TF_BUILD_BAZEL_CLEAN, if set to any non-empty and non-0 value, directs the
 # script to perform bazel clean prior to main build and test steps.
 #
+# TF_BUILD_SERIAL_INSTALL_TEST, if set to any non-empty and non-0 value,
+# will force the Python install tests to run serially, overriding than the
+# concurrent testing behavior.
+#
 # If the environmental variable NO_TEST_ON_INSTALL is set to any non-empty
 # value, the script will exit after the pip install step.
 
@@ -82,6 +86,8 @@ die() {
   exit 1
 }
 
+# Script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Obtain the path to Python binary
 # source tools/python_bin_path.sh
@@ -177,87 +183,131 @@ if [[ ${PY_TEST_COUNT} -eq 0 ]]; then
 fi
 
 # Iterate through all the Python unit test files using the installation
-COUNTER=0
+TEST_COUNTER=0
 PASS_COUNTER=0
 FAIL_COUNTER=0
 SKIP_COUNTER=0
 FAILED_TESTS=""
 FAILED_TEST_LOGS=""
 
-for TEST_FILE_PATH in ${ALL_PY_TESTS}; do
-  ((COUNTER++))
+N_JOBS=$(grep -c ^processor /proc/cpuinfo)  # TODO(cais): Turn into argument / env var
+if [[ -z ${N_JOBS} ]]; then
+  N_JOBS=8
+  echo "Cannot determine the number of processors"
+  echo "Using default concurrent job counter ${N_JOBS}"
+fi
 
-  PROG_STR="(${COUNTER} / ${PY_TEST_COUNT})"
+if [[ ! -z "${TF_BUILD_SERIAL_INSTALL_TEST}" ]] &&
+   [[ "${TF_BUILD_SERIAL_INSTALL_TEST}" != "0" ]]; then
+  N_JOBS=1
+fi
 
-  # If PY_TEST_WHITELIST is not empty, only the white-listed tests will be run
-  if [[ ! -z ${PY_TEST_WHITELIST} ]] && \
-     [[ ! ${PY_TEST_WHITELIST} == *"${TEST_FILE_PATH}"* ]]; then
-    ((SKIP_COUNTER++))
-    echo "${PROG_STR} Non-whitelisted test SKIPPED: ${TEST_FILE_PATH}"
-    continue
+echo "Running Python tests-on-install with ${N_JOBS} concurrent jobs..."
+
+ALL_PY_TESTS=(${ALL_PY_TESTS})
+while true; do
+  TEST_LOGS=""
+  TEST_INDICES=""
+  TEST_FILE_PATHS=""
+  TEST_BASENAMES=""
+
+  ITER_COUNTER=0
+  while true; do
+    # for TEST_FILE_PATH in ${ALL_PY_TESTS}; do
+    TEST_FILE_PATH=${ALL_PY_TESTS[TEST_COUNTER]}
+
+    ((TEST_COUNTER++))
+    ((ITER_COUNTER++))
+
+    # If PY_TEST_WHITELIST is not empty, only the white-listed tests will be run
+    if [[ ! -z ${PY_TEST_WHITELIST} ]] && \
+      [[ ! ${PY_TEST_WHITELIST} == *"${TEST_FILE_PATH}"* ]]; then
+      ((SKIP_COUNTER++))
+      echo "Non-whitelisted test SKIPPED: ${TEST_FILE_PATH}"
+
+      continue
+    fi
+
+    # If the test is in the black list, skip it
+    if [[ ${PY_TEST_BLACKLIST} == *"${TEST_FILE_PATH}"* ]]; then
+      ((SKIP_COUNTER++))
+      echo "Blacklisted test SKIPPED: ${TEST_FILE_PATH}"
+      continue
+    fi
+
+    TEST_INDICES="${TEST_INDICES} ${TEST_COUNTER}"
+    TEST_FILE_PATHS="${TEST_FILE_PATHS} ${TEST_FILE_PATH}"
+
+    # Copy to a separate directory to guard against the possibility of picking up
+    # modules in the source directory
+    cp ${TEST_FILE_PATH} ${PY_TEST_DIR}/
+
+    TEST_BASENAME=$(basename "${TEST_FILE_PATH}")
+    TEST_BASENAMES="${TEST_BASENAMES} ${TEST_BASENAME}"
+
+    # Relative path of the test log. Use long path in case there are duplicate
+    # file names in the Python tests
+    TEST_LOG_REL="${PY_TEST_LOG_DIR_REL}/${TEST_FILE_PATH}.log"
+    mkdir -p $(dirname ${TEST_LOG_REL})  # Create directory for log
+
+    TEST_LOG=$(abs_path ${TEST_LOG_REL})  # Absolute path
+    TEST_LOGS="${TEST_LOGS} ${TEST_LOG}"
+
+    # Start the stopwatch for this test
+    START_TIME=$(date +'%s')
+
+    "${SCRIPT_DIR}/py_test_delegate.sh" \
+      "${PYTHON_BIN_PATH}" "${PY_TEST_DIR}/${TEST_BASENAME}" "${TEST_LOG}" &
+    if [[ $(echo "${ITER_COUNTER} >= ${N_JOBS}" | bc -l) == "1" ]] ||
+       [[ $(echo "${TEST_COUNTER} >= ${PY_TEST_COUNT}" | bc -l) == "1" ]]; then
+      break;
+    fi
+  done
+
+  # Wait for all processes to complete
+  wait
+
+  TEST_LOGS=(${TEST_LOGS})
+  TEST_FILE_PATHS=(${TEST_FILE_PATHS})
+  TEST_BASENAMES=(${TEST_BASENAMES})
+
+  K=0
+  for TEST_INDEX in ${TEST_INDICES}; do
+    TEST_FILE_PATH=${TEST_FILE_PATHS[K]}
+    TEST_RESULT=$(tail -1 "${TEST_LOGS[K]}" | awk '{print $1}')
+    ELAPSED_TIME=$(tail -1 "${TEST_LOGS[K]}" | cut -d' ' -f2-)
+
+    PROG_STR="(${TEST_INDEX} / ${PY_TEST_COUNT})"
+    # Check for pass or failure status of the test outtput and exit
+    if [[ ${TEST_RESULT} -eq 0 ]]; then
+      ((PASS_COUNTER++))
+
+      echo "${PROG_STR} Python test-on-install PASSED (${ELAPSED_TIME}): ${TEST_FILE_PATH}"
+    else
+      ((FAIL_COUNTER++))
+
+      FAILED_TESTS="${FAILED_TESTS} ${TEST_FILE_PATH}"
+      FAILED_TEST_LOGS="${FAILED_TEST_LOGS} ${TEST_LOGS[K]}"
+
+      echo "${PROG_STR} Python test-on-install FAILED (${ELAPSED_TIME}): ${TEST_FILE_PATH}"
+
+      echo "  Log @: ${TEST_LOG_REL}"
+      echo "============== BEGINS failure log content =============="
+      head --lines=-1 "${TEST_LOGS[K]}"
+      echo "============== ENDS failure log content =============="
+      echo ""
+    fi
+    cd ${DIR0}
+
+    # Clean up files for this test
+    rm -f ${TEST_BASENAMES[K]}
+
+    ((K++))
+  done
+
+  if [[ $(echo "${TEST_COUNTER} >= ${PY_TEST_COUNT}" | bc -l) == "1" ]]; then
+    break;
   fi
-
-  # If the test is in the black list, skip it
-  if [[ ${PY_TEST_BLACKLIST} == *"${TEST_FILE_PATH}"* ]]; then
-    ((SKIP_COUNTER++))
-    echo "${PROG_STR} Blacklisted test SKIPPED: ${TEST_FILE_PATH}"
-    continue
-  fi
-
-  # Copy to a separate directory to guard against the possibility of picking up
-  # modules in the source directory
-  cp ${TEST_FILE_PATH} ${PY_TEST_DIR}/
-
-  TEST_BASENAME=$(basename "${TEST_FILE_PATH}")
-
-  # Relative path of the test log. Use long path in case there are duplicate
-  # file names in the Python tests
-  TEST_LOG_REL="${PY_TEST_LOG_DIR_REL}/${TEST_FILE_PATH}.log"
-  mkdir -p $(dirname ${TEST_LOG_REL})  # Create directory for log
-
-  TEST_LOG=$(abs_path ${TEST_LOG_REL})  # Absolute path
-
-  # Start the stopwatch for this test
-  START_TIME=$(date +'%s')
-
-  # Before running the test, cd away from the Tensorflow source to
-  # avoid the possibility of picking up dependencies from the
-  # source directory
-  cd ${PY_TEST_DIR}
-  ${PYTHON_BIN_PATH} ${PY_TEST_DIR}/${TEST_BASENAME} >${TEST_LOG} 2>&1
-
-  TEST_RESULT=$?
-
-  END_TIME=$(date +'%s')
-  ELAPSED_TIME="$((${END_TIME} - ${START_TIME})) s"
-
-  # Check for pass or failure status of the test outtput and exit
-  if [[ ${TEST_RESULT} -eq 0 ]]; then
-    ((PASS_COUNTER++))
-
-    echo "${PROG_STR} Python test-on-install PASSED (${ELAPSED_TIME}): "\
-"${TEST_FILE_PATH}"
-  else
-    ((FAIL_COUNTER++))
-
-    FAILED_TESTS="${FAILED_TESTS} ${TEST_FILE_PATH}"
-
-    FAILED_TEST_LOGS="${FAILED_TEST_LOGS} ${TEST_LOG_REL}"
-
-    echo "${PROG_STR} Python test-on-install FAILED (${ELPASED_TIME}): "\
-"${TEST_FILE_PATH}"
-
-    echo "  Log @: ${TEST_LOG_REL}"
-    echo "============== BEGINS failure log content =============="
-    cat ${TEST_LOG}
-    echo "============== ENDS failure log content =============="
-    echo ""
-  fi
-  cd ${DIR0}
-
-  # Clean up files for this test
-  rm -f ${PY_TEST_DIR}/${TEST_BASENAME}
-
 done
 
 # Clean up files copied for Python unit tests:
