@@ -26,6 +26,4 @@ pip install py-cpuinfo
 pip3 install py-cpuinfo
 
 # pylint tests require the following:
-curl -O https://pypi.python.org/packages/3.5/p/pylint/pylint-1.5.5-py2.py3-none-any.whl
-pip install pylint-1.5.5-py2.py3-none-any.whl
-rm -f pylint-1.5.5-py2.py3-none-any.whl
+pip install pylint
