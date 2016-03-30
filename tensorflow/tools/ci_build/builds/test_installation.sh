@@ -291,7 +291,7 @@ while true; do
 
       echo "${PROG_STR} Python test-on-install FAILED (${ELAPSED_TIME}): ${TEST_FILE_PATH}"
 
-      echo "  Log @: ${TEST_LOG_REL}"
+      echo "  Log @: ${TEST_LOGS[K]}"
       echo "============== BEGINS failure log content =============="
       head --lines=-1 "${TEST_LOGS[K]}"
       echo "============== ENDS failure log content =============="
