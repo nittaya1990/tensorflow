@@ -44,9 +44,13 @@
 # TF_BUILD_BAZEL_CLEAN, if set to any non-empty and non-0 value, directs the
 # script to perform bazel clean prior to main build and test steps.
 #
-# TF_BUILD_SERIAL_INSTALL_TEST, if set to any non-empty and non-0 value,
+# TF_BUILD_SERIAL_INSTALL_TESTS, if set to any non-empty and non-0 value,
 # will force the Python install tests to run serially, overriding than the
 # concurrent testing behavior.
+#
+# TF_BUILD_EXTRA_EXCLUSIVE_INSTALL_TESTS, add to the default list of
+# Python unit tests to run in exclusive mode (i.e., not concurrently with
+# other tests), separated with colons
 #
 # If the environmental variable NO_TEST_ON_INSTALL is set to any non-empty
 # value, the script will exit after the pip install step.
@@ -70,6 +74,17 @@ PY_TEST_BLACKLIST="${PY_TEST_BLACKLIST}:"\
 # Test blacklist: GPU-only
 PY_TEST_GPU_BLACKLIST="${PY_TEST_GPU_BLACKLIST}:"\
 "tensorflow/python/framework/function_test.py"
+
+# Tests that should be run in the exclusive mode (i.e., not parallel with
+# other tests)
+PY_TEST_EXCLUSIVE_LIST="tensorflow/python/platform/gfile_test.py:"\
+"tensorflow/python/platform/default/gfile_test.py"
+
+# Append custom list of exclusive tests
+if [[ ! -z "${TF_BUILD_EXTRA_EXCLUSIVE_INSTALL_TESTS}" ]]; then
+  PY_TEST_EXCLUSIVE_LIST="${PY_TEST_EXCLUSIVE_LIST}:"\
+"${TF_BUILD_EXTRA_EXCLUSIVE_INSTALL_TESTS}"
+fi
 
 # =============================================================================
 
@@ -172,9 +187,26 @@ cp -r tensorflow/core/lib/png ${PY_TEST_DIR}/tensorflow/core/lib
 
 # Run tests
 DIR0=$(pwd)
-ALL_PY_TESTS=$(find tensorflow/{contrib,examples,models,python,tensorboard} \
+ALL_PY_TESTS_0=$(find tensorflow/{contrib,examples,models,python,tensorboard} \
     -type f \( -name "*_test.py" -o -name "test_*.py" \) | sort)
-# TODO(cais): Add tests in tensorflow/contrib
+
+# Move the exclusive tests to the back of the list
+EXCLUSIVE_LIST="$(echo "${PY_TEST_EXCLUSIVE_LIST}" | sed -e 's/:/ /g')"
+
+ALL_PY_TESTS=""
+for TEST in ${ALL_PY_TESTS_0}; do
+  if [[ ! ${PY_TEST_EXCLUSIVE_LIST} == *"${TEST}"* ]]; then
+    ALL_PY_TESTS="${ALL_PY_TESTS} ${TEST}"
+  fi
+done
+
+# Number of parallel (non-exclusive) tests
+N_PAR_TESTS=$(echo ${ALL_PY_TESTS} | wc -w)
+echo "Number of non-exclusive tests: ${N_PAR_TESTS}"
+
+for TEST in ${EXCLUSIVE_LIST}; do
+  ALL_PY_TESTS="${ALL_PY_TESTS} ${TEST}"
+done
 
 PY_TEST_COUNT=$(echo ${ALL_PY_TESTS} | wc -w)
 
@@ -197,8 +229,8 @@ if [[ -z ${N_JOBS} ]]; then
   echo "Using default concurrent job counter ${N_JOBS}"
 fi
 
-if [[ ! -z "${TF_BUILD_SERIAL_INSTALL_TEST}" ]] &&
-   [[ "${TF_BUILD_SERIAL_INSTALL_TEST}" != "0" ]]; then
+if [[ ! -z "${TF_BUILD_SERIAL_INSTALL_TESTS}" ]] &&
+   [[ "${TF_BUILD_SERIAL_INSTALL_TESTS}" != "0" ]]; then
   N_JOBS=1
 fi
 
@@ -258,10 +290,20 @@ while true; do
 
     "${SCRIPT_DIR}/py_test_delegate.sh" \
       "${PYTHON_BIN_PATH}" "${PY_TEST_DIR}/${TEST_BASENAME}" "${TEST_LOG}" &
+
+    if [[ $(echo "${TEST_COUNTER} >= ${N_PAR_TESTS}" | bc -l) == "1" ]]; then
+      # Run in exclusive mode
+      if [[ $(echo "${TEST_COUNTER} > ${N_PAR_TESTS}" | bc -l) == "1" ]]; then
+        echo "Run test exclusively: ${PY_TEST_DIR}/${TEST_BASENAME}"
+      fi
+      break
+    fi
+
     if [[ $(echo "${ITER_COUNTER} >= ${N_JOBS}" | bc -l) == "1" ]] ||
        [[ $(echo "${TEST_COUNTER} >= ${PY_TEST_COUNT}" | bc -l) == "1" ]]; then
-      break;
+      break
     fi
+
   done
 
   # Wait for all processes to complete
