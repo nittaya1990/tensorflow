@@ -224,6 +224,11 @@ FAILED_TEST_LOGS=""
 
 N_JOBS=$(grep -c ^processor /proc/cpuinfo)  # TODO(cais): Turn into argument / env var
 if [[ -z ${N_JOBS} ]]; then
+  # Try the Mac way of getting number of CPUs
+  N_JOBS=$(sysctl -n hw.ncpu)
+fi
+
+if [[ -z ${N_JOBS} ]]; then
   N_JOBS=8
   echo "Cannot determine the number of processors"
   echo "Using default concurrent job counter ${N_JOBS}"
