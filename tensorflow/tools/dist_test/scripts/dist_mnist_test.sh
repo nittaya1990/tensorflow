@@ -174,23 +174,13 @@ while true; do
   fi
 done
 
-# # Run evaluation
-# # TODO(cais): Run evaluation every N training steps
-# timeout ${TIMEOUT} python "${MNIST_REPLICA}" \
-#       --worker_grpc_url="${WORKER_GRPC_URL_0}" \
-#       --worker_index=0 \
-#       --num_workers=${N_WORKERS} \
-#       --num_parameter_servers=${N_PS} \
-#       ${SYNC_REPLICAS_FLAG} --evaluate 2>&1 > \
-#       "${WKR_LOG_PREFIX}0_eval.log"
-
 # Function for getting final validation cross entropy from worker log files
 get_final_val_xent() {
   echo $(cat $1 | grep "^After.*validation cross entropy = " | \
       awk '{print $NF}')
 }
 
-VAL_XENT=$(get_final_val_xent "${WKR_LOG_PREFIX}0_eval.log")
+VAL_XENT=$(get_final_val_xent "${WKR_LOG_PREFIX}0.log")
 
 # Sanity check on the validation entropies
 # TODO(cais): In addition to this basic sanity check, we could run the training
