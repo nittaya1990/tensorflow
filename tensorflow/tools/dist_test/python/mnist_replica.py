@@ -52,9 +52,6 @@ flags.DEFINE_string("data_dir", "/tmp/mnist-data",
 flags.DEFINE_boolean("download_only", False,
                      "Only perform downloading of data; Do not proceed to "
                      "session preparation, model definition or training")
-flags.DEFINE_boolean("initialize_session_only", False,
-                     "Only perform downloading of data and initialization of "
-                     "session; Do not proceed to training")
 flags.DEFINE_integer("worker_index", 0,
                      "Worker task index, should be >= 0. worker_index=0 is "
                      "the master worker task the performs the variable "
@@ -71,7 +68,7 @@ flags.DEFINE_integer("grpc_port", 2222,
                      "TensorFlow GRPC port")
 flags.DEFINE_integer("hidden_units", 100,
                      "Number of units in the hidden layer of the NN")
-flags.DEFINE_integer("train_steps", 50,
+flags.DEFINE_integer("train_steps", 200,
                      "Number of (global) training steps to perform")
 flags.DEFINE_integer("batch_size", 100, "Training batch size")
 flags.DEFINE_float("learning_rate", 0.01, "Learning rate")
@@ -82,9 +79,6 @@ flags.DEFINE_boolean("sync_replicas", False,
                      "Use the sync_replicas (synchronized replicas) mode, "
                      "wherein the parameter updates from workersare aggregated "
                      "before applied to avoid stale gradients")
-flags.DEFINE_boolean("evaluate", False,
-                     "Run evaluation by running the cross validation op "
-                     "on the validation set")
 FLAGS = flags.FLAGS
 
 
@@ -120,6 +114,22 @@ def get_device_setter(num_parameter_servers, num_workers):
       "ps": ps_spec,
       "worker": worker_spec})
 
+  print(ps_spec)  # DEBUG
+  print(worker_spec)  # DEBUG
+
+  # DEBUG
+  # print("Using DEBUG cluster_spec")
+  # 1 ps, 1 workers
+  # cluster_spec = tf.ClusterSpec({
+  #     "ps": ["localhost:2220"],
+  #     "worker": ["localhost:2223"]
+  # })
+  # 2 ps, 2 worker
+  # cluster_spec = tf.ClusterSpec({
+  #     "ps": ["localhost:2220", "localhost:2221"],
+  #     "worker": ["localhost:2223", "localhost:2224"]
+  # })
+
   # Get device setter from the cluster spec
   return tf.train.replica_device_setter(cluster=cluster_spec)
 
@@ -142,6 +152,8 @@ if __name__ == "__main__":
   if FLAGS.num_parameter_servers <= 0:
     raise ValueError("Invalid num_parameter_servers value: %d" %
                      FLAGS.num_parameter_servers)
+
+  is_chief = (FLAGS.worker_index == 0)
 
   if FLAGS.sync_replicas:
     if FLAGS.replicas_to_aggregate is None:
@@ -171,8 +183,7 @@ if __name__ == "__main__":
         name="sm_w")
     sm_b = tf.Variable(tf.zeros([10]), name="sm_b")
 
-  # Ops: located on the worker specified with FLAGS.worker_index
-  with tf.device("/job:worker/task:%d" % FLAGS.worker_index):
+    # Ops: located on the worker specified with FLAGS.worker_index
     x = tf.placeholder(tf.float32, [None, IMAGE_PIXELS * IMAGE_PIXELS])
     y_ = tf.placeholder(tf.float32, [None, 10])
 
@@ -195,34 +206,44 @@ if __name__ == "__main__":
     train_step = opt.minimize(cross_entropy,
                               global_step=global_step)
 
-  with tf.device(device_setter):
-    if FLAGS.sync_replicas:
+    if FLAGS.sync_replicas and is_chief:
       # Initial token and chief queue runners required by the sync_replicas mode
-      init_tokens_op = opt.get_init_tokens_op()
       chief_queue_runner = opt.get_chief_queue_runner()
+      init_tokens_op = opt.get_init_tokens_op()
 
-  train_dir = tempfile.mkdtemp()
-  sv = tf.train.Supervisor(logdir=train_dir,
-                           is_chief=(FLAGS.worker_index == 0))
+    init_op = tf.initialize_all_variables()
+    train_dir = tempfile.mkdtemp()
+    sv = tf.train.Supervisor(is_chief=is_chief,
+                             logdir=train_dir,
+                             init_op=init_op,
+                             recovery_wait_secs=1,
+                             global_step=global_step)
 
-  # The chief worker (worker_index==0) session will prepare the session,
-  # while the remaining workers will wait for the preparation to complete.
-  if FLAGS.initialize_session_only:
-    print("Initializing session...")
-    sess = sv.prepare_or_wait_for_session(FLAGS.worker_grpc_url)
-    print("Session initialization complete.")
-    sys.exit(0)
+    sess_config = tf.ConfigProto(
+        allow_soft_placement=True,
+        log_device_placement=True,
+        device_filters=["/job:ps", "/job:worker/task:%d" % FLAGS.worker_index])
 
-  sess = tf.Session(FLAGS.worker_grpc_url)
+    # The chief worker (worker_index==0) session will prepare the session,
+    # while the remaining workers will wait for the preparation to complete.
+    if is_chief:
+      print("Worker %d: Initializing session..." % FLAGS.worker_index)
+    else:
+      print("Worker %d: Waiting for session to be initialized..." %
+            FLAGS.worker_index)
 
-  if FLAGS.sync_replicas and FLAGS.worker_index == 0:
-    # Chief worker will start the chief queue runner and call the init op
-    print("Starting queue and running init_tokens_op")
-    sv.start_queue_runners(sess, [chief_queue_runner])
-    sess.run(init_tokens_op)
+    sess = sv.prepare_or_wait_for_session(FLAGS.worker_grpc_url,
+                                          config=sess_config)
 
-  # Perform training
-  if not FLAGS.evaluate:
+    print("Worker %d: Session initialization complete." % FLAGS.worker_index)
+
+    if FLAGS.sync_replicas and is_chief:
+        # Chief worker will start the chief queue runner and call the init op
+        print("Starting chief queue runner and running init_tokens_op")
+        sv.start_queue_runners(sess, [chief_queue_runner])
+        sess.run(init_tokens_op)
+
+    # Perform training
     time_begin = time.time()
     print("Training begins @ %f" % time_begin)
 
@@ -248,7 +269,6 @@ if __name__ == "__main__":
     training_time = time_end - time_begin
     print("Training elapsed time: %f s" % training_time)
 
-  else:
     # Validation feed
     val_feed = {x: mnist.validation.images,
                 y_: mnist.validation.labels}

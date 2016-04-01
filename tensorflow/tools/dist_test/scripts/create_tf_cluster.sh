@@ -160,6 +160,7 @@ if [[ ! -f "${K8S_YAML}" ]]; then
 else
     echo "Generated yaml configuration file for k8s TensorFlow cluster: "\
 "${K8S_YAML}"
+    cat "${K8S_YAML}"
 fi
 
 # Create tf k8s container cluster
