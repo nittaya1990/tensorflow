@@ -62,7 +62,7 @@ SYNC_REPLICAS=0
 while true; do
   if [[ "$1" == "--num-workers" ]]; then
     N_WORKERS=$2
-  elif [[ "$1" == "--num-parameter-servers" ]]]; then
+  elif [[ "$1" == "--num-parameter-servers" ]]; then
     N_PS=$2
   elif [[ "$1" == "--sync-replicas" ]]; then
     SYNC_REPLICAS="1"
