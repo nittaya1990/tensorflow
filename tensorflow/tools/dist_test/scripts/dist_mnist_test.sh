@@ -104,7 +104,7 @@ timeout ${TIMEOUT} python "${MNIST_REPLICA}" \
     --worker_index=0 \
     --num_workers=${N_WORKERS} \
     ${SYNC_REPLICAS_FLAG} \
-    --initialize_session_only || \
+    --download_only || \
     die "Download-only step of MNIST replica FAILED"
 
 # Run a number of workers in parallel
