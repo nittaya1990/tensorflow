@@ -114,27 +114,11 @@ def get_device_setter(num_parameter_servers, num_workers):
       "ps": ps_spec,
       "worker": worker_spec})
 
-  print(ps_spec)  # DEBUG
-  print(worker_spec)  # DEBUG
-
-  # DEBUG
-  # print("Using DEBUG cluster_spec")
-  # 1 ps, 1 workers
-  # cluster_spec = tf.ClusterSpec({
-  #     "ps": ["localhost:2220"],
-  #     "worker": ["localhost:2223"]
-  # })
-  # 2 ps, 2 worker
-  # cluster_spec = tf.ClusterSpec({
-  #     "ps": ["localhost:2220", "localhost:2221"],
-  #     "worker": ["localhost:2223", "localhost:2224"]
-  # })
-
   # Get device setter from the cluster spec
   return tf.train.replica_device_setter(cluster=cluster_spec)
 
 
-if __name__ == "__main__":
+def main(unused_argv):
   mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
   if FLAGS.download_only:
     sys.exit(0)
@@ -238,10 +222,10 @@ if __name__ == "__main__":
     print("Worker %d: Session initialization complete." % FLAGS.worker_index)
 
     if FLAGS.sync_replicas and is_chief:
-        # Chief worker will start the chief queue runner and call the init op
-        print("Starting chief queue runner and running init_tokens_op")
-        sv.start_queue_runners(sess, [chief_queue_runner])
-        sess.run(init_tokens_op)
+      # Chief worker will start the chief queue runner and call the init op
+      print("Starting chief queue runner and running init_tokens_op")
+      sv.start_queue_runners(sess, [chief_queue_runner])
+      sess.run(init_tokens_op)
 
     # Perform training
     time_begin = time.time()
@@ -275,3 +259,7 @@ if __name__ == "__main__":
     val_xent = sess.run(cross_entropy, feed_dict=val_feed)
     print("After %d training step(s), validation cross entropy = %g" %
           (FLAGS.train_steps, val_xent))
+
+
+if __name__ == "__main__":
+  tf.app.run()

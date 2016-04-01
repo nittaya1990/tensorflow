@@ -67,6 +67,9 @@ def parse_cluster_spec(cluster_spec, cluster):
 
   job_strings = cluster_spec.split(",")
 
+  if not cluster_spec:
+    raise ValueError("Empty cluster_spec string")
+
   for job_string in job_strings:
     job_def = cluster.job.add()
 
@@ -86,7 +89,7 @@ def parse_cluster_spec(cluster_spec, cluster):
     job_tasks = job_string.split("|")[1].split(";")
     for i in range(len(job_tasks)):
       if not job_tasks[i]:
-        raise ValueError("Empty job_task string at position %d" % i)
+        raise ValueError("Empty task string at position %d" % i)
 
       job_def.tasks[i] = job_tasks[i]
 
