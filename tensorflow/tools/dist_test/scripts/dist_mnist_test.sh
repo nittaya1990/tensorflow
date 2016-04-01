@@ -21,6 +21,7 @@
 # Usage:
 #    dist_mnist_test.sh <worker_grpc_urls>
 #                       [--num-workers <NUM_WORKERS>]
+#                       [--num-parameter-servers <NUM_PARAMETER_SERVERS>]
 #                       [--sync-replicas]
 #
 # --sync-replicas
@@ -47,7 +48,7 @@ die() {
 
 if [[ $# == "0" ]]; then
   die "Usage: $0 <WORKER_GRPC_URLS> [--num-workers <NUM_WORKERS>] "\
-"[--sync-replicas]"
+"[--num-parameter-servers <NUM_PARAMETER_SERVERS>] [--sync-replicas]"
 fi
 
 WORKER_GRPC_URLS=$1
@@ -55,11 +56,14 @@ shift
 
 # Process additional input arguments
 N_WORKERS=2  # Default value
+N_PS=2  # Default value
 SYNC_REPLICAS=0
 
 while true; do
   if [[ "$1" == "--num-workers" ]]; then
     N_WORKERS=$2
+  elif [[ "$1" == "--num-parameter-servers" ]]]; then
+    N_PS=$2
   elif [[ "$1" == "--sync-replicas" ]]; then
     SYNC_REPLICAS="1"
   fi
@@ -76,6 +80,7 @@ if [[ ${SYNC_REPLICAS} == "1" ]]; then
 fi
 
 echo "N_WORKERS = ${N_WORKERS}"
+echo "N_PS = ${N_PS}"
 echo "SYNC_REPLICAS = ${SYNC_REPLICAS}"
 echo "SYNC_REPLICAS_FLAG = ${SYNC_REPLICAS_FLAG}"
 
@@ -103,6 +108,7 @@ timeout ${TIMEOUT} python "${MNIST_REPLICA}" \
     --worker_grpc_url="${WORKER_GRPC_URL_0}" \
     --worker_index=0 \
     --num_workers=${N_WORKERS} \
+    --num_parameter_servers=${N_PS} \
     ${SYNC_REPLICAS_FLAG} \
     --download_only || \
     die "Download-only step of MNIST replica FAILED"
@@ -119,6 +125,7 @@ while true; do
       --worker_grpc_url="${WORKER_GRPC_URL}" \
       --worker_index=${IDX} \
       --num_workers=${N_WORKERS} \
+      --num_parameter_servers=${N_PS} \
       ${SYNC_REPLICAS_FLAG} 2>&1 | tee "${WKR_LOG_PREFIX}${IDX}.log" &
   echo "Worker ${IDX}: "
   echo "  GRPC URL: ${WORKER_GRPC_URL}"
@@ -167,29 +174,30 @@ while true; do
   fi
 done
 
-# Run evaluation
-# TODO(cais): Run evaluation every N training steps
-timeout ${TIMEOUT} python "${MNIST_REPLICA}" \
-      --worker_grpc_url="${WORKER_GRPC_URL_0}" \
-      --worker_index=0 \
-      --num_workers=${N_WORKERS} \
-      ${SYNC_REPLICAS_FLAG} --evaluate 2>&1 > \
-      "${WKR_LOG_PREFIX}0_eval.log"
+# # Run evaluation
+# # TODO(cais): Run evaluation every N training steps
+# timeout ${TIMEOUT} python "${MNIST_REPLICA}" \
+#       --worker_grpc_url="${WORKER_GRPC_URL_0}" \
+#       --worker_index=0 \
+#       --num_workers=${N_WORKERS} \
+#       --num_parameter_servers=${N_PS} \
+#       ${SYNC_REPLICAS_FLAG} --evaluate 2>&1 > \
+#       "${WKR_LOG_PREFIX}0_eval.log"
 
-# Function for getting final validation cross entropy from worker log files
-get_final_val_xent() {
-  echo $(cat $1 | grep "^After.*validation cross entropy = " | \
-      awk '{print $NF}')
-}
+# # Function for getting final validation cross entropy from worker log files
+# get_final_val_xent() {
+#   echo $(cat $1 | grep "^After.*validation cross entropy = " | \
+#       awk '{print $NF}')
+# }
 
-VAL_XENT=$(get_final_val_xent "${WKR_LOG_PREFIX}0_eval.log")
+# VAL_XENT=$(get_final_val_xent "${WKR_LOG_PREFIX}0_eval.log")
 
-# Sanity check on the validation entropies
-# TODO(cais): In addition to this basic sanity check, we could run the training
-# with 1 and 2 workers, each for a few times and use scipy.stats to do a t-test
-# to verify tha tthe 2-worker training gives significantly lower final cross
-# entropy
-echo "Final validation cross entropy from worker0: ${VAL_XENT}"
-if [[ $(echo "${VAL_XENT}>0" | bc -l) != "1" ]]; then
-  die "Sanity checks on the final validation cross entropy values FAILED"
-fi
+# # Sanity check on the validation entropies
+# # TODO(cais): In addition to this basic sanity check, we could run the training
+# # with 1 and 2 workers, each for a few times and use scipy.stats to do a t-test
+# # to verify tha tthe 2-worker training gives significantly lower final cross
+# # entropy
+# echo "Final validation cross entropy from worker0: ${VAL_XENT}"
+# if [[ $(echo "${VAL_XENT}>0" | bc -l) != "1" ]]; then
+#   die "Sanity checks on the final validation cross entropy values FAILED"
+# fi

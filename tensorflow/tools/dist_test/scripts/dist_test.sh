@@ -156,6 +156,7 @@ fi
 
 "${MNIST_DIST_TEST_BIN}" "${GRPC_SERVER_URLS}" \
     --num-workers "${NUM_WORKERS}" \
+    --num-parameter-servers "${NUM_PARAMETER_SERVERS}" \
     ${SYNC_REPLICAS_FLAG}
 
 if [[ $? == "0" ]]; then
