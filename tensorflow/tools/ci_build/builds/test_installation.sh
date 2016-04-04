@@ -84,6 +84,29 @@ PY_TEST_GPU_BLACKLIST="${PY_TEST_GPU_BLACKLIST}:"\
 PY_TEST_EXCLUSIVE_LIST="tensorflow/python/platform/gfile_test.py:"\
 "tensorflow/python/platform/default/gfile_test.py"
 
+# Exclusive tests for GPU only
+PY_TEST_EXCLUSIVE_LIST_GPU="tensorflow/contrib/ctc/ctc_decoder_ops_test.py:"\
+"^tensorflow/contrib/distributions/python/kernel_tests/.*_test\.py$:"\
+"tensorflow/contrib/layers/python/layers/initializers_test.py:"\
+"tensorflow/contrib/layers/python/layers/layers_test.py:"\
+"tensorflow/contrib/layers/python/layers/regularizers_test.py:"\
+"tensorflow/contrib/skflow/python/skflow/tests/test_custom_decay.py:"\
+"tensorflow/contrib/skflow/python/skflow/tests/test_early_stopping.py:"\
+"tensorflow/contrib/skflow/python/skflow/tests/test_estimators.py:"\
+"tensorflow/contrib/skflow/python/skflow/tests/test_grid_search.py:"\
+"tensorflow/contrib/skflow/python/skflow/tests/test_multioutput.py:"\
+"tensorflow/contrib/skflow/python/skflow/tests/test_regression.py:"\
+"tensorflow/contrib/skflow/python/skflow/tests/test_saver.py:"\
+"tensorflow/python/client/graph_util_test.py:"\
+"tensorflow/python/client/session_test.py:"\
+"tensorflow/python/client/server_lib_test.py:"\
+"^tensorflow/python/kernel_tests/.*_test\.py$:"\
+"tensorflow/python/ops/image_ops_test.py:"\
+"tensorflow/python/ops/math_ops_test.py:"\
+"tensorflow/python/ops/image_grad_test.py:"\
+"tensorflow/python/training/session_manager_test.py:"\
+"tensorflow/python/training/training_ops_test.py"
+
 # Append custom list of exclusive tests
 if [[ ! -z "${TF_BUILD_EXTRA_EXCLUSIVE_INSTALL_TESTS}" ]]; then
   PY_TEST_EXCLUSIVE_LIST="${PY_TEST_EXCLUSIVE_LIST}:"\
@@ -144,6 +167,7 @@ fi
 # Append GPU-only test blacklist
 if [[ ${IS_GPU} == "1" ]]; then
   PY_TEST_BLACKLIST="${PY_TEST_BLACKLIST}:${PY_TEST_GPU_BLACKLIST}"
+  PY_TEST_EXCLUSIVE_LIST="${PY_TEST_EXCLUSIVE_LIST}:${PY_TEST_EXCLUSIVE_LIST_GPU}"
 fi
 
 # Determine the major and minor versions of Python being used (e.g., 2.7)
@@ -222,9 +246,24 @@ ALL_PY_TESTS_0=$(find tensorflow/{contrib,examples,models,python,tensorboard} \
 EXCLUSIVE_LIST="$(echo "${PY_TEST_EXCLUSIVE_LIST}" | sed -e 's/:/ /g')"
 
 ALL_PY_TESTS=""
+EXCLUSIVE_TESTS=""
 for TEST in ${ALL_PY_TESTS_0}; do
-  if [[ ! ${PY_TEST_EXCLUSIVE_LIST} == *"${TEST}"* ]]; then
+  IS_EXCLUSIVE=0
+  if [[ ${PY_TEST_EXCLUSIVE_LIST} == *"${TEST}"* ]]; then
+    IS_EXCLUSIVE=1
+  else
+    for TEST_PATTERN in ${EXCLUSIVE_LIST}; do
+      if [[ ! -z $(echo "${TEST}" | grep "${TEST_PATTERN}") ]]; then
+        IS_EXCLUSIVE=1
+        break
+      fi
+    done
+  fi
+
+  if [[ ${IS_EXCLUSIVE} == "0" ]]; then
     ALL_PY_TESTS="${ALL_PY_TESTS} ${TEST}"
+  else
+    EXCLUSIVE_TESTS="${EXCLUSIVE_TESTS} ${TEST}"
   fi
 done
 
@@ -232,7 +271,7 @@ done
 N_PAR_TESTS=$(echo ${ALL_PY_TESTS} | wc -w)
 echo "Number of non-exclusive tests: ${N_PAR_TESTS}"
 
-for TEST in ${EXCLUSIVE_LIST}; do
+for TEST in ${EXCLUSIVE_TESTS}; do
   ALL_PY_TESTS="${ALL_PY_TESTS} ${TEST}"
 done
 
