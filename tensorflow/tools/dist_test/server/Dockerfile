@@ -43,4 +43,4 @@ RUN pip --no-cache-dir install \
 ADD . /var/tf-k8s
 
 # Container entry point
-ENTRYPOINT ["/var/tf-k8s/server/grpc_tensorflow_server_wrapper.sh"]
+ENTRYPOINT ["/var/tf-k8s/server/grpc_tensorflow_server.py"]
