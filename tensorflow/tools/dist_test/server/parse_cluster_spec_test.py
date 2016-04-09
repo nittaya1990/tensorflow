@@ -20,13 +20,14 @@ from __future__ import print_function
 
 import tensorflow as tf
 
+from tensorflow.core.protobuf import tensorflow_server_pb2
 from tensorflow.tools.dist_test.server import grpc_tensorflow_server
 
 
 class ParseClusterSpecStringTest(tf.test.TestCase):
 
   def setUp(self):
-    self._cluster = tf.ServerDef(protocol="grpc").cluster
+    self._cluster = tensorflow_server_pb2.ServerDef(protocol="grpc").cluster
 
   def test_parse_multi_jobs_sunnyday(self):
     cluster_spec = ("worker|worker0:2220;worker1:2221;worker2:2222,"
