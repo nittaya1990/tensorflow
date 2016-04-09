@@ -16,7 +16,11 @@
 #
 # Builds the test server for distributed (GRPC) TensorFlow
 #
-# Usage: build_server.sh <docker_image_name> [--local-pip]
+# Usage: build_server.sh <docker_image_name> [--test]
+#
+# The optional flag --test lets the script to use the Dockerfile for the
+# testing GRPC server. Without the flag, the script will build the non-test
+# GRPC server.
 #
 # Note that the Dockerfile is located in ./server/ but the docker build should
 # use the current directory as the context.
@@ -30,7 +34,7 @@ die() {
 
 # Check arguments
 if [[ $# != 1 ]] && [[ $# != 2 ]]; then
-  die "Usage: $0 <docker_image_name> [--local-pip]"
+  die "Usage: $0 <docker_image_name> [--test]"
 fi
 
 DOCKER_IMG_NAME=$1
@@ -40,9 +44,10 @@ shift
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 DOCKER_FILE="${DIR}/server/Dockerfile"
-if [[ $1 == "--local-pip" ]]; then
-  DOCKER_FILE="${DIR}/server/Dockerfile.local_pip"
+if [[ $1 == "--test" ]]; then
+  DOCKER_FILE="${DIR}/server/Dockerfile.test"
 fi
+echo "Using Docker file: ${DOCKER_FILE}"
 
 if [[ ! -f "${DOCKER_FILE}" ]]; then
   die "ERROR: Unable to find dockerfile: ${DOCKER_FILE}"

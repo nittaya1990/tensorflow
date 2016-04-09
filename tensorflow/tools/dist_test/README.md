@@ -85,13 +85,17 @@ e.g.,
     ./local_test.sh --num-workers 4
 
 
-**Building the test server Docker image**
+**Building the GRPC server Docker image**
 
 To build the Docker image for a test server of TensorFlow distributed runtime,
 run:
 
     ./build_server.sh <docker_image_name>
 
+**Using the GRPC server Docker image**
+To launch a container as a TensorFlow GRPC server, do as the following example:
+
+    docker run tensorflow/tf_grpc_server --cluster_spec="worker|localhost:2222;foo:2222,ps|bar:2222;qux:2222" --job_name=worker --task_id=0
 
 **Generating configuration file for TensorFlow k8s clusters**
 
@@ -104,5 +108,13 @@ workers and parameter servers. For example:
         --num_parameter_servers 2 \
         --grpc_port 2222 \
         --request_load_balancer \
-        --docker_image "tensorflow/tf_grpc_test_server" \
+        --docker_image "tensorflow/tf_grpc_server" \
         > tf-k8s-with-lb.yaml
+
+The yaml configuration file generated in the previous step can be used to a
+create a k8s cluster running the specified numbers of worker and parameter
+servers. For example:
+
+    kubectl create -f tf-k8s-with-lb.yaml
+
+See [Kubernetes kubectl documentation](http://kubernetes.io/docs/user-guide/kubectl-overview/) for more details.
