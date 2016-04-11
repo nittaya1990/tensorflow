@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/core/framework/rendezvous.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/graph/graph.h"
+#include "tensorflow/core/lib/core/debugger.h"
 #include "tensorflow/core/lib/core/notification.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/platform/logging.h"
@@ -45,6 +46,14 @@ class StepStatsCollector;
 class Executor {
  public:
   virtual ~Executor() {}
+
+  // IDE(cais)
+  virtual DebuggerResponse HandleDebuggerMessage(const DebuggerRequest& request) {
+    std::cerr << "ERROR: Not implemented" << std::endl;
+
+    DebuggerResponse response;
+    return response;
+  }
 
   // RunAsync() executes the graph computation. "done" is run when the
   // graph computation completes. If any error happens during the

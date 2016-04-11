@@ -66,7 +66,6 @@ def _get_feeds_for_indexed_slices(feed, feed_val):
   return list(zip([feed.values, feed.indices] if feed.dense_shape is None else
                   [feed.values, feed.indices, feed.dense_shape], feed_val))
 
-
 class BaseSession(SessionInterface):
   """A class for interacting with a TensorFlow computation.
 
@@ -106,6 +105,7 @@ class BaseSession(SessionInterface):
       status = tf_session.TF_NewStatus()
       try:
         self._session = tf_session.TF_NewSession(opts, status)
+        # print("self._session =", self._session)  # TODO(cais): DEBUG remove
         if tf_session.TF_GetCode(status) != 0:
           raise RuntimeError(compat.as_text(tf_session.TF_Message(status)))
       finally:
@@ -131,6 +131,15 @@ class BaseSession(SessionInterface):
             raise RuntimeError(compat.as_text(tf_session.TF_Message(status)))
         finally:
           tf_session.TF_DeleteStatus(status)
+
+  def debug(self, message, feed=None):
+    if feed is None:
+      feed = {}
+    
+    output = tf_session.TF_DebugDummy(self._session, message, feed)
+    if isinstance(output, list):
+      output = output[0]
+    return output
 
   def __del__(self):
     self.close()

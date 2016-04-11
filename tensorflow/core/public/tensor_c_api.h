@@ -18,6 +18,10 @@ limitations under the License.
 #define TENSORFLOW_PUBLIC_TENSOR_C_API_H_
 
 #include <stddef.h>
+#include <string>
+#include <vector>
+
+#include "tensorflow/core/framework/tensor.h"
 
 // --------------------------------------------------------------------------
 // C API for TensorFlow.
@@ -263,6 +267,21 @@ extern void TF_DeleteSession(TF_Session*, TF_Status* status);
 // add the nodes in that GraphDef to the graph for the session.
 extern void TF_ExtendGraph(TF_Session*, const void* proto, size_t proto_len,
                            TF_Status*);
+
+
+typedef struct TF_DebuggerResponse TF_DebuggerResponse;
+
+// IDE(cais)
+extern TF_DebuggerResponse* TF_SendDebugMessage(TF_Session* s,
+                                                const std::string& debug_msg,
+                                                TF_Tensor** input_tensors,
+                                                TF_Tensor** output_tensors);
+
+extern std::string DebuggerResponseCommand(TF_DebuggerResponse* debugger_response);
+extern bool DebuggerResponseIsCompleted(TF_DebuggerResponse* debugger_response);
+extern std::vector<std::string> DebuggerResponseCompletedNodes(TF_DebuggerResponse* debugger_response);
+extern std::vector<std::string> DebuggerResponseRemainingNodes(TF_DebuggerResponse* debugger_response);
+// extern tensorflow::Tensor& DebuggerResponseOutputTensor(TF_DebuggerResponse* debugger_response);
 
 // Run the graph associated with the session starting with the
 // supplied inputs (inputs[0,ninputs-1]).  Regardless of success or

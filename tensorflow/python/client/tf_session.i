@@ -107,6 +107,8 @@ tensorflow::ImportNumpy();
     // The ndarray must be stored as contiguous bytes in C (row-major) order.
     PyObject* array_object = PyArray_FromAny(
         value, nullptr, 0, 0, NPY_ARRAY_CARRAY, nullptr);
+
+    std::cout << "array_object = " << array_object << std::endl;
     if (!array_object) {
       SWIG_fail;
     }
@@ -263,7 +265,7 @@ tensorflow::ImportNumpy();
 %unignore TF_CloseSession;
 %unignore TF_DeleteSession;
 %unignore TF_ExtendGraph;
-%unignore TF_NewLibrary;
+// %unignore TF_NewLibrary;
 %unignore TF_LoadLibrary;
 %unignore TF_GetOpList;
 %include "tensorflow/core/public/tensor_c_api.h"
@@ -287,6 +289,15 @@ tensorflow::ImportNumpy();
         raise ValueError(TF_Message(status))
     return opts
 %}
+
+
+%noexception tensorflow::TF_DebugDummy_wrapper;
+%rename(TF_DebugDummy) tensorflow::TF_DebugDummy_wrapper;
+%unignore tensorflow;
+%unignore TF_DebugDummy;
+%unignore DebuggerResponseIsCompletedWrapper;
+%unignore DebuggerResponseCompletedNodesWrapper;
+%unignore DebuggerResponseRemainingNodesWrapper;
 
 // Include the wrapper for TF_Run from tf_session_helper.h.
 

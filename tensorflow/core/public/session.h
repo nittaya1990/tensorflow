@@ -21,6 +21,7 @@ limitations under the License.
 
 #include "tensorflow/core/framework/graph.pb.h"
 #include "tensorflow/core/framework/tensor.h"
+#include "tensorflow/core/lib/core/debugger.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/protobuf/config.pb.h"
@@ -173,6 +174,14 @@ class Session {
   /// on the TensorFlow runtime (specified during session creation by
   /// the `SessionOptions::target` field).
   virtual Status Close() = 0;
+
+  // IDE(cais)
+  virtual DebuggerResponse SendDebugMessage(const DebuggerRequest& request) {
+    std::cerr << "ERROR: SendDebugMessage not supported for this session." << std::endl;
+
+    DebuggerResponse debugger_response;
+    return debugger_response;
+  }
 };
 
 /// \brief Create a new session with the given options.

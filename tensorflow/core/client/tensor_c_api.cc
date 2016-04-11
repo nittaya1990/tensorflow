@@ -22,7 +22,10 @@ limitations under the License.
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/framework/tensor_shape.h"
+#include "tensorflow/core/framework/types.h"
+#include "tensorflow/core/framework/types.pb.h"
 #include "tensorflow/core/lib/core/coding.h"
+#include "tensorflow/core/lib/core/debugger.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/core/stringpiece.h"
@@ -37,6 +40,7 @@ using tensorflow::error::Code;
 using tensorflow::errors::InvalidArgument;
 using tensorflow::gtl::ArraySlice;
 using tensorflow::AllocationDescription;
+using tensorflow::DebuggerResponse;
 using tensorflow::Status;
 using tensorflow::DataType;
 using tensorflow::Env;
@@ -53,6 +57,13 @@ using tensorflow::TensorShape;
 extern "C" {
 
 // --------------------------------------------------------------------------
+struct TF_DebuggerResponse {
+  TF_DebuggerResponse(const DebuggerResponse& debugger_response_)
+    : debugger_response(debugger_response_) {}
+
+  DebuggerResponse debugger_response;
+};
+
 struct TF_Status {
   Status status;
 };
@@ -471,6 +482,96 @@ void TF_Run_Helper(TF_Session* s, const char* handle,
 
 extern "C" {
 
+// IDE(cais)
+TF_DebuggerResponse* TF_SendDebugMessage(TF_Session* s,
+                                         const std::string& debug_msg,
+                                         TF_Tensor** input_tensors,
+                                         TF_Tensor** output_tensors) {
+  tensorflow::DebuggerRequest request(debug_msg);
+
+  // If the command is "inject_value", Get tensor value input
+  Tensor input_tensor;  //TODO(cais): Avoid unnecessary constructions
+  if (debug_msg.find("inject_value ") == 0) {
+    // TODO(cais): Make a copy of the input tensor
+    TF_Tensor* src = input_tensors[0];
+    input_tensor = tensorflow::TensorCApi::MakeTensor(src->dtype, src->shape, src->buffer);
+    
+    std::cout << "src = " << src << "; src->buffer = " << src->buffer
+              << "; src->buffer->data() = " << src->buffer->data()
+              << "; inject_value = " << input_tensor.DebugString()
+              << "; &input_tensor = " << &input_tensor
+              << "; input_tensor.buf_ = " << input_tensor.buf_
+              << "; request.input_tensor address = " << &(request.input_tensor) << std::endl;  //DEBUG
+
+    request.input_tensor = input_tensor;
+  }
+
+  // std::cout << "Calling SendDebugMessage()" << std::endl;  //DEBUG
+
+  DebuggerResponse debugger_response = s->session->SendDebugMessage(request);
+
+  // std::cout << "Calling TF_DebuggerResponse()" << std::endl;  //DEBUG
+  TF_DebuggerResponse* debugger_response_output = new TF_DebuggerResponse(debugger_response); //TODO(cais): memory leak
+  // output->debugger_response;
+
+  // IDE(cais): Dummy TODO(cais): Replace with true values
+  // Assume length = 1
+  for (size_t i = 0; i < 1; ++i) {
+    output_tensors[i] = NULL;
+  }
+
+
+
+  if (debugger_response.has_output_tensor) {
+    // std::cout << "Transferring output_tensor" << std::endl;  //DEBUG
+    Tensor output_tensor(debugger_response.output_tensor);
+
+    TensorBuffer* buf = tensorflow::TensorCApi::Buffer(output_tensor);
+    buf->Ref();
+
+    output_tensors[0] = new TF_Tensor{static_cast<TF_DataType>(output_tensor.dtype()), 
+                                      output_tensor.shape(), buf};
+    // TODO(cais): Logical branch for string tensors
+  }
+
+  // std::cout << "Creating dummy tensor" << std::endl;  //DEBUG
+  // TensorShape new_tensor_shape({3, 3});
+  // Tensor new_tensor(tensorflow::DT_FLOAT, new_tensor_shape);
+  // auto new_tensor_flat = new_tensor.flat<float>();
+  // for (int i = 0; i < 3 * 3; ++i) {
+  //   new_tensor_flat(i) = 20.0 * (i + 1);
+  // }
+
+  // TensorBuffer* buf = tensorflow::TensorCApi::Buffer(new_tensor);
+  // buf->Ref();
+
+  // output_tensors[0] = new TF_Tensor{static_cast<TF_DataType>(new_tensor.dtype()), 
+                                    // new_tensor.shape(), buf};
+
+  return debugger_response_output;
+}
+
+std::string DebuggerResponseCommand(TF_DebuggerResponse* debugger_response) {
+  return debugger_response->debugger_response.command;
+}
+
+bool DebuggerResponseIsCompleted(TF_DebuggerResponse* debugger_response) {
+  return debugger_response->debugger_response.is_completed;
+}
+
+std::vector<std::string> DebuggerResponseCompletedNodes(TF_DebuggerResponse* debugger_response) {
+  return debugger_response->debugger_response.completed_nodes;
+}
+
+std::vector<std::string> DebuggerResponseRemainingNodes(TF_DebuggerResponse* debugger_response) {
+  return debugger_response->debugger_response.remaining_nodes;
+}
+
+// tensorflow::Tensor& DebuggerResponseOutputTensor(TF_DebuggerResponse* debugger_response) {
+
+//   return debugger_response->debugger_response.output_tensor;
+// }
+
 void TF_Run(TF_Session* s, const TF_Buffer* run_options,
             // Input tensors
             const char** c_input_names, TF_Tensor** c_inputs, int ninputs,
@@ -547,4 +648,5 @@ TF_Library* TF_LoadLibrary(const char* library_filename, TF_Status* status) {
 
 TF_Buffer TF_GetOpList(TF_Library* lib_handle) { return lib_handle->op_list; }
 
-}  // end extern "C"
+}  
+// end extern "C"

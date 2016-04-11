@@ -26,6 +26,7 @@ limitations under the License.
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/graph/equal_graph_def.h"
 #include "tensorflow/core/lib/core/coding.h"
+#include "tensorflow/core/lib/core/debugger.h"
 #include "tensorflow/core/platform/types.h"
 
 namespace tensorflow {
@@ -433,11 +434,209 @@ tensorflow::Status TF_Status_to_Status(TF_Status* tf_status) {
   }
 }
 
-}  // namespace
+}  // namespacepoo
 
 Safe_PyObjectPtr make_safe(PyObject* o) {
   return Safe_PyObjectPtr(o, Py_DECREF_wrapper);
 }
+
+// IDE(cais)
+void TF_DebugDummy_wrapper(TF_Session* session,
+                           const string& msg,
+                           const FeedVector& inputs,
+                           Status* out_status,
+                           PyObjectVector* out_values) {
+  // std::cout << "TF_DebugDummy_wrapper inputs: " << std::endl;  //DEBUG
+  // for (const auto& name_and_array : inputs) {
+    // std::cout << "  Name: " << name_and_array.first << std::endl;  //DEBUG
+  // }
+  // TODO(cais)
+  // std::cout << "session = " << session << std::endl;
+
+  // 1. Convert the feed inputs to the appropriate form for TF_Run.
+  Safe_PyObjectVector py_inputs_safe;  // Used to decref the input arrays on failure.
+  Safe_TF_TensorVector inputs_safe;  // Used to delete tensors on failure.
+  TF_TensorVector inputs_unsafe;     // Used to contain the arg to TF_Run.
+
+  for (const auto& name_and_array : inputs) {
+    py_inputs_safe.emplace_back(
+        make_safe(reinterpret_cast<PyObject*>(name_and_array.second)));
+  }
+
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    PyArrayObject* array = inputs[i].second;
+    std::cout << "PyArrayObject* array = " << array << std::endl;
+
+    // Convert numpy dtype to TensorFlow dtype.
+    TF_DataType dtype = TF_FLOAT;
+    *out_status = PyArray_TYPE_to_TF_DataType(array, &dtype);
+    if (!out_status->ok()) {
+      return;
+    }
+
+    tensorflow::int64 nelems = 1;
+    gtl::InlinedVector<tensorflow::int64, 4> dims;
+    for (int i = 0; i < PyArray_NDIM(array); ++i) {
+      dims.push_back(PyArray_SHAPE(array)[i]);
+      nelems *= dims[i];
+    }
+
+    // Create a TF_Tensor based on the fed data. In the case of non-string data
+    // type, this steals a reference to array, which will be relinquished when
+    // the underlying buffer is deallocated. For string, a new temporary buffer
+    // is allocated into which the strings are encoded.
+    if (dtype != TF_STRING) {
+      // NOTE(mrry): We currently copy the numpy array into a new
+      // buffer to avoid possible issues on deallocation (such as
+      // having to acquire the Python Global Interpreter Lock).
+      // TODO(mrry): Investigate in what cases we can safely acquire
+      size_t size = PyArray_NBYTES(array);
+      // NOTE(mrry): 32 is the upper bound on current alignment
+      // requirements for tensorflow::Tensor. We hard code this here to
+      // avoid taking a dependency on Eigen in the client code.
+      void* data = tensorflow::cpu_allocator()->AllocateRaw(32, size);
+      std::cout << "PyArrayObject* data = " << data << std::endl;
+      
+      std::memcpy(data, PyArray_DATA(array), size);
+
+      TF_Tensor* new_tensor = TF_NewTensor(
+          dtype, dims.data(), dims.size(), data, size,
+          [](void* data, size_t len, void* arg) {            
+            tensorflow::cpu_allocator()->DeallocateRaw(data);
+          },
+          nullptr);
+      std::cout << "new_tensor = " << new_tensor << std::endl;
+
+      inputs_safe.emplace_back(make_safe(new_tensor));
+      // The destruction of the numpy array will now be handled by the
+      // inputs_safe destructor.
+      py_inputs_safe[i].reset();
+    } else {
+      size_t size = 0;
+      void* encoded = nullptr;
+      Status s = EncodePyBytesArray(array, nelems, &size, &encoded);
+      if (!s.ok()) {
+        *out_status = s;
+        return;
+      }
+      inputs_safe.emplace_back(
+          make_safe(TF_NewTensor(dtype, dims.data(), dims.size(), encoded, size,
+                                 [](void* data, size_t len, void* arg) {
+                                   delete[] reinterpret_cast<char*>(data);
+                                 },
+                                 array)));
+      // The destruction of the numpy array will now be handled by the
+      // inputs_safe destructor.
+      py_inputs_safe[i].reset();
+    }
+    inputs_unsafe.push_back(inputs_safe.back().get());
+  }
+  // ~ 1. Convert the feed inputs to the appropriate form for TF_Run.
+
+  TF_TensorVector output_tensors(1);
+
+  TF_DebuggerResponse* debugger_response = TF_SendDebugMessage(session,
+                                                               msg,
+                                                               inputs_unsafe.data(),
+                                                               output_tensors.data());
+
+  std::string command = DebuggerResponseCommandWrapper(debugger_response);
+  bool is_completed = DebuggerResponseIsCompletedWrapper(debugger_response);
+
+  // Key objects for the output dict
+  const std::string command_key_str = "command";
+  const std::string completed_nodes_key_str = "completed_nodes";
+  const std::string remaining_nodes_key_str = "remaining_nodes";
+  const std::string is_completed_key_str = "is_completed";
+  const std::string node_val_key_str = "node_value";
+
+  PyObject* command_key = PyString_FromStringAndSize(command_key_str.c_str(),
+                                                     command_key_str.size());
+  PyObject* completed_nodes_key = PyString_FromStringAndSize(completed_nodes_key_str.c_str(),
+                                                             completed_nodes_key_str.size());
+  PyObject* remaining_nodes_key = PyString_FromStringAndSize(remaining_nodes_key_str.c_str(),
+                                                             remaining_nodes_key_str.size());
+  PyObject* is_completed_key = PyString_FromStringAndSize(is_completed_key_str.c_str(),
+                                                          is_completed_key_str.size());
+  PyObject* node_val_key = PyString_FromStringAndSize(node_val_key_str.c_str(),
+                                                      node_val_key_str.size());
+
+  // Create output dict
+  PyObject* py_array = PyDict_New();
+
+  PyDict_SetItem(py_array, command_key, PyString_FromStringAndSize(command.c_str(), command.size()));
+  PyDict_SetItem(py_array, is_completed_key, is_completed ? Py_True : Py_False);
+
+  if (command == "where") {
+    std::vector<std::string> completed_nodes = DebuggerResponseCompletedNodesWrapper(debugger_response);
+    std::vector<std::string> remaining_nodes = DebuggerResponseRemainingNodesWrapper(debugger_response);
+
+    PyObject* completed_nodes_list = PyList_New(completed_nodes.size());
+    PyObject* remaining_nodes_list = PyList_New(remaining_nodes.size());
+
+    for (size_t j = 0; j < completed_nodes.size(); ++j) {
+      PyList_SetItem(completed_nodes_list,
+                     j,
+                     PyString_FromStringAndSize(completed_nodes[j].c_str(), completed_nodes[j].size()));
+    }
+
+    for (size_t j = 0; j < remaining_nodes.size(); ++j) {
+      PyList_SetItem(remaining_nodes_list,
+                     j,
+                     PyString_FromStringAndSize(remaining_nodes[j].c_str(), remaining_nodes[j].size())); 
+    }
+
+    PyDict_SetItem(py_array, completed_nodes_key, completed_nodes_list);
+    PyDict_SetItem(py_array, remaining_nodes_key, remaining_nodes_list);
+
+  } else if (command.find("print ") == 0) {
+    // Tensor output_tensor = DebuggerResponseOutputTensorWrapper(debugger_response);
+    // std::cout << "output_tensor: " << output_tensor.DebugString() << std::endl;  //DEBUG
+    
+    PyObject* py_output_tensor;
+    TF_Tensor_to_PyObject(output_tensors[0], &py_output_tensor);
+    PyDict_SetItem(py_array, node_val_key, py_output_tensor);
+  }
+
+  // std::cout << "DONE calling TF_SendDebugMessage()" << std::endl;  //DEBUG
+
+  // Safe_TF_TensorVector tf_outputs_safe;
+  // for (const auto& output_tensor : output_tensors) {
+  //   tf_outputs_safe.emplace_back(make_safe(output_tensor));
+  // }
+
+  Safe_PyObjectVector py_outputs_safe;
+  // TF_Tensor_to_PyObject(output_tensors[i], &py_array);
+
+  py_outputs_safe.emplace_back(make_safe(py_array));
+
+  for (auto& output : py_outputs_safe) {
+    out_values->push_back(output.release());
+  }
+
+  *out_status = Status::OK();
+}
+
+
+std::string DebuggerResponseCommandWrapper(TF_DebuggerResponse* debugger_response) {
+  return DebuggerResponseCommand(debugger_response);
+}
+
+bool DebuggerResponseIsCompletedWrapper(TF_DebuggerResponse* debugger_response) {
+  return DebuggerResponseIsCompleted(debugger_response);
+}
+
+std::vector<std::string> DebuggerResponseCompletedNodesWrapper(TF_DebuggerResponse* debugger_response) {
+  return DebuggerResponseCompletedNodes(debugger_response);
+}
+
+std::vector<std::string> DebuggerResponseRemainingNodesWrapper(TF_DebuggerResponse* debugger_response) {
+  return DebuggerResponseRemainingNodes(debugger_response);
+}
+
+// tensorflow::Tensor& fDebuggerResponseOutputTensorWrapper(TF_DebuggerResponse* debugger_response) {
+//   return DebuggerResponseOutputTensor(debugger_response);
+// }
 
 void TF_Run_wrapper_helper(TF_Session* session, const char* handle,
                            const TF_Buffer* run_options,

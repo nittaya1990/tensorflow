@@ -47,14 +47,12 @@ class VariableOp : public OpKernel {
         (*var)->tensor()->set_shape(shape_);
         return Status::OK();
       };
+
       OP_REQUIRES_OK(ctx,
                      cinfo_.resource_manager()->LookupOrCreate<Var>(
                          cinfo_.container(), cinfo_.name(), &var_, creator));
     }
-    // Output a reference to our tensor, so it may be updated.
-    //
-    // As long as *this is alive, the ref we return here is valid
-    // because *this owns a ref on var_.
+    
     ctx->set_output_ref(0, var_->mu(), var_->tensor());
   }
 
