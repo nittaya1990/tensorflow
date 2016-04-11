@@ -107,7 +107,7 @@ workers and parameter servers. For example:
         --num_workers 2 \
         --num_parameter_servers 2 \
         --grpc_port 2222 \
-        --request_load_balancer \
+        --request_load_balancer true \
         --docker_image "tensorflow/tf_grpc_server" \
         > tf-k8s-with-lb.yaml
 
