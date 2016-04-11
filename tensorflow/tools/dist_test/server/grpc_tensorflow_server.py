@@ -99,7 +99,7 @@ def parse_cluster_spec(cluster_spec, cluster):
 
 def main(unused_args):
   # Create Protobuf ServerDef
-  server_def = tf.ServerDef(protocol="grpc")
+  server_def = tf.train.ServerDef(protocol="grpc")
 
   # Cluster info
   parse_cluster_spec(FLAGS.cluster_spec, server_def.cluster)
@@ -114,8 +114,8 @@ def main(unused_args):
     raise ValueError("Invalid task_id: %d" % FLAGS.task_id)
   server_def.task_index = FLAGS.task_id
 
-  # Create GrpcServer instance
-  server = tf.GrpcServer(server_def)
+  # Create GRPC Server instance
+  server = tf.train.Server(server_def)
 
   # join() is blocking, unlike start()
   server.join()
