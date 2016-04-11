@@ -471,6 +471,7 @@ tf_cuda_library(
     deps = [
         ":all_kernels",
         ":core",
+        ":debug_session",
         ":direct_session",
         ":gpu_runtime",
         ":lib",
@@ -533,6 +534,17 @@ tf_cuda_library(
     visibility = ["//visibility:public"],
     deps = [
         ":direct_session_internal",
+    ],
+    alwayslink = 1,
+)
+
+tf_cuda_library(
+    name = "debug_session",
+    copts = tf_copts(),
+    linkstatic = 1,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":debug_session_internal",
     ],
     alwayslink = 1,
 )
@@ -971,6 +983,22 @@ tf_cuda_library(
     name = "direct_session_internal",
     srcs = ["common_runtime/direct_session.cc"],
     hdrs = ["common_runtime/direct_session.h"],
+    copts = tf_copts(),
+    linkstatic = 1,
+    deps = [
+        ":core_cpu_internal",
+        ":framework",
+        ":lib",
+        ":lib_internal",
+        ":protos_all_cc",
+    ],
+    alwayslink = 1,
+)
+
+tf_cuda_library(
+    name = "debug_session_internal",
+    srcs = ["common_runtime/debug_session.cc"],
+    hdrs = ["common_runtime/debug_session.h"],
     copts = tf_copts(),
     linkstatic = 1,
     deps = [
