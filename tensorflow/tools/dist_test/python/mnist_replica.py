@@ -110,7 +110,7 @@ def get_device_setter(num_parameter_servers, num_workers):
   for k in range(num_workers):
     worker_spec.append("%s%d:%d" % (WORKER_PREFIX, k, FLAGS.grpc_port))
 
-  cluster_spec = tf.ClusterSpec({
+  cluster_spec = tf.train.ClusterSpec({
       "ps": ps_spec,
       "worker": worker_spec})
 
