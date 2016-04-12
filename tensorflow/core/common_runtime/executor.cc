@@ -864,6 +864,9 @@ void ExecutorState::RunAsync(Executor::DoneCallback done) {
   const Graph* graph = impl_->graph_;
   std::cout << "In RunAsync: graph->num_nodes() = " << graph->num_nodes() << std::endl; //DEBUG
 
+  // IDE(cais):
+
+
   TaggedNodeSeq ready;
 
   // Ask the device to fill in the device context map.
@@ -1547,8 +1550,19 @@ bool ExecutorState::NodeDone(const Status& s, const Node* node,
 
   // Schedule the ready nodes in 'ready'.
   if (s.ok()) {
-    std::cout << "  NodeDone() calling ScheduleReady(): ready.size() = " << ready.size()
-              << "; inline_ready->size() = " << inline_ready->size() << std::endl;
+    std::cout << "  NodeDone() calling ScheduleReady():" << std::endl;  //DEBUG
+    std::cout << "    ready.size() = " << ready.size() << ": ["; //TODO(cais)
+    for (const TaggedNode& t_node : ready) {
+      std::cout << t_node.node->name() << ", ";
+    }
+    std::cout << "]" << std::endl; //DEBUG
+
+    std::cout << "    inline_ready->size() = " << inline_ready->size() << ": [";
+    for (TaggedNode& t_node : *inline_ready) {
+      std::cout << t_node.node->name() << ", ";
+    }
+    std::cout << "]" << std::endl; //DEBUG
+
     string input_str = "";
     getline(std::cin, input_str);
 
