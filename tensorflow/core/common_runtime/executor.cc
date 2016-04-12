@@ -862,6 +862,8 @@ void ExecutorImpl::InitializePending(const Graph* graph,
 
 void ExecutorState::RunAsync(Executor::DoneCallback done) {
   const Graph* graph = impl_->graph_;
+  std::cout << "In RunAsync: graph->num_nodes() = " << graph->num_nodes() << std::endl; //DEBUG
+
   TaggedNodeSeq ready;
 
   // Ask the device to fill in the device context map.
@@ -874,13 +876,18 @@ void ExecutorState::RunAsync(Executor::DoneCallback done) {
 
   // Initialize the ready queue.
   for (const Node* n : impl_->root_nodes_) {
+    std::cout << "Pushing root node " << n->name() << " to ready queue" << std::endl; //DEBUG
     DCHECK_EQ(n->in_edges().size(), 0);
     ready.push_back(TaggedNode{n, root_frame_, 0, false});
   }
+
   if (ready.empty()) {
+    std::cout << "Readu queue is empty()" << std::endl; //DEBUG
     done(Status::OK());
   } else {
     num_outstanding_ops_ = ready.size();
+    std::cout << "Ready queue is NOT empty(); num_outstanding_ops_ = " 
+              << num_outstanding_ops_ << std::endl; //DEBUG
     root_frame_->iterations[0]->outstanding_ops = ready.size();
     done_cb_ = done;
     // Schedule to run all the ready ops in thread pool.
@@ -922,6 +929,8 @@ void DeleteParams(OpKernelContext::Params* p) {
 }  // namespace
 
 void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
+  std::cout << "In Process: tagged_node = " << tagged_node.node->name() << std::endl;
+
   const NodeItem* nodes = impl_->nodes_;
   TaggedNodeSeq ready;
   std::deque<TaggedNode> inline_ready;
@@ -1031,6 +1040,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
           gtl::vector_as_array(&impl_->output_attrs_) + item.output_attr_start;
 
       if (item.kernel_is_async) {
+        std::cout << "  kernel is async" << std::endl; //DEBUG
         // Asynchronous computes.
         AsyncOpKernel* async = item.kernel->AsAsync();
         DCHECK(async != nullptr);
@@ -1080,6 +1090,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
         if (stats_collector_) nodestats::SetOpStart(stats);
         device->ComputeAsync(async, ctx, done);
       } else {
+        std::cout << "  kernel is sync: " << op_kernel->name() << std::endl; //DEBUG
         // Synchronous computes.
         OpKernelContext ctx(&params, item.num_outputs);
         if (stats_collector_) nodestats::SetOpStart(stats);
@@ -1106,6 +1117,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     }
 
     if (!launched_asynchronously) {
+      std::cout << "  Process: Launched synchronously" << std::endl; //DEBUG
       // Clears inputs.
       const int num_inputs = item.num_inputs;
       for (int i = 0; i < num_inputs; ++i) {
@@ -1120,7 +1132,9 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
       }
       // Propagates outputs.
       if (s.ok()) {
+        std::cout << "  Process: Calling PropagateOutputs(): ready.size() = " << ready.size() << std::endl;
         PropagateOutputs(tagged_node, outputs, &ready);
+        std::cout << "  Process: DONE calling PropagateOutputs(): ready.size() = " << ready.size() << std::endl;
       }
       outputs.clear();
       if (!accessed_tensors.empty()) {
@@ -1339,12 +1353,17 @@ void ExecutorState::ActivateNode(const Node* node, const bool is_dead,
                                  FrameState* output_frame, int64 output_iter,
                                  const EntryVector& outputs,
                                  TaggedNodeSeq* ready) {
+
   const NodeItem* nodes = impl_->nodes_;
   IterationState* output_iter_state = output_frame->GetIteration(output_iter);
   for (const Edge* e : node->out_edges()) {
     const Node* dst_node = e->dst();
     const int dst_id = dst_node->id();
     const int src_slot = e->src_output();
+
+    std::cout << "  ActivateNode: " << node->name() << " --> " << dst_node->name()
+              << "; dst_id = " << dst_id 
+              << "; src_slot = " << src_slot << std::endl;
 
     bool dst_dead = false;
     bool dst_ready = false;
@@ -1353,6 +1372,7 @@ void ExecutorState::ActivateNode(const Node* node, const bool is_dead,
     // analysis happy.
     bool dst_need_input = !e->IsControlEdge();
     if (IsMerge(dst_node)) {
+      std::cout << "  ActivateNode:   IsMerge is true" << std::endl;
       // A merge node is ready if all control inputs have arrived and either
       // a) a live data input becomes available or b) all data inputs are
       // dead.
@@ -1386,6 +1406,12 @@ void ExecutorState::ActivateNode(const Node* node, const bool is_dead,
         }
       }
     } else {
+      std::cout << "  ActivateNode:   IsMerge is false" << std::endl;
+      // if (outputs[src_slot].has_value) {
+        // // IDE(cais): Print value
+        // std::cout << "  ActivateNode:   outputs[src_slot] has value: "
+        //           << outputs[src_slot].val.DebugString() << std::endl; //DEBUG
+      // }
       // A non-merge node is ready if all its inputs are ready. We wait
       // for all inputs to come in even if we know the node is dead. This
       // ensures that all input tensors get cleaned up.
@@ -1401,12 +1427,40 @@ void ExecutorState::ActivateNode(const Node* node, const bool is_dead,
       const int dst_slot = e->dst_input();
       Entry* input_tensors = output_iter_state->input_tensors;
       int dst_loc = dst_item.input_start + dst_slot;
-      input_tensors[dst_loc] = outputs[src_slot];
+
+      if (node->name() == "A") {
+        // IDE(cais):
+        TensorShape new_tensor_shape({2, 3});
+        Tensor new_tensor(DT_FLOAT, new_tensor_shape);
+        auto new_tensor_flat = new_tensor.flat<float>();
+        for (int i = 0; i < 2 * 3; ++i) {
+          new_tensor_flat(i) = 0.2 * (i + 1);
+        }
+
+        std::cout << "  ActivateNode:   Old type enum = " << outputs[src_slot].val.dtype()
+                  << "; New type enum = " << new_tensor.dtype()
+                  << "; Injecting new value: "
+                  << new_tensor.DebugString() << std::endl; //DEBUG
+
+        Entry output_copy;
+        output_copy.val = new_tensor;
+        // output_copy.ref = &new_tensor;
+        output_copy.ref = outputs[src_slot].ref;
+        output_copy.ref_mu = outputs[src_slot].ref_mu;
+        output_copy.has_value = outputs[src_slot].has_value;
+        output_copy.alloc_attr = outputs[src_slot].alloc_attr;
+        output_copy.device_context = outputs[src_slot].device_context;
+
+        input_tensors[dst_loc] = output_copy;
+      } else {
+        input_tensors[dst_loc] = outputs[src_slot];
+      }
     }
 
     // Add dst to the ready queue if it's ready
     if (dst_ready) {
       dst_dead = dst_dead && !IsControlTrigger(dst_node);
+      std::cout << "  ActivateNode:   *** Pushing node to ready: " << dst_node->name() << std::endl;
       ready->push_back(
           TaggedNode(dst_node, output_frame, output_iter, dst_dead));
       output_iter_state->outstanding_ops++;
@@ -1452,6 +1506,8 @@ void ExecutorState::AddLoopInv(FrameState* frame, const Node* node,
 bool ExecutorState::NodeDone(const Status& s, const Node* node,
                              const TaggedNodeSeq& ready, NodeExecStats* stats,
                              std::deque<TaggedNode>* inline_ready) {
+  std::cout << "In NodeDone(): node = " << node->name() << std::endl; //DEBUG
+
   if (stats_collector_) {
     nodestats::SetAllEnd(stats);
     stats_collector_->UpdateCostModel(stats, impl_->graph_, node);
@@ -1491,6 +1547,11 @@ bool ExecutorState::NodeDone(const Status& s, const Node* node,
 
   // Schedule the ready nodes in 'ready'.
   if (s.ok()) {
+    std::cout << "  NodeDone() calling ScheduleReady(): ready.size() = " << ready.size()
+              << "; inline_ready->size() = " << inline_ready->size() << std::endl;
+    string input_str = "";
+    getline(std::cin, input_str);
+
     ScheduleReady(ready, inline_ready);
   }
   return completed;
@@ -1515,24 +1576,32 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq& ready,
   if (stats_collector_) {
     scheduled_usec = nodestats::NowInUsec();
   }
+  std::cout << "In ScheduleReady(); scheduled_usec = " << scheduled_usec << std::endl; //DEBUG
+
   if (inline_ready == nullptr) {
     // Schedule to run all the ready ops in thread pool.
     for (auto& tagged_node : ready) {
+      std::cout << "Calling runner_ with Process() A (inline_ready = nullptr): "
+                << "node: " << tagged_node.node->name() << std::endl; //DEBUG
       runner_(std::bind(&ME::Process, this, tagged_node, scheduled_usec));
     }
     return;
   }
+
   const NodeItem* nodes = impl_->nodes_;
   const TaggedNode* curr_expensive_node = nullptr;
   for (auto& tagged_node : ready) {
     const NodeItem& item = nodes[tagged_node.node->id()];
     if (tagged_node.is_dead || !item.kernel_is_expensive) {
       // Inline this inexpensive node.
+      std::cout << "Pushing inexpensive node " << tagged_node.node->name() << std::endl; //DEBUG
       inline_ready->push_back(tagged_node);
     } else {
       if (curr_expensive_node) {
         // Dispatch to another thread since there is plenty of work to
         // do for this thread.
+        // TODO(cais): Do on this thread
+        std::cout << "Calling runner_ with Process() B" << std::endl; //DEBUG
         runner_(std::bind(&ME::Process, this, *curr_expensive_node,
                           scheduled_usec));
       }
@@ -1542,10 +1611,13 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq& ready,
   if (curr_expensive_node) {
     if (inline_ready->empty()) {
       // Tail recursion optimization
+      std::cout << "Tail recursion: Pushing expensive node "
+                << curr_expensive_node->node->name() << std::endl; //DEBUG
       inline_ready->push_back(*curr_expensive_node);
     } else {
       // There are inline nodes to run already. We dispatch this expensive
       // node to other thread.
+      std::cout << "Calling runner_ with Process() C" << std::endl; //DEBUG
       runner_(
           std::bind(&ME::Process, this, *curr_expensive_node, scheduled_usec));
     }

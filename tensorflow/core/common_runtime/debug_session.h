@@ -211,9 +211,6 @@ class DebugSession : public Session {
   mutex graph_def_lock_;
   GraphDef graph_def_ GUARDED_BY(graph_def_lock_);
 
-  // The thread-pool to use for running ops.
-  thread::ThreadPool* thread_pool_ = nullptr;
-
   // Schedules 'c' for execution.
   void SchedClosure(std::function<void()> c);
 

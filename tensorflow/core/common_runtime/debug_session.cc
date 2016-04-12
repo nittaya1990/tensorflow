@@ -60,24 +60,6 @@ namespace tensorflow {
 
 namespace {
 
-thread::ThreadPool* NewThreadPool(const SessionOptions& options) {
-  int32 inter_op_parallelism_threads =
-      options.config.inter_op_parallelism_threads();
-  if (inter_op_parallelism_threads == 0) {
-    // Default to using the number of cores available in the process.
-    inter_op_parallelism_threads = port::NumSchedulableCPUs();
-  }
-  VLOG(1) << "Debug session inter op parallelism threads: "
-          << inter_op_parallelism_threads;
-  return new thread::ThreadPool(options.env, "Compute",
-                                inter_op_parallelism_threads);
-}
-
-thread::ThreadPool* GlobalThreadPool(const SessionOptions& options) {
-  static thread::ThreadPool* const thread_pool = NewThreadPool(options);
-  return thread_pool;
-}
-
 // TODO(vrv): Figure out how to unify the many different functions
 // that generate RendezvousKey, since many of them have to be
 // consistent with each other.
@@ -110,6 +92,8 @@ std::atomic_int_fast64_t DebugSession::step_id_counter_(1);
 // devices that run concurrently, in which case we will need to
 // revisit this decision.
 void DebugSession::SchedClosure(std::function<void()> c) {
+  std::cout << "In SchedClosure" << std::endl; // DEBUG
+
 // TODO(sanjay): Get rid of __ANDROID__ path
 #ifdef __ANDROID__
   // On Android, there is no implementation of ThreadPool that takes
@@ -119,7 +103,7 @@ void DebugSession::SchedClosure(std::function<void()> c) {
   // safe given the reasoning above.
   c();
 #else
-  thread_pool_->Schedule(c);
+  c(); // cais IDE
 #endif  // __ANDROID__
 }
 
@@ -129,11 +113,6 @@ DebugSession::DebugSession(const SessionOptions& options,
       device_mgr_(device_mgr),
       cancellation_manager_(new CancellationManager()),
       operation_timeout_in_ms_(options_.config.operation_timeout_in_ms()) {
-  if (options_.config.use_per_session_threads()) {
-    thread_pool_ = NewThreadPool(options_);
-  } else {
-    thread_pool_ = GlobalThreadPool(options);
-  }
   // NOTE(mrry): We do not need to use a unique string for the session
   // handle, because DebugSession owns its devices. This may change
   // in future versions.
@@ -149,6 +128,7 @@ DebugSession::DebugSession(const SessionOptions& options,
     LOG(INFO) << "Device mapping:\n" << mapping_str;
   }
   for (auto d : device_mgr_->ListDevices()) {
+    std::cout << "Adding device: " <<  d->name() << std::endl; //DEBUG
     devices_.push_back(d);
     device_set_.AddDevice(d);
     d->op_segment()->AddHold(session_handle_);
@@ -173,9 +153,7 @@ DebugSession::~DebugSession() {
     d->op_segment()->RemoveHold(session_handle_);
   }
   delete cancellation_manager_;
-  if (options_.config.use_per_session_threads()) {
-    delete thread_pool_;
-  }
+  
   for (auto it : cost_models_) {
     delete it.second;
   }
@@ -268,6 +246,7 @@ Status DebugSession::Run(const RunOptions& run_options,
                           const std::vector<string>& target_nodes,
                           std::vector<Tensor>* outputs,
                           RunMetadata* run_metadata) {
+  std::cout << "In Run() 6-arg" << std::endl; //DEBUG
   {
     mutex_lock l(graph_def_lock_);
     if (!graph_created_) {
@@ -283,6 +262,8 @@ Status DebugSession::Run(const RunOptions& run_options,
     input_tensor_names.push_back(it.first);
   }
 
+
+  std::cout << "Calling GetOrCreateExecutors()" << std::endl; //DEBUG
   // Check if we already have an executor for these arguments.
   ExecutorsAndKeys* executors_and_keys;
   RunStateArgs run_state_args;
@@ -295,12 +276,15 @@ Status DebugSession::Run(const RunOptions& run_options,
   run_state.rendez = new IntraProcessRendezvous(device_mgr_.get());
 
   // Send inputs.
+  std::cout << "Calling SendInputs()" << std::endl; //DEBUG
   TF_RETURN_IF_ERROR(SendInputs(inputs, executors_and_keys, run_state.rendez));
 
   // Start parallel Executors.
   const int num_executors = executors_and_keys->items.size();
+  std::cout << "num_executors = " << num_executors << std::endl; //DEBUG
   ExecutorBarrier* barrier = new ExecutorBarrier(
       num_executors, run_state.rendez, [&run_state](const Status& ret) {
+        std::cout << "In barrier StatusCallback" << std::endl; //DEBUG
         {
           mutex_lock l(run_state.mu_);
           run_state.status.Update(ret);
@@ -312,7 +296,9 @@ Status DebugSession::Run(const RunOptions& run_options,
   args.step_id = step_id_counter_.fetch_add(1);
   args.rendezvous = run_state.rendez;
   args.cancellation_manager = cancellation_manager_;
-  args.runner = [this](Executor::Args::Closure c) { SchedClosure(c); };
+  args.runner = [this](Executor::Args::Closure c) { 
+    SchedClosure(c);
+  };
   if (LogMemory::IsEnabled()) {
     LogMemory::RecordStep(args.step_id, run_state_args.handle);
   }
@@ -325,12 +311,16 @@ Status DebugSession::Run(const RunOptions& run_options,
   }
 
   for (const auto& item : executors_and_keys->items) {
+    std::cout << "Calling RunAsync() from Run()" << std::endl; //DEBUG
     item.executor->RunAsync(args, barrier->Get());
+
+    // std::cout << "Calling Run()" << std::endl; //DEBUG
+    // item.executor->Run(args); // cais IDE
   }
 
-  WaitForNotification(&run_state, run_options.timeout_in_ms() > 0
-                                      ? run_options.timeout_in_ms()
-                                      : operation_timeout_in_ms_);
+  // WaitForNotification(&run_state, run_options.timeout_in_ms() > 0
+  //                                     ? run_options.timeout_in_ms()
+  //                                     : operation_timeout_in_ms_);
 
   {
     mutex_lock l(run_state.mu_);
@@ -407,6 +397,7 @@ Status DebugSession::PRunSetup(const std::vector<string>& input_names,
   }
 
   for (auto& item : executors_and_keys->items) {
+    std::cout << "Calling RunAsync() from PRunSetup()" << std::endl; //DEBUG
     Executor* exec = item.executor;
     exec->RunAsync(args, barrier->Get());
   }
@@ -662,11 +653,14 @@ Status DebugSession::GetOrCreateExecutors(
 
   // The executor_lock_ is intentionally released while executor is
   // being created.
+
+  std::cout << "Calling CreateGraphs()" << std::endl;
   FunctionLibraryDefinition* fdefs;
   std::unordered_map<string, Graph*> graphs;
   Status s = CreateGraphs(inputs, outputs, target_nodes, &fdefs, &graphs,
                           run_state_args);
   TF_RETURN_IF_ERROR(s);
+  std::cout << "~ Done calling CreateGraphs()" << std::endl;
 
   std::unique_ptr<ExecutorsAndKeys> ek(new ExecutorsAndKeys);
   ek->func_defs = fdefs;
@@ -689,10 +683,13 @@ Status DebugSession::GetOrCreateExecutors(
     }
   }
   ek->items.reserve(graphs.size());
+  
   auto runner = [this](Executor::Args::Closure c) { SchedClosure(c); };
   const auto& optimizer_opts =
       options_.config.graph_options().optimizer_options();
   GraphOptimizer optimizer(optimizer_opts);
+
+  int graph_counter = 0;
   for (auto iter = graphs.begin(); iter != graphs.end(); ++iter) {
     const string& partition_name = iter->first;
     Graph* partition_graph = iter->second;
@@ -734,7 +731,13 @@ Status DebugSession::GetOrCreateExecutors(
       }
     };
 
-    optimizer.Optimize(lib, device, &partition_graph);
+
+    // IDE(cais): Disabled optimizer, so that RunAsync needs to run only once.
+    // std::cout << "Calling optimzer.Optimizer() on graph "
+              // << graph_counter << " of " << graphs.size() << std::endl; //DEBUG
+    // optimizer.Optimize(lib, device, &partition_graph); 
+    // std::cout << "~ DONE calling optimzer.Optimizer() on graph "
+              // << graph_counter++ << " of " << graphs.size() << std::endl; //DEBUG
     s = ValidateMemoryTypes(DeviceType(device->device_type()), partition_graph);
     if (!s.ok()) {
       break;
@@ -752,6 +755,7 @@ Status DebugSession::GetOrCreateExecutors(
     return s;
   }
 
+  std::cout << "Computing rendezvous keys..." << std::endl;
   // Compute the rendezvous keys to avoid recomputing them every time.
   //
   // We always use the first device as the device name portion of the
@@ -777,6 +781,7 @@ Status DebugSession::GetOrCreateExecutors(
     *executors_and_keys = ek.release();
   }
 
+  std::cout << "~ Exiting GetOrCreateExecutors()" << std::endl;
   return Status::OK();
 }
 
