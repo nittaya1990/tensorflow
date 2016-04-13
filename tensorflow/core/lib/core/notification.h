@@ -19,6 +19,7 @@ limitations under the License.
 #include <assert.h>
 #include <chrono>              // NOLINT
 #include <condition_variable>  // NOLINT
+#include <iostream>
 
 #include "tensorflow/core/platform/mutex.h"
 #include "tensorflow/core/platform/types.h"
@@ -60,6 +61,51 @@ class Notification {
   mutex mu_;
   condition_variable cv_;
   bool notified_;
+};
+
+class MultiUseNotification {
+ public:
+  MultiUseNotification() : 
+      times_notified_(0), completed_(false) {}
+  ~MultiUseNotification() {}
+
+  void Notify() {
+    mutex_lock l(mu_);
+    // assert(!notified_);
+    times_notified_ ++;
+    cv_.notify_all();
+  }
+
+  bool TimesNotified() {
+    mutex_lock l(mu_);
+    return times_notified_;
+  }
+
+  void WaitForNotification() {
+    mutex_lock l(mu_);
+    int prev_times_notified = times_notified_;
+    std::cout << "--- Waiting for notification: prev_times_notified_ = "
+              << prev_times_notified << std::endl;
+    while (times_notified_ == prev_times_notified) {
+      cv_.wait(l);
+    }
+  }
+
+  void MarkAsCompleted() {
+    mutex_lock l(mu_);
+    completed_ = true;
+  }
+
+  bool IsCompleted() {
+    mutex_lock l(mu_);
+    return completed_;
+  }
+
+ private:
+  mutex mu_;
+  condition_variable cv_;
+  int times_notified_;
+  bool completed_;
 };
 
 }  // namespace tensorflow

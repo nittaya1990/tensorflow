@@ -220,9 +220,14 @@ typedef gtl::InlinedVector<AllocatorAttributes, 4> AllocatorAttributeVec;
 class ExecutorImpl : public Executor {
  public:
   ExecutorImpl(const LocalExecutorParams& p, const Graph* g)
-      : params_(p), graph_(g), initial_pending_counts_(graph_->num_node_ids()) {
+      : debugger_notification(),
+        params_(p), graph_(g), initial_pending_counts_(graph_->num_node_ids()),
+        thread_pool_() {
     CHECK(p.create_kernel != nullptr);
     CHECK(p.delete_kernel != nullptr);
+
+    debugger_notification.reset(new MultiUseNotification());
+    thread_pool_.reset(new thread::ThreadPool(Env::Default(), "Debugger", 1));
   }
 
   ~ExecutorImpl() override {
@@ -250,6 +255,8 @@ class ExecutorImpl : public Executor {
   Status SetAllocAttrs();
 
   void RunAsync(const Args& args, DoneCallback done) override;
+
+  std::shared_ptr<MultiUseNotification> debugger_notification;
 
  private:
   friend class ExecutorState;
@@ -279,11 +286,15 @@ class ExecutorImpl : public Executor {
 
   TF_DISALLOW_COPY_AND_ASSIGN(ExecutorImpl);
 
- private:
   std::deque<string> node_order;
+
+  std::shared_ptr<thread::ThreadPool> thread_pool_;
+
 };
 
 Status ExecutorImpl::Initialize() {
+
+
   const int num_nodes = graph_->num_node_ids();
   delete[] nodes_;
   nodes_ = new NodeItem[num_nodes];
@@ -927,6 +938,9 @@ void ExecutorImpl::InitializePending(const Graph* graph,
 }
 
 void ExecutorState::RunAsync(Executor::DoneCallback done) {
+  // IDE(cais): Create new thread for debugging control: Keyboard for now
+
+
   const Graph* graph = impl_->graph_;
   std::cout << "In RunAsync: graph->num_nodes() = " << graph->num_nodes() << std::endl; //DEBUG
 
@@ -1642,8 +1656,7 @@ bool ExecutorState::NodeDone(const Status& s, const Node* node,
     }
     std::cout << "]" << std::endl; //DEBUG
 
-    string input_str = "";
-    getline(std::cin, input_str);
+    impl_->debugger_notification->WaitForNotification(); // Wait to proceed
 
     ScheduleReady(ready, inline_ready);
   }
@@ -2076,7 +2089,23 @@ void ExecutorState::CleanupFramesIterations(FrameState* frame, int64 iter,
 void ExecutorImpl::RunAsync(const Args& args, DoneCallback done) {
   ExecutorState* executor_state = new ExecutorState(args, this);
 
+  thread_pool_->Schedule([this]() {
+    // std::cout << "Hello!" << std::endl; //DEBUG
+    string input_str = "";
+
+    while (! debugger_notification->IsCompleted()) {
+      std::cout << "Press enter to continue:";
+      getline(std::cin, input_str);
+
+      debugger_notification->Notify();
+    }
+
+  });
+
   executor_state->RunAsync(done);
+
+  std::cout << "Exiting RunAsync: marking debugger_notification as completed" << std::endl;
+  debugger_notification->MarkAsCompleted();
 }
 
 }  // end namespace
