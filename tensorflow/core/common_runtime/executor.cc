@@ -305,6 +305,7 @@ Status ExecutorImpl::Initialize() {
 
   std::deque<string> node_queue;
   std::unordered_set<string> visited_nodes;
+  std::unordered_set<string> done_nodes;
 
   for (const Node* n: graph_->nodes()) {
     if (n->in_edges().size() == 0) {
@@ -315,13 +316,17 @@ Status ExecutorImpl::Initialize() {
   }
 
   while (! node_queue.empty()) {
-    string processed_node = node_queue.front();
+    // Pop all the ready nodes from the queue
+    while (! node_queue.empty()) {
+      const string& processed_node = node_queue.front();
 
-    std::cout << "Popping from node_queue: " << processed_node << std::endl;
-    node_queue.pop_front();
-    node_order.push_back(processed_node);
-    visited_nodes.insert(processed_node);
-
+      std::cout << "Popping from node_queue: " << processed_node << std::endl;  
+      node_queue.pop_front();
+      node_order.push_back(processed_node);    
+      visited_nodes.insert(processed_node);
+      done_nodes.insert(processed_node);
+    }
+    
     for (const Node* n: graph_->nodes()) {
       // Skip visited nodes
       if (visited_nodes.count(n->name()) > 0) {
@@ -332,7 +337,7 @@ Status ExecutorImpl::Initialize() {
       bool all_inputs_ready = true;
       for (const Edge* edge : n->in_edges()) {
         const string& input_node_name = edge->src()->name();
-        if (visited_nodes.count(input_node_name) == 0) {
+        if (done_nodes.count(input_node_name) == 0) {
           all_inputs_ready = false;
           break;
         }
