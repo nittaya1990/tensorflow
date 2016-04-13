@@ -278,6 +278,9 @@ class ExecutorImpl : public Executor {
   std::vector<AllocatorAttributes> output_attrs_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(ExecutorImpl);
+
+ private:
+  std::deque<string> node_order;
 };
 
 Status ExecutorImpl::Initialize() {
@@ -295,6 +298,64 @@ Status ExecutorImpl::Initialize() {
   // that O(# steps * # nodes per step) times.
   device_record_tensor_accesses_ =
       params_.device->RequiresRecordingAccessedTensors();
+
+  // IDE(cais): Precompute node execution order
+  std::cout << "### Precomputing node execution order ###" << std::endl;
+  node_order.clear();
+
+  std::deque<string> node_queue;
+  std::unordered_set<string> visited_nodes;
+
+  for (const Node* n: graph_->nodes()) {
+    if (n->in_edges().size() == 0) {
+      std::cout << "Pushing to node_queue: " << n->name() << std::endl;
+      node_queue.push_back(n->name());
+      visited_nodes.insert(n->name());
+    }
+  }
+
+  while (! node_queue.empty()) {
+    string processed_node = node_queue.front();
+
+    std::cout << "Popping from node_queue: " << processed_node << std::endl;
+    node_queue.pop_front();
+    node_order.push_back(processed_node);
+    visited_nodes.insert(processed_node);
+
+    for (const Node* n: graph_->nodes()) {
+      // Skip visited nodes
+      if (visited_nodes.count(n->name()) > 0) {
+        continue;
+      }
+
+      // Check if all the input nodes are satisfie
+      bool all_inputs_ready = true;
+      for (const Edge* edge : n->in_edges()) {
+        const string& input_node_name = edge->src()->name();
+        if (visited_nodes.count(input_node_name) == 0) {
+          all_inputs_ready = false;
+          break;
+        }
+      }
+
+      if (all_inputs_ready) {
+        std::cout << "Pushing to node_queue: " << n->name() << std::endl;
+        node_queue.push_back(n->name());
+        visited_nodes.insert(n->name());
+      }
+    }
+  }
+
+  std::cout << "Node order: [";
+  for (size_t i = 0; i < node_order.size(); ++i) {
+    std::cout << node_order[i];
+    if (i < node_order.size() - 1) {
+      std::cout << ", ";
+    }
+  }
+  std::cout << "]" << std::endl;
+
+  std::cout << "### ~ Done precomputing node execution order ###" << std::endl;
 
   // Preprocess every node in the graph to create an instance of op
   // kernel for each node;
@@ -705,7 +766,7 @@ class ExecutorState {
   // Get the output frame/iter of a node. Create new frame/iteration if
   // needed. If there are dead roots for the new iteration, we need to
   // "execute" them so ad them to the ready queue. Returns true if
-  // we need to check for the completion of output frame/iter.
+  // we need to check for the completion of output frame/iter._idx
   bool SetOutputFrameIter(const TaggedNode& tagged_node,
                           const EntryVector& outputs, FrameState** frame,
                           int64* iter, TaggedNodeSeq* ready)
@@ -863,9 +924,6 @@ void ExecutorImpl::InitializePending(const Graph* graph,
 void ExecutorState::RunAsync(Executor::DoneCallback done) {
   const Graph* graph = impl_->graph_;
   std::cout << "In RunAsync: graph->num_nodes() = " << graph->num_nodes() << std::endl; //DEBUG
-
-  // IDE(cais):
-
 
   TaggedNodeSeq ready;
 
@@ -1509,7 +1567,23 @@ void ExecutorState::AddLoopInv(FrameState* frame, const Node* node,
 bool ExecutorState::NodeDone(const Status& s, const Node* node,
                              const TaggedNodeSeq& ready, NodeExecStats* stats,
                              std::deque<TaggedNode>* inline_ready) {
-  std::cout << "In NodeDone(): node = " << node->name() << std::endl; //DEBUG
+  const string& node_name = node->name();
+  std::cout << "In NodeDone(): node = " << node_name << " (Step ";
+
+  size_t step_idx = 0;
+  while (step_idx < impl_->node_order.size()) {
+    if (impl_->node_order[step_idx] == node_name) {
+      break;
+    }
+    step_idx++;
+  }
+  if (step_idx >= impl_->node_order.size()) {
+    std::cout << "?";
+  } else {
+    std::cout << step_idx + 1;
+  }
+
+  std::cout << " / " << impl_->node_order.size() << ")" << std::endl;  //DEBUG
 
   if (stats_collector_) {
     nodestats::SetAllEnd(stats);
@@ -1995,7 +2069,9 @@ void ExecutorState::CleanupFramesIterations(FrameState* frame, int64 iter,
 }
 
 void ExecutorImpl::RunAsync(const Args& args, DoneCallback done) {
-  (new ExecutorState(args, this))->RunAsync(done);
+  ExecutorState* executor_state = new ExecutorState(args, this);
+
+  executor_state->RunAsync(done);
 }
 
 }  // end namespace
