@@ -224,7 +224,7 @@ class ExecutorImpl : public Executor {
   ExecutorImpl(const LocalExecutorParams& p, const Graph* g)
       : debugger_notification(), node_value_store(),
         params_(p), graph_(g), initial_pending_counts_(graph_->num_node_ids()),
-        thread_pool_() {
+        thread_pool_(), break_at_node() {
     CHECK(p.create_kernel != nullptr);
     CHECK(p.delete_kernel != nullptr);
 
@@ -266,6 +266,9 @@ class ExecutorImpl : public Executor {
 
   static void InitializePending(const Graph* graph, PendingCounts* counts);
 
+  std::vector<string> GetCompletedNodes();
+  std::vector<string> GetNotCompletedNodes();
+
   // Owned.
   LocalExecutorParams params_;
   const Graph* graph_;
@@ -293,12 +296,12 @@ class ExecutorImpl : public Executor {
 
   std::shared_ptr<thread::ThreadPool> thread_pool_;
 
-  
+  string break_at_node;
+
 
 };
 
 Status ExecutorImpl::Initialize() {
-
 
   const int num_nodes = graph_->num_node_ids();
   delete[] nodes_;
@@ -942,6 +945,49 @@ void ExecutorImpl::InitializePending(const Graph* graph,
   }
 }
 
+// IDE(cais)
+std::vector<string> ExecutorImpl::GetCompletedNodes() {
+  std::vector<string> completed_nodes;
+
+  if (! break_at_node.empty()) {
+    for (const string& node_name : node_order) {
+      completed_nodes.push_back(node_name);
+
+      if (node_name == break_at_node) {
+        break;
+      }
+    }    
+  }
+
+  return completed_nodes;
+}
+
+std::vector<string> ExecutorImpl::GetNotCompletedNodes() {
+  std::vector<string> not_completed_nodes;
+
+  // First locate the current break point
+  std::deque<string>::const_iterator it = node_order.cbegin();
+  if (! break_at_node.empty()) {
+    while (it != node_order.cend()) {
+      if (*it == break_at_node) {
+        it ++;
+        break;
+      } else {
+        it ++;
+      }
+    }
+  }
+
+  while (it != node_order.cend()) {
+      not_completed_nodes.push_back(*it);
+
+      it ++;
+    }
+
+  return not_completed_nodes;
+}
+
+
 void ExecutorState::RunAsync(Executor::DoneCallback done) {
   // IDE(cais): Create new thread for debugging control: Keyboard for now
   const Graph* graph = impl_->graph_;
@@ -1517,6 +1563,11 @@ void ExecutorState::ActivateNode(const Node* node, const bool is_dead,
       Entry* input_tensors = output_iter_state->input_tensors;
       int dst_loc = dst_item.input_start + dst_slot;
 
+      // Store a copy of the output value
+      std::cout << "  *** Storing output value copy from node " << output_src_node_name << std::endl;
+      Tensor tensor_val_copy(outputs[src_slot].val);
+      impl_->node_value_store.insert({output_src_node_name, tensor_val_copy});
+
       if (node->name() == "A") {
         // IDE(cais):
         TensorShape new_tensor_shape({2, 3});
@@ -1525,11 +1576,6 @@ void ExecutorState::ActivateNode(const Node* node, const bool is_dead,
         for (int i = 0; i < 2 * 3; ++i) {
           new_tensor_flat(i) = 0.2 * (i + 1);
         }
-
-        // Store a copy of the output value
-        std::cout << "  *** Storing output value copy from node " << output_src_node_name << std::endl;
-        Tensor tensor_val_copy(outputs[src_slot].val);
-        impl_->node_value_store.insert({output_src_node_name, tensor_val_copy});
 
         std::cout << "  ActivateNode:   Old type enum = " << outputs[src_slot].val.dtype()
                   << "; New type enum = " << new_tensor.dtype()
@@ -1602,6 +1648,7 @@ bool ExecutorState::NodeDone(const Status& s, const Node* node,
                              std::deque<TaggedNode>* inline_ready) {
   const string& node_name = node->name();
   std::cout << "In NodeDone(): node = " << node_name << " (Step ";
+  impl_->break_at_node = node_name;
 
   size_t step_idx = 0;
   while (step_idx < impl_->node_order.size()) {
@@ -2105,53 +2152,124 @@ void ExecutorImpl::RunAsync(const Args& args, DoneCallback done) {
 
   thread_pool_->Schedule([this]() {
     // std::cout << "Hello!" << std::endl; //DEBUG
-    string input_str = "";
+    string command;
 
     while (! debugger_notification->IsCompleted()) {
       std::cout << "tfdb: ";
-      getline(std::cin, input_str);
+      getline(std::cin, command);
 
-      if (input_str.find("step") == 0) {
-        if (input_str == "step") {
+      if (command.find("step") == 0) {
+        if (command == "step") {
           debugger_notification->NotifyOnce();
-        } else if (input_str.find("step ") == 0) {
-          int n_steps = atoi(input_str.replace(0, 5, "").c_str());
+        } else if (command.find("step ") == 0) {
+          int n_steps = atoi(command.replace(0, 5, "").c_str());
 
           if (n_steps > 0) {
             debugger_notification->Notify(n_steps);
           } else {
-            std::cerr << "Syntax error in step command: \"" << input_str << "\"" << std::endl;
+            std::cerr << "Syntax error in step command: \"" << command << "\"" << std::endl;
           }
         } else {
-          std::cerr << "Syntax error in step command: \"" << input_str << "\"" << std::endl;
+          std::cerr << "Syntax error in step command: \"" << command << "\"" << std::endl;
         }
-      } else if (input_str.find("print ") == 0) {  // Print the tensor value on a node
-        string node_name = input_str.replace(0, 6, "");
+      } else if (command.find("print ") == 0) {  // Print the tensor value on a node
+        string node_name = command.replace(0, 6, "");
 
         bool found_node = false;
         for (const Node* n : graph_->nodes()) {
           if (node_name == n->name()) {
             const int id = n->id();
-
             NodeItem* item = &nodes_[id];
 
-            const Tensor& node_val = node_value_store.at(node_name);
-
-            std::cout << "Found node \"" << node_name << "\": value = " 
+            if (node_value_store.count(node_name) == 1) {
+              const Tensor& node_val = node_value_store.at(node_name);
+              std::cout << "Found node \"" << node_name << "\": value = " 
                       << node_val.DebugString() << std::endl;
+              found_node = true;
+              break;
+            }
 
-            found_node = true;
-
-            break;
           }
         }
       
         if (! found_node) {
-          std::cerr << "ERROR: Cannot find node \"" << node_name << "\"" << std::endl;
+          std::cerr << "ERROR: Cannot find Tensor value for node \"" << node_name << "\"" << std::endl;
+        }
+      } else if (command.find("continue ") == 0) {
+        const string& node_name = command.replace(0, 9, "");
+
+        std::vector<string> completed_nodes = GetCompletedNodes();
+        std::vector<string> not_completed_nodes = GetNotCompletedNodes();
+
+        // See if the node is already completed
+        bool already_completed = false;
+        for (const string& completed_node : completed_nodes) {
+          if (completed_node == node_name) {
+            already_completed = true;
+            break;
+          }
         }
 
+        if (already_completed) {
+          std::cerr << "ERROR: Node \"" << node_name << "\" is already completed" << std::endl;
+        } else {
+          size_t steps_to_go = 0;
+          bool found_node = false;
+
+          for (const string& remaining_node : not_completed_nodes) {
+            steps_to_go ++;
+            if (remaining_node == node_name) {
+              found_node = true;
+              break;
+            }
+          }
+
+          if (! found_node) {
+            std::cerr << "ERROR: Node \"" << node_name << "\" cannot be found" << std::endl;
+          } else {
+            // std::cout << "Steps to go: " << steps_to_go << std::endl;
+            debugger_notification->Notify(steps_to_go);
+          }
+        }
+
+        // TODO(cais): Handle pre-existing breakpoints
+
+      } else if (command == "where") {
+        std::vector<string> completed_nodes = GetCompletedNodes();
+        std::vector<string> not_completed_nodes = GetNotCompletedNodes();
+
+        // Print completed nodes
+        std::cout << completed_nodes.size() << " node";
+        if (completed_nodes.size() > 0) {
+          std::cout << "s";
+        }
+        std::cout << "completed: [";
+        for (size_t i = 0; i < completed_nodes.size(); ++i) {
+          std::cout << completed_nodes[i];
+          if (i < completed_nodes.size() - 1) {
+            std::cout << ", ";
+          }
+        }
+        std::cout << "]" << std::endl;
+
+        // Print remaining nodes
+        std::cout << not_completed_nodes.size() << " node";
+        if (not_completed_nodes.size() > 0) {
+          std::cout << "s";
+        }
+        std::cout << " to process: [";
+        for (size_t i = 0; i < not_completed_nodes.size(); ++i) {
+          std::cout << not_completed_nodes[i];
+          if (i < not_completed_nodes.size() - 1) {
+            std::cout << ", ";
+          }
+        }
+        std::cout << "]" << std::endl;
+
+      } else if (command.empty()) {
+        // NO OP
       } else {
-        std::cerr << "Unrecognized tfdb command: \"" << input_str << "\"" << std::endl;
+        std::cerr << "Unrecognized tfdb command: \"" << command << "\"" << std::endl;
       }
     }
   });
