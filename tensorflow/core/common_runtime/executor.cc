@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/executor.h"
 
 #include <atomic>
+#include <cstdlib>
 #include <deque>
 #include <memory>
 #include <string>
@@ -219,8 +220,9 @@ typedef gtl::InlinedVector<AllocatorAttributes, 4> AllocatorAttributeVec;
 
 class ExecutorImpl : public Executor {
  public:
+  // Constructor
   ExecutorImpl(const LocalExecutorParams& p, const Graph* g)
-      : debugger_notification(),
+      : debugger_notification(), node_value_store(),
         params_(p), graph_(g), initial_pending_counts_(graph_->num_node_ids()),
         thread_pool_() {
     CHECK(p.create_kernel != nullptr);
@@ -257,6 +259,7 @@ class ExecutorImpl : public Executor {
   void RunAsync(const Args& args, DoneCallback done) override;
 
   std::shared_ptr<MultiUseNotification> debugger_notification;
+  std::unordered_map<string, Tensor> node_value_store;
 
  private:
   friend class ExecutorState;
@@ -289,6 +292,8 @@ class ExecutorImpl : public Executor {
   std::deque<string> node_order;
 
   std::shared_ptr<thread::ThreadPool> thread_pool_;
+
+  
 
 };
 
@@ -727,7 +732,7 @@ class ExecutorState {
   // instead of a pointer?  (avoids having to delete).
   checkpoint::TensorSliceReaderCacheWrapper* slice_reader_cache_;
   FunctionCallFrame* call_frame_;
-  const ExecutorImpl* impl_;
+  ExecutorImpl* impl_;
   CancellationManager* cancellation_manager_;
   Executor::Args::Runner runner_;
 
@@ -939,10 +944,10 @@ void ExecutorImpl::InitializePending(const Graph* graph,
 
 void ExecutorState::RunAsync(Executor::DoneCallback done) {
   // IDE(cais): Create new thread for debugging control: Keyboard for now
-
-
   const Graph* graph = impl_->graph_;
   std::cout << "In RunAsync: graph->num_nodes() = " << graph->num_nodes() << std::endl; //DEBUG
+
+  impl_->node_value_store.clear();
 
   TaggedNodeSeq ready;
 
@@ -1441,6 +1446,10 @@ void ExecutorState::ActivateNode(const Node* node, const bool is_dead,
     const int dst_id = dst_node->id();
     const int src_slot = e->src_output();
 
+    // IDE(cais): Record output
+    const Node* output_src_node = e->src();
+    const string& output_src_node_name = output_src_node->name();
+    
     std::cout << "  ActivateNode: " << node->name() << " --> " << dst_node->name()
               << "; dst_id = " << dst_id 
               << "; src_slot = " << src_slot << std::endl;
@@ -1516,6 +1525,11 @@ void ExecutorState::ActivateNode(const Node* node, const bool is_dead,
         for (int i = 0; i < 2 * 3; ++i) {
           new_tensor_flat(i) = 0.2 * (i + 1);
         }
+
+        // Store a copy of the output value
+        std::cout << "  *** Storing output value copy from node " << output_src_node_name << std::endl;
+        Tensor tensor_val_copy(outputs[src_slot].val);
+        impl_->node_value_store.insert({output_src_node_name, tensor_val_copy});
 
         std::cout << "  ActivateNode:   Old type enum = " << outputs[src_slot].val.dtype()
                   << "; New type enum = " << new_tensor.dtype()
@@ -2094,12 +2108,52 @@ void ExecutorImpl::RunAsync(const Args& args, DoneCallback done) {
     string input_str = "";
 
     while (! debugger_notification->IsCompleted()) {
-      std::cout << "Press enter to continue:";
+      std::cout << "tfdb: ";
       getline(std::cin, input_str);
 
-      debugger_notification->Notify();
-    }
+      if (input_str.find("step") == 0) {
+        if (input_str == "step") {
+          debugger_notification->NotifyOnce();
+        } else if (input_str.find("step ") == 0) {
+          int n_steps = atoi(input_str.replace(0, 5, "").c_str());
 
+          if (n_steps > 0) {
+            debugger_notification->Notify(n_steps);
+          } else {
+            std::cerr << "Syntax error in step command: \"" << input_str << "\"" << std::endl;
+          }
+        } else {
+          std::cerr << "Syntax error in step command: \"" << input_str << "\"" << std::endl;
+        }
+      } else if (input_str.find("print ") == 0) {  // Print the tensor value on a node
+        string node_name = input_str.replace(0, 6, "");
+
+        bool found_node = false;
+        for (const Node* n : graph_->nodes()) {
+          if (node_name == n->name()) {
+            const int id = n->id();
+
+            NodeItem* item = &nodes_[id];
+
+            const Tensor& node_val = node_value_store.at(node_name);
+
+            std::cout << "Found node \"" << node_name << "\": value = " 
+                      << node_val.DebugString() << std::endl;
+
+            found_node = true;
+
+            break;
+          }
+        }
+      
+        if (! found_node) {
+          std::cerr << "ERROR: Cannot find node \"" << node_name << "\"" << std::endl;
+        }
+
+      } else {
+        std::cerr << "Unrecognized tfdb command: \"" << input_str << "\"" << std::endl;
+      }
+    }
   });
 
   executor_state->RunAsync(done);

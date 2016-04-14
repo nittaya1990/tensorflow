@@ -66,29 +66,45 @@ class Notification {
 class MultiUseNotification {
  public:
   MultiUseNotification() : 
-      times_notified_(0), completed_(false) {}
+      pos_(0), target_pos_(1), target_pos_inc_(1), completed_(false) {}
   ~MultiUseNotification() {}
 
-  void Notify() {
+  void NotifyOnce() {
     mutex_lock l(mu_);
     // assert(!notified_);
-    times_notified_ ++;
+    pos_ ++;
     cv_.notify_all();
   }
 
-  bool TimesNotified() {
-    mutex_lock l(mu_);
-    return times_notified_;
+  void Notify(int n) {
+    pos_ += n;
+    cv_.notify_all();
   }
+
+  // bool TimesNotified() {
+  //   mutex_lock l(mu_);
+  //   return times_notified_;
+  // }
 
   void WaitForNotification() {
     mutex_lock l(mu_);
-    int prev_times_notified = times_notified_;
-    std::cout << "--- Waiting for notification: prev_times_notified_ = "
-              << prev_times_notified << std::endl;
-    while (times_notified_ == prev_times_notified) {
+    // int prev_times_notified = times_notified_;
+    // std::cout << "--- Waiting for notification: prev_times_notified_ = "
+    //           << prev_times_notified << std::endl;
+    std::cout << "--- Waiting for notification: pos_ = "
+              << pos_ << "; target_pos_ = " << target_pos_ << std::endl;
+    while (pos_ < target_pos_) {
       cv_.wait(l);
     }
+
+    // if (pos == target_pos_) {
+      // No increment will be done unless target_pos_ has caught up with pos_.
+      // For example, if pos_ is incremented with a large step through Notify()
+      // from 2 to 4, target_pos_ will not be incremented at 2 or 3, but will
+      // be incremented only when it 
+
+    target_pos_ += target_pos_inc_;
+    // }
   }
 
   void MarkAsCompleted() {
@@ -104,7 +120,10 @@ class MultiUseNotification {
  private:
   mutex mu_;
   condition_variable cv_;
-  int times_notified_;
+  int pos_;
+  int target_pos_;
+  int target_pos_inc_;
+  // int times_notified_;
   bool completed_;
 };
 
