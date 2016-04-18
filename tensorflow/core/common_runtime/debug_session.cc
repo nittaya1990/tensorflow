@@ -92,7 +92,7 @@ std::atomic_int_fast64_t DebugSession::step_id_counter_(1);
 // devices that run concurrently, in which case we will need to
 // revisit this decision.
 void DebugSession::SchedClosure(std::function<void()> c) {
-  std::cout << "In SchedClosure" << std::endl; // DEBUG
+  // std::cout << "In SchedClosure" << std::endl; // DEBUG
 
 // TODO(sanjay): Get rid of __ANDROID__ path
 #ifdef __ANDROID__

@@ -1060,7 +1060,7 @@ void DeleteParams(OpKernelContext::Params* p) {
 }  // namespace
 
 void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
-  std::cout << "In Process: tagged_node = " << tagged_node.node->name() << std::endl;
+  // std::cout << "In Process: tagged_node = " << tagged_node.node->name() << std::endl;  //DEBUG
 
   const NodeItem* nodes = impl_->nodes_;
   TaggedNodeSeq ready;
@@ -1171,7 +1171,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
           gtl::vector_as_array(&impl_->output_attrs_) + item.output_attr_start;
 
       if (item.kernel_is_async) {
-        std::cout << "  kernel is async" << std::endl; //DEBUG
+        std::cout << "Async kernel" << std::endl; //DEBUG
         // Asynchronous computes.
         AsyncOpKernel* async = item.kernel->AsAsync();
         DCHECK(async != nullptr);
@@ -1221,7 +1221,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
         if (stats_collector_) nodestats::SetOpStart(stats);
         device->ComputeAsync(async, ctx, done);
       } else {
-        std::cout << "  kernel is sync: " << op_kernel->name() << std::endl; //DEBUG
+        // std::cout << "Sync kernel: " << op_kernel->name() << std::endl; //DEBUG
         // Synchronous computes.
         OpKernelContext ctx(&params, item.num_outputs);
         if (stats_collector_) nodestats::SetOpStart(stats);
@@ -1248,7 +1248,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     }
 
     if (!launched_asynchronously) {
-      std::cout << "  Process: Launched synchronously" << std::endl; //DEBUG
+      // std::cout << "  Process: Launched synchronously" << std::endl; //DEBUG
       // Clears inputs.
       const int num_inputs = item.num_inputs;
       for (int i = 0; i < num_inputs; ++i) {
@@ -1263,9 +1263,9 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
       }
       // Propagates outputs.
       if (s.ok()) {
-        std::cout << "  Process: Calling PropagateOutputs(): ready.size() = " << ready.size() << std::endl;
+        // std::cout << "  Process: Calling PropagateOutputs(): ready.size() = " << ready.size() << std::endl;
         PropagateOutputs(tagged_node, outputs, &ready);
-        std::cout << "  Process: DONE calling PropagateOutputs(): ready.size() = " << ready.size() << std::endl;
+        // std::cout << "  Process: DONE calling PropagateOutputs(): ready.size() = " << ready.size() << std::endl;
       }
       outputs.clear();
       if (!accessed_tensors.empty()) {
@@ -1496,9 +1496,9 @@ void ExecutorState::ActivateNode(const Node* node, const bool is_dead,
     const Node* output_src_node = e->src();
     const string& output_src_node_name = output_src_node->name();
     
-    std::cout << "  ActivateNode: " << node->name() << " --> " << dst_node->name()
-              << "; dst_id = " << dst_id 
-              << "; src_slot = " << src_slot << std::endl;
+    // std::cout << "  ActivateNode: " << node->name() << " --> " << dst_node->name()
+              // << "; dst_id = " << dst_id 
+              // << "; src_slot = " << src_slot << std::endl;  //DEBUG
 
     bool dst_dead = false;
     bool dst_ready = false;
@@ -1541,7 +1541,7 @@ void ExecutorState::ActivateNode(const Node* node, const bool is_dead,
         }
       }
     } else {
-      std::cout << "  ActivateNode:   IsMerge is false" << std::endl;
+      // std::cout << "  ActivateNode:   IsMerge is false" << std::endl;  //DEBUG
       // if (outputs[src_slot].has_value) {
         // // IDE(cais): Print value
         // std::cout << "  ActivateNode:   outputs[src_slot] has value: "
@@ -1564,43 +1564,43 @@ void ExecutorState::ActivateNode(const Node* node, const bool is_dead,
       int dst_loc = dst_item.input_start + dst_slot;
 
       // Store a copy of the output value
-      std::cout << "  *** Storing output value copy from node " << output_src_node_name << std::endl;
+      // std::cout << "  *** Storing output value copy from node " << output_src_node_name << std::endl;  //DEBUG
       Tensor tensor_val_copy(outputs[src_slot].val);
       impl_->node_value_store.insert({output_src_node_name, tensor_val_copy});
 
-      if (node->name() == "A") {
-        // IDE(cais):
-        TensorShape new_tensor_shape({2, 3});
-        Tensor new_tensor(DT_FLOAT, new_tensor_shape);
-        auto new_tensor_flat = new_tensor.flat<float>();
-        for (int i = 0; i < 2 * 3; ++i) {
-          new_tensor_flat(i) = 0.2 * (i + 1);
-        }
+      // if (node->name() == "A") {
+      //   // IDE(cais):
+      //   TensorShape new_tensor_shape({2, 3});
+      //   Tensor new_tensor(DT_FLOAT, new_tensor_shape);
+      //   auto new_tensor_flat = new_tensor.flat<float>();
+      //   for (int i = 0; i < 2 * 3; ++i) {
+      //     new_tensor_flat(i) = 0.2 * (i + 1);
+      //   }
 
-        std::cout << "  ActivateNode:   Old type enum = " << outputs[src_slot].val.dtype()
-                  << "; New type enum = " << new_tensor.dtype()
-                  << "; Injecting new value: "
-                  << new_tensor.DebugString() << std::endl; //DEBUG
+      //   std::cout << "  ActivateNode:   Old type enum = " << outputs[src_slot].val.dtype()
+      //             << "; New type enum = " << new_tensor.dtype()
+      //             << "; Injecting new value: "
+      //             << new_tensor.DebugString() << std::endl; //DEBUG
 
-        Entry output_copy;
-        output_copy.val = new_tensor;
-        // output_copy.ref = &new_tensor;
-        output_copy.ref = outputs[src_slot].ref;
-        output_copy.ref_mu = outputs[src_slot].ref_mu;
-        output_copy.has_value = outputs[src_slot].has_value;
-        output_copy.alloc_attr = outputs[src_slot].alloc_attr;
-        output_copy.device_context = outputs[src_slot].device_context;
+      //   Entry output_copy;
+      //   output_copy.val = new_tensor;
+      //   // output_copy.ref = &new_tensor;
+      //   output_copy.ref = outputs[src_slot].ref;
+      //   output_copy.ref_mu = outputs[src_slot].ref_mu;
+      //   output_copy.has_value = outputs[src_slot].has_value;
+      //   output_copy.alloc_attr = outputs[src_slot].alloc_attr;
+      //   output_copy.device_context = outputs[src_slot].device_context;
 
-        input_tensors[dst_loc] = output_copy;
-      } else {
+      //   input_tensors[dst_loc] = output_copy;
+      // } else {
         input_tensors[dst_loc] = outputs[src_slot];
-      }
+      // }
     }
 
     // Add dst to the ready queue if it's ready
     if (dst_ready) {
       dst_dead = dst_dead && !IsControlTrigger(dst_node);
-      std::cout << "  ActivateNode:   *** Pushing node to ready: " << dst_node->name() << std::endl;
+      // std::cout << "  ActivateNode:   *** Pushing node to ready: " << dst_node->name() << std::endl;  //DEBUG
       ready->push_back(
           TaggedNode(dst_node, output_frame, output_iter, dst_dead));
       output_iter_state->outstanding_ops++;
@@ -1647,23 +1647,22 @@ bool ExecutorState::NodeDone(const Status& s, const Node* node,
                              const TaggedNodeSeq& ready, NodeExecStats* stats,
                              std::deque<TaggedNode>* inline_ready) {
   const string& node_name = node->name();
-  std::cout << "In NodeDone(): node = " << node_name << " (Step ";
+  // std::cout << "In NodeDone(): node = " << node_name << " (Step ";  //DEBUG
   impl_->break_at_node = node_name;
 
-  size_t step_idx = 0;
-  while (step_idx < impl_->node_order.size()) {
-    if (impl_->node_order[step_idx] == node_name) {
-      break;
-    }
-    step_idx++;
-  }
-  if (step_idx >= impl_->node_order.size()) {
-    std::cout << "?";
-  } else {
-    std::cout << step_idx + 1;
-  }
-
-  std::cout << " / " << impl_->node_order.size() << ")" << std::endl;  //DEBUG
+  // size_t step_idx = 0;
+  // while (step_idx < impl_->node_order.size()) {
+  //   if (impl_->node_order[step_idx] == node_name) {
+  //     break;
+  //   }
+  //   step_idx++;
+  // }
+  // if (step_idx >= impl_->node_order.size()) {
+  //   std::cout << "?";
+  // } else {
+  //   std::cout << step_idx + 1;
+  // }
+  // std::cout << " / " << impl_->node_order.size() << ")" << std::endl;  //DEBUG
 
   if (stats_collector_) {
     nodestats::SetAllEnd(stats);
@@ -1704,18 +1703,18 @@ bool ExecutorState::NodeDone(const Status& s, const Node* node,
 
   // Schedule the ready nodes in 'ready'.
   if (s.ok()) {
-    std::cout << "  NodeDone() calling ScheduleReady():" << std::endl;  //DEBUG
-    std::cout << "    ready.size() = " << ready.size() << ": ["; //TODO(cais)
-    for (const TaggedNode& t_node : ready) {
-      std::cout << t_node.node->name() << ", ";
-    }
-    std::cout << "]" << std::endl; //DEBUG
+    // std::cout << "  NodeDone() calling ScheduleReady():" << std::endl;  //DEBUG
+    // std::cout << "    ready.size() = " << ready.size() << ": ["; //TODO(cais)
+    // for (const TaggedNode& t_node : ready) {
+      // std::cout << t_node.node->name() << ", ";
+    // }
+    // std::cout << "]" << std::endl; //DEBUG
 
-    std::cout << "    inline_ready->size() = " << inline_ready->size() << ": [";
-    for (TaggedNode& t_node : *inline_ready) {
-      std::cout << t_node.node->name() << ", ";
-    }
-    std::cout << "]" << std::endl; //DEBUG
+    // std::cout << "    inline_ready->size() = " << inline_ready->size() << ": [";
+    // for (TaggedNode& t_node : *inline_ready) {
+      // std::cout << t_node.node->name() << ", ";
+    // }
+    // std::cout << "]" << std::endl; //DEBUG
 
     impl_->debugger_notification->WaitForNotification(); // Wait to proceed
 
@@ -1743,7 +1742,7 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq& ready,
   if (stats_collector_) {
     scheduled_usec = nodestats::NowInUsec();
   }
-  std::cout << "In ScheduleReady(); scheduled_usec = " << scheduled_usec << std::endl; //DEBUG
+  // std::cout << "In ScheduleReady(); scheduled_usec = " << scheduled_usec << std::endl; //DEBUG
 
   if (inline_ready == nullptr) {
     // Schedule to run all the ready ops in thread pool.
@@ -1761,14 +1760,14 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq& ready,
     const NodeItem& item = nodes[tagged_node.node->id()];
     if (tagged_node.is_dead || !item.kernel_is_expensive) {
       // Inline this inexpensive node.
-      std::cout << "Pushing inexpensive node " << tagged_node.node->name() << std::endl; //DEBUG
+      // std::cout << "Pushing inexpensive node " << tagged_node.node->name() << std::endl; //DEBUG
       inline_ready->push_back(tagged_node);
     } else {
       if (curr_expensive_node) {
         // Dispatch to another thread since there is plenty of work to
         // do for this thread.
         // TODO(cais): Do on this thread
-        std::cout << "Calling runner_ with Process() B" << std::endl; //DEBUG
+        // std::cout << "Calling runner_ with Process() B" << std::endl;  //DEBUG
         runner_(std::bind(&ME::Process, this, *curr_expensive_node,
                           scheduled_usec));
       }
@@ -1778,8 +1777,8 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq& ready,
   if (curr_expensive_node) {
     if (inline_ready->empty()) {
       // Tail recursion optimization
-      std::cout << "Tail recursion: Pushing expensive node "
-                << curr_expensive_node->node->name() << std::endl; //DEBUG
+      // std::cout << "Tail recursion: Pushing expensive node "
+      //           << curr_expensive_node->node->name() << std::endl; //DEBUG
       inline_ready->push_back(*curr_expensive_node);
     } else {
       // There are inline nodes to run already. We dispatch this expensive
@@ -2155,7 +2154,7 @@ void ExecutorImpl::RunAsync(const Args& args, DoneCallback done) {
     string command;
 
     while (! debugger_notification->IsCompleted()) {
-      std::cout << "tfdb: ";
+      std::cout << "tfdb> ";
       getline(std::cin, command);
 
       if (command.find("step") == 0) {
@@ -2243,7 +2242,7 @@ void ExecutorImpl::RunAsync(const Args& args, DoneCallback done) {
         if (completed_nodes.size() > 0) {
           std::cout << "s";
         }
-        std::cout << "completed: [";
+        std::cout << " completed: [";
         for (size_t i = 0; i < completed_nodes.size(); ++i) {
           std::cout << completed_nodes[i];
           if (i < completed_nodes.size() - 1) {

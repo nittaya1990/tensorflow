@@ -88,11 +88,8 @@ class MultiUseNotification {
 
   void WaitForNotification() {
     mutex_lock l(mu_);
-    // int prev_times_notified = times_notified_;
-    // std::cout << "--- Waiting for notification: prev_times_notified_ = "
-    //           << prev_times_notified << std::endl;
-    std::cout << "--- Waiting for notification: pos_ = "
-              << pos_ << "; target_pos_ = " << target_pos_ << std::endl;
+    // std::cout << "--- Waiting for notification: pos_ = "
+    //           << pos_ << "; target_pos_ = " << target_pos_ << std::endl;  //DEBUG
     while (pos_ < target_pos_) {
       cv_.wait(l);
     }
