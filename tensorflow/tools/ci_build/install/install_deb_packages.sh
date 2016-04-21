@@ -27,6 +27,10 @@ apt-get install -y \
     curl \
     ffmpeg \
     git \
+    gfortran \
+    libatlas-base-dev \
+    libblas-dev \
+    liblapack-dev \
     libtool \
     openjdk-8-jdk \
     openjdk-8-jre-headless \
@@ -34,12 +38,10 @@ apt-get install -y \
     python-dev \
     python-numpy \
     python-pip \
-    python-scipy \
     python-virtualenv \
     python3-dev \
     python3-numpy \
     python3-pip \
-    python3-scipy \
     sudo \
     swig \
     unzip \
