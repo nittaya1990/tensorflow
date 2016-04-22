@@ -200,7 +200,7 @@ echo "Invoking user op ${USER_OP} defined in file ${USER_OP_SO} "\
 
 ORIG_OUTPUT=$("${PYTHON_BIN_PATH}" -c "import tensorflow as tf; print(tf.Session('').run(tf.load_op_library('./${USER_OP_SO}').${USER_OP}(${OP_INPUT})))")
 
-# Format OUTPUT for analysis  # DEBUG
+# Format OUTPUT for analysis
 if [[ -z $(echo "${ORIG_OUTPUT}" | grep -o ',') ]]; then
   OUTPUT=$(echo "${ORIG_OUTPUT}" | sed -r -e 's/[ \t]+/,/g')
 else

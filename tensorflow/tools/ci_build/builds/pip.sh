@@ -90,7 +90,7 @@ while true; do
   elif [[ "${1}" == "--mavx2" ]]; then
     MAVX_FLAG="--copt=-mavx2"
   fi
- 
+
   shift
   if [[ -z "${1}" ]]; then
     break
@@ -215,7 +215,7 @@ fi
 
 # Test user ops
 if [[ "${DO_TEST_USER_OPS}" == "1" ]]; then
-  "${DIR}/test_user_ops.sh" --virtualenv ${GPU_FLAG} || \
+  "${SCIPRT_DIR}/test_user_ops.sh" --virtualenv ${GPU_FLAG} || \
       die "PIP user-op tests-on-install FAILED"
 fi
 
