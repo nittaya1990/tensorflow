@@ -26,17 +26,13 @@
 # appropriate test blacklists can be applied accordingly.
 #
 
-# Helper functions
-# Get the absolute path from a path
-abs_path() {
-  [[ $1 = /* ]] && echo "$1" || echo "$PWD/${1#./}"
-}
+echo ""
+echo "=== Testing user ops ==="
 
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/builds_common.sh"
 
-echo ""
-echo "=== Testing user ops ==="
 
 # Process input arguments
 IS_VIRTUALENV=0
@@ -128,7 +124,7 @@ if [[ ${IS_GPU} == "0" ]]; then
 
   # Locate the op kernel C++ file
   OP_KERNEL_CC="${SCRIPT_DIR}/../../../g3doc/how_tos/adding_an_op/zero_out_op_kernel_1.cc"
-  OP_KERNEL_CC=$(abs_path "${OP_KERNEL_CC}")
+  OP_KERNEL_CC=$(realpath "${OP_KERNEL_CC}")
 
   if [[ ! -f "${OP_KERNEL_CC}" ]]; then
     die "ERROR: Unable to find user-op kernel C++ file at: ${OP_KERNEL_CC}"
@@ -167,13 +163,13 @@ else
   echo ""
 
   OP_KERNEL_CU="${SCRIPT_DIR}/../../../g3doc/how_tos/adding_an_op/cuda_op_kernel.cu.cc"
-  OP_KERNEL_CU=$(abs_path "${OP_KERNEL_CU}")
+  OP_KERNEL_CU=$(realpath "${OP_KERNEL_CU}")
   if [[ ! -f "${OP_KERNEL_CU}" ]]; then
     die "ERROR: Unable to find user-op kernel CUDA file at: ${OP_KERNEL_CU}"
   fi
 
   OP_KERNEL_CC="${SCRIPT_DIR}/../../../g3doc/how_tos/adding_an_op/cuda_op_kernel.cc"
-  OP_KERNEL_CC=$(abs_path "${OP_KERNEL_CC}")
+  OP_KERNEL_CC=$(realpath "${OP_KERNEL_CC}")
   if [[ ! -f "${OP_KERNEL_CC}" ]]; then
     die "ERROR: Unable to find user-op kernel C++ file at: ${OP_KERNEL_CC}"
   fi

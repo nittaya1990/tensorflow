@@ -1053,7 +1053,7 @@ Returns the `Variable` holding the average of `var`.
 
 - - -
 
-#### `tf.train.ExponentialMovingAverage.variables_to_restore()` {#ExponentialMovingAverage.variables_to_restore}
+#### `tf.train.ExponentialMovingAverage.variables_to_restore(moving_avg_variables=None)` {#ExponentialMovingAverage.variables_to_restore}
 
 Returns a map of names to `Variables` to restore.
 
@@ -1074,6 +1074,13 @@ Below is an example of such mapping:
   conv_4/conv2d_params/ExponentialMovingAverage: conv_4/conv2d_params,
   global_step: global_step
 ```
+
+##### Args:
+
+
+*  <b>`moving_avg_variables`</b>: a list of variables that require to use of the
+    moving variable name to be restored. If None, it will default to
+    variables.moving_average_variables() + variables.trainable_variables()
 
 ##### Returns:
 
@@ -1974,7 +1981,7 @@ This starts services in the background.  The services started depend
 on the parameters to the constructor and may include:
 
   - A Summary thread computing summaries every save_summaries_secs.
-  - A Checkpoint thread saving the model every every save_model_secs.
+  - A Checkpoint thread saving the model every save_model_secs.
   - A StepCounter thread measure step time.
 
 ##### Args:
@@ -2231,7 +2238,7 @@ This starts services in the background.  The services started depend
 on the parameters to the constructor and may include:
 
   - A Summary thread computing summaries every save_summaries_secs.
-  - A Checkpoint thread saving the model every every save_model_secs.
+  - A Checkpoint thread saving the model every save_model_secs.
   - A StepCounter thread measure step time.
 
 ##### Args:
@@ -2582,7 +2589,7 @@ return sess
 
 
 *  <b>`master`</b>: `String` representation of the TensorFlow master to use.
-*  <b>`init_op`</b>: Optional `Operation` used to to initialize the model.
+*  <b>`init_op`</b>: Optional `Operation` used to initialize the model.
 *  <b>`saver`</b>: A `Saver` object used to restore a model.
 *  <b>`checkpoint_dir`</b>: Path to the checkpoint files.
 *  <b>`wait_for_checkpoint`</b>: Whether to wait for checkpoint to become available.
