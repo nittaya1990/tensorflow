@@ -215,7 +215,7 @@ fi
 
 # Test user ops
 if [[ "${DO_TEST_USER_OPS}" == "1" ]]; then
-  "${SCIPRT_DIR}/test_user_ops.sh" --virtualenv ${GPU_FLAG} || \
+  "${SCRIPT_DIR}/test_user_ops.sh" --virtualenv ${GPU_FLAG} || \
       die "PIP user-op tests-on-install FAILED"
 fi
 
