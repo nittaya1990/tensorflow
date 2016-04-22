@@ -202,7 +202,11 @@ ORIG_OUTPUT=$("${PYTHON_BIN_PATH}" -c "import tensorflow as tf; print(tf.Session
 
 # Format OUTPUT for analysis
 if [[ -z $(echo "${ORIG_OUTPUT}" | grep -o ',') ]]; then
-  OUTPUT=$(echo "${ORIG_OUTPUT}" | sed -r -e 's/[ \t]+/,/g')
+  if [[ ${IS_MAC} == "1" ]]; then
+    OUTPUT=$(echo "${ORIG_OUTPUT}" | sed -E -e 's/[ \t]+/,/g')
+  else
+    OUTPUT=$(echo "${ORIG_OUTPUT}" | sed -r -e 's/[ \t]+/,/g')
+  fi
 else
   OUTPUT="${ORIG_OUTPUT}"
 fi
