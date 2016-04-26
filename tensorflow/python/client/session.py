@@ -109,7 +109,6 @@ class BaseSession(SessionInterface):
       status = tf_session.TF_NewStatus()
       try:
         self._session = tf_session.TF_NewSession(opts, status)
-        # print("self._session =", self._session)  # TODO(cais): DEBUG remove
         if tf_session.TF_GetCode(status) != 0:
           raise RuntimeError(compat.as_text(tf_session.TF_Message(status)))
       finally:
@@ -140,7 +139,7 @@ class BaseSession(SessionInterface):
     if feed is None:
       feed = {}
     
-    output = tf_session.TF_DebugDummy(self._session, message, feed)
+    output = tf_session.TF_Debug(self._session, message, feed)
     if isinstance(output, list):
       output = output[0]
     return output

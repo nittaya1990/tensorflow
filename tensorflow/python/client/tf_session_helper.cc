@@ -434,24 +434,22 @@ tensorflow::Status TF_Status_to_Status(TF_Status* tf_status) {
   }
 }
 
-}  // namespacepoo
+}  // end namespace
 
 Safe_PyObjectPtr make_safe(PyObject* o) {
   return Safe_PyObjectPtr(o, Py_DECREF_wrapper);
 }
 
 // IDE(cais)
-void TF_DebugDummy_wrapper(TF_Session* session,
+void TF_Debug_wrapper(TF_Session* session,
                            const string& msg,
                            const FeedVector& inputs,
                            Status* out_status,
                            PyObjectVector* out_values) {
-  // std::cout << "TF_DebugDummy_wrapper inputs: " << std::endl;  //DEBUG
+  // std::cout << "TF_Debug_wrapper inputs: " << std::endl;  //DEBUG
   // for (const auto& name_and_array : inputs) {
     // std::cout << "  Name: " << name_and_array.first << std::endl;  //DEBUG
   // }
-  // TODO(cais)
-  // std::cout << "session = " << session << std::endl;
 
   // 1. Convert the feed inputs to the appropriate form for TF_Run.
   Safe_PyObjectVector py_inputs_safe;  // Used to decref the input arrays on failure.

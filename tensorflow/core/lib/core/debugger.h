@@ -29,7 +29,7 @@ class DebuggerRequest {
   ~DebuggerRequest() {}
 
   string command;
-  Tensor input_tensor;  //TODO(cais): Avoid unnecessary construction
+  Tensor input_tensor;
 };
 
 class DebuggerResponse {

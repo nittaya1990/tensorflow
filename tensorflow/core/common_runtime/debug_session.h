@@ -17,22 +17,30 @@ limitations under the License.
 #define TENSORFLOW_COMMON_RUNTIME_DEBUG_SESSION_H_
 
 #include <atomic>
+#include <deque>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include "tensorflow/core/common_runtime/device.h"
 #include "tensorflow/core/common_runtime/device_mgr.h"
 #include "tensorflow/core/common_runtime/device_set.h"
 #include "tensorflow/core/common_runtime/executor.h"
+#include "tensorflow/core/common_runtime/pending_counts.h"
 #include "tensorflow/core/common_runtime/rendezvous_mgr.h"
 #include "tensorflow/core/framework/cancellation.h"
 #include "tensorflow/core/framework/graph.pb.h"
+#include "tensorflow/core/framework/rendezvous.h"
+#include "tensorflow/core/framework/session_state.h"
 #include "tensorflow/core/framework/tensor.h"
+#include "tensorflow/core/graph/graph.h"
 #include "tensorflow/core/lib/core/debugger.h"
 #include "tensorflow/core/lib/core/errors.h"
+#include "tensorflow/core/lib/core/notification.h"
 #include "tensorflow/core/lib/core/status.h"
+#include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/macros.h"
 #include "tensorflow/core/platform/mutex.h"
 #include "tensorflow/core/platform/thread_annotations.h"
@@ -40,6 +48,449 @@ limitations under the License.
 #include "tensorflow/core/public/session.h"
 
 namespace tensorflow {
+
+namespace {
+// 1-D, 0 element tensor.
+static const Tensor* const kEmptyTensor = new Tensor;
+
+class DebugExecutorState;  // IDE(cais)
+
+class DebugExecutorImpl : public Executor {
+ public:
+  // Constructor
+  DebugExecutorImpl(const LocalExecutorParams& p, const Graph* g);
+
+  ~DebugExecutorImpl() override;
+
+  // IDE(cais)
+  DebuggerResponse HandleDebuggerMessage(const DebuggerRequest& request);
+
+  Status Initialize();
+
+  // Infer memory allocation attributes of a node n's output,
+  // based on its use node dst.  Note that dst might not be directly
+  // connected to n by a single edge, but might be a downstream
+  // consumer of n's output by reference.  *attr is updated with any
+  // necessary attributes.
+  Status InferAllocAttr(const Node* n, const Node* dst,
+                        const DeviceNameUtils::ParsedName& local_dev_name,
+                        AllocatorAttributes* attr);
+
+  // Process all Nodes in the current graph, attempting to infer the
+  // memory allocation attributes to be used wherever they may allocate
+  // a tensor buffer.
+  Status SetAllocAttrs();
+
+  void RunAsync(const Args& args, DoneCallback done) override;
+
+  std::shared_ptr<MultiUseNotification> debugger_notification;
+  std::unordered_map<string, Tensor> node_value_store;
+  std::unordered_map<string, Tensor*> node_ref_store;
+
+ private:
+  friend class DebugExecutorState;
+
+  static void InitializePending(const Graph* graph, PendingCounts* counts);
+
+  std::vector<string> GetCompletedNodes();
+  std::vector<string> GetNotCompletedNodes();
+
+  // Owned.
+  LocalExecutorParams params_;
+  const Graph* graph_;
+  NodeItem* nodes_ = nullptr;     // array of size "graph_.num_node_ids()"
+  int total_input_tensors_ = 0;   // == sum(nodes_[*].num_inputs())
+  int total_output_tensors_ = 0;  // == sum(nodes_[*].num_outputs())
+
+  // A cached value of params_
+  bool device_record_tensor_accesses_ = false;
+
+  // Root nodes (with no in edges) that should form the initial ready queue
+  std::vector<const Node*> root_nodes_;
+
+  PendingCounts initial_pending_counts_;
+
+  // The number of inputs for each frame in this graph. This is static
+  // information of the graph.
+  std::unordered_map<string, int> frame_input_count_;
+
+  std::vector<AllocatorAttributes> output_attrs_;
+
+  TF_DISALLOW_COPY_AND_ASSIGN(DebugExecutorImpl);
+
+  std::deque<string> node_order;
+
+  std::shared_ptr<thread::ThreadPool> thread_pool_;
+
+  string break_at_node;
+
+  DebugExecutorState* executor_state;
+
+  // IDE(cais)
+  std::unordered_map<string, Tensor> injected_tensors;
+};  // end class DebugExecutorImpl
+
+// The state associated with one invocation of DebugExecutorImpl::Run.
+// DebugExecutorState dispatches nodes when they become ready and keeps
+// track of how many predecessors of a node have not done (pending_).
+class DebugExecutorState {
+ public:
+  DebugExecutorState(const Executor::Args& args, DebugExecutorImpl* impl);
+  ~DebugExecutorState();
+
+  void RunAsync(Executor::DoneCallback done);
+
+  // IDE(cais)
+  void InjectNodeValue(Tensor value);
+
+ private:
+  typedef DebugExecutorState ME;
+
+  // Either a tensor pointer (pass-by-reference) or a tensor (pass-by-value).
+  // TODO(yuanbyu): A better way to do "has_value"?
+  struct Entry {
+    Tensor val = *kEmptyTensor;  // A tensor value.
+    Tensor* ref = nullptr;       // A tensor reference.
+    mutex* ref_mu = nullptr;     // mutex for *ref if ref is not nullptr.
+    bool has_value = false;      // Whether the value exists
+    // The attributes of the allocator that creates the tensor.
+    AllocatorAttributes alloc_attr;
+
+    // Every entry carries an optional DeviceContext containing
+    // Device-specific information about how the Tensor was produced.
+    DeviceContext* device_context = nullptr;
+  };
+
+  // Contains a map from node id to the DeviceContext object that was
+  // assigned by the device at the beginning of a step.
+  DeviceContextMap device_context_map_;
+
+  struct IterationState {
+    explicit IterationState(const DebugExecutorImpl* impl)
+        : input_tensors(new Entry[impl->total_input_tensors_]),
+          outstanding_ops(0),
+          outstanding_frame_count(0),
+          counts_(impl->graph_->num_node_ids()) {
+      counts_.InitializeFrom(impl->initial_pending_counts_);
+    }
+
+    // The state of an iteration.
+
+    // One copy per iteration. For iteration k, i-th node's j-th input is in
+    // input_tensors[k][impl_->nodes[i].input_start + j]. An entry is either
+    // a tensor pointer (pass-by-reference) or a tensor (pass-by-value).
+    //
+    // NOTE: No need to protect input_tensors[i] by any locks because it
+    // is resized once. Each element of tensors_ is written once by the
+    // source node of an edge and is cleared by the destination of the same
+    // edge. The latter node is never run concurrently with the former node.
+    Entry* input_tensors;
+
+    // The number of outstanding ops for each iteration.
+    int outstanding_ops;
+
+    // The number of outstanding frames for each iteration.
+    int outstanding_frame_count;
+    int pending(int id) { return counts_.pending(id); }
+    int decrement_pending(int id, int v) {
+      return counts_.decrement_pending(id, v);
+    }
+    // Mark a merge node as live
+    // REQUIRES: Node corresponding to "id" is a merge node
+    void mark_live(int id) { counts_.mark_live(id); }
+    // Mark a node to show that processing has started.
+    void mark_started(int id) { counts_.mark_started(id); }
+    // Mark a node to show that processing has completed.
+    void mark_completed(int id) { counts_.mark_completed(id); }
+    PendingCounts::NodeState node_state(int id) {
+      return counts_.node_state(id);
+    }
+
+    int dead_count(int id) { return counts_.dead_count(id); }
+    void increment_dead_count(int id) { counts_.increment_dead_count(id); }
+
+    ~IterationState() { delete[] input_tensors; }
+
+   private:
+    PendingCounts counts_;
+  };  // end struct IterationState
+
+  struct FrameState {
+    // A new frame is created for each loop. Execution starts at iteration 0.
+    // When a value at iteration 0 passes through a NextIteration node,
+    // iteration 1 is created and starts running. Note that iteration 0 may
+    // still be running so multiple iterations may run in parallel. The
+    // frame maintains the state of iterations in several data structures
+    // such as pending_count and input_tensors. When iteration 0 completes,
+    // we garbage collect the state of iteration 0.
+    //
+    // A frame instance is considered "done" and can be garbage collected
+    // if all its inputs have entered and all its iterations are "done".
+    //
+    // A frame manages the live iterations of an iterative computation.
+    // Iteration i is considered "done" when there are no outstanding ops,
+    // frames at iteration i are done, all recvs for this iteration are
+    // completed, and iteration i-1 is done. For iteration 0, we instead
+    // wait for there to be no more pending inputs of the frame.
+    //
+    // Frames and iterations are garbage collected once they are done.
+    // The state we need to keep around is highly dependent on the
+    // parallelism enabled by the scheduler. We may want to have the
+    // scheduler dynamically control the outstanding number of live
+    // parallel frames and iterations. To reduce the state space, the
+    // scheduler might want to schedule ops in inner frames first and
+    // lower iterations first.
+    //
+    // This frame state is mostly initialized lazily on demand so we
+    // don't introduce unnecessary overhead.
+
+    // The name of this frame, which is the concatenation of its parent
+    // frame name, the iteration of the parent frame when this frame was
+    // created, and the value of the attr 'frame_name'.
+    string frame_name;
+
+    // The unique id for this frame. Generated by fingerprinting
+    // frame_name.
+    uint64 frame_id;
+
+    // The iteration id of its parent frame when this frame is created.
+    // -1 if there is no parent frame. The frame_name/parent_iter pair
+    // uniquely identifies this FrameState.
+    int64 parent_iter = -1;
+
+    // The FrameState of its parent frame.
+    FrameState* parent_frame = nullptr;
+
+    // The highest iteration number we have reached so far in this frame.
+    int64 iteration_count = 0;
+
+    // The number of inputs this frame is still waiting.
+    int num_pending_inputs = 0;
+
+    // The number of outstanding iterations.
+    int num_outstanding_iterations = 0;
+
+    // The maximum allowed number of parallel iterations.
+    int max_parallel_iterations = 1;
+
+    // The iteration states of this frame.
+    gtl::InlinedVector<IterationState*, 12> iterations;
+
+    // The NextIteration nodes to enter a new iteration. If the number of
+    // outstanding iterations reaches the limit, we will defer the start of
+    // the next iteration until the number of outstanding iterations falls
+    // below the limit.
+    std::vector<std::pair<const Node*, Entry>> next_iter_roots;
+
+    // The values of the loop invariants for this loop. They are added into
+    // this list as they "enter" the frame. When a loop invariant enters,
+    // we make it available to all active iterations. When the frame starts
+    // a new iteration, we make all the current loop invariants available
+    // to the new iteration.
+    std::vector<std::pair<const Node*, Entry>> inv_values;
+
+    // The list of dead exit nodes for the current highest iteration. We
+    // will only "execute" the dead exits of the final iteration.
+    std::vector<const Node*> dead_exits;
+
+    IterationState* GetIteration(int64 iter) {
+      int index = iter % iterations.size();
+      return iterations[index];
+    }
+
+    void SetIteration(int64 iter, IterationState* state) {
+      int index = iter % iterations.size();
+      iterations[index] = state;
+    }
+
+    ~FrameState() {
+      for (size_t i = 0; i < iterations.size(); ++i) {
+        delete iterations[i];
+        iterations[i] = nullptr;
+      }
+    }
+  };  // struct FrameState
+
+  // A tagged node: <frame*, iter, node*>.
+  struct TaggedNode {
+    const Node* node = nullptr;
+    FrameState* input_frame = nullptr;
+    int64 input_iter = -1;
+    bool is_dead = false;
+
+    TaggedNode(const Node* t_node, FrameState* in_frame, int64 in_iter,
+               bool dead) {
+      node = t_node;
+      input_frame = in_frame;
+      input_iter = in_iter;
+      is_dead = dead;
+    }
+  };
+
+  typedef gtl::InlinedVector<TaggedNode, 8> TaggedNodeSeq;
+  typedef gtl::InlinedVector<Entry, 4> EntryVector;
+
+  int64 step_id_;
+  // Not owned.
+  Rendezvous* rendezvous_;
+  SessionState* session_state_;
+  TensorStore* tensor_store_;
+  StepStatsCollector* stats_collector_;
+  // QUESTION: Make it a checkpoint::TensorSliceReaderCacheWrapper
+  // instead of a pointer?  (avoids having to delete).
+  checkpoint::TensorSliceReaderCacheWrapper* slice_reader_cache_;
+  FunctionCallFrame* call_frame_;
+  DebugExecutorImpl* impl_;
+  CancellationManager* cancellation_manager_;
+  Executor::Args::Runner runner_;
+
+  // Owned.
+
+  // Step-local resource manager.
+  ResourceMgr step_resource_manager_;
+
+  // A flag that is set on error after the frame state has been
+  // dumped for diagnostic purposes.
+  bool dumped_on_error_ = false;
+
+  // The root frame in which the execution of this step is started.
+  FrameState* root_frame_;
+
+  // Invoked when the execution finishes.
+  Executor::DoneCallback done_cb_;
+
+  std::atomic_int_fast32_t num_outstanding_ops_;
+
+  mutex mu_;
+  Status status_ GUARDED_BY(mu_);
+
+  // Mapping from frame name to outstanding frames. A new frame is created
+  // at some iteration of an active frame. So the unique key for the new
+  // child frame is composed of the name of the parent frame, the iteration
+  // number at which the parent frame is creating the new frame, and the
+  // name of the new frame from nodedef.
+  std::unordered_map<string, FrameState*> outstanding_frames_ GUARDED_BY(mu_);
+
+  // The unique name of a frame.
+  inline string MakeFrameName(FrameState* frame, int64 iter_id, string name) {
+    return strings::StrCat(frame->frame_name, ";", iter_id, ";", name);
+  }
+
+  // Find an existing or create a new child frame in the frame 'frame' at
+  // iteration 'iter'.
+  void FindOrCreateChildFrame(FrameState* frame, int64 iter, const Node* node,
+                              FrameState** child) EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
+  // Increments the iteration id. If this is a new iteration, initialize it.
+  void IncrementIteration(FrameState* frame, TaggedNodeSeq* ready)
+      EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
+  // Returns true if the computation in the frame is completed.
+  bool IsFrameDone(FrameState* frame) EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
+  // Returns true if the iteration of the frame is completed.
+  bool IsIterationDone(FrameState* frame, int64 iter)
+      EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
+  // Get the output frame/iter of a node. Create new frame/iteration if
+  // needed. If there are dead roots for the new iteration, we need to
+  // "execute" them so ad them to the ready queue. Returns true if
+  // we need to check for the completion of output frame/iter._idx
+  bool SetOutputFrameIter(const TaggedNode& tagged_node,
+                          const EntryVector& outputs, FrameState** frame,
+                          int64* iter, TaggedNodeSeq* ready)
+      EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
+  // Cleanup frames and iterations
+  void CleanupFramesIterations(FrameState* frame, int64 iter,
+                               TaggedNodeSeq* ready)
+      EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
+  // Activate all the deferred NextIteration nodes in a new iteration.
+  void ActivateNexts(FrameState* frame, int64 iter, TaggedNodeSeq* ready)
+      EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
+  // Activate all the current loop invariants in a new iteration.
+  void ActivateLoopInvs(FrameState* frame, int64 iter, TaggedNodeSeq* ready)
+      EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
+  // Add a new loop invariant and make it available to all active iterations.
+  void AddLoopInv(FrameState* frame, const Node* node, const Entry& value,
+                  TaggedNodeSeq* ready) EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
+  // Activate the successors of a node.
+  void ActivateNode(const Node* node, const bool is_dead, FrameState* frame,
+                    int64 iter, const EntryVector& outputs,
+                    TaggedNodeSeq* ready) EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
+  // Process a ready node in current thread.
+  void Process(TaggedNode node, int64 scheduled_usec);
+
+  // Before invoking item->kernel, fills in its "inputs".
+  Status PrepareInputs(const NodeItem& item, Entry* first_input,
+                       TensorValueVec* inputs,
+                       DeviceContextVec* input_device_contexts,
+                       AllocatorAttributeVec* input_alloc_attrs,
+                       bool* is_input_dead);
+
+  // After item->kernel computation is done, processes its outputs.
+  Status ProcessOutputs(const NodeItem& item, OpKernelContext* ctx,
+                        EntryVector* outputs, NodeExecStats* stats);
+
+  // After processing the outputs, propagates the outputs to their dsts.
+  void PropagateOutputs(const TaggedNode& tagged_node,
+                        const EntryVector& outputs,
+                        TaggedNodeSeq* ready);
+
+  // "node" just finishes. Takes ownership of "stats". Returns true if
+  // execution has completed.
+  bool NodeDone(const Status& s, const Node* node, const TaggedNodeSeq& ready,
+                NodeExecStats* stats, std::deque<TaggedNode>* inline_ready);
+
+  // Call Process() on all nodes in 'inline_ready'.
+  void ProcessInline(const std::deque<TaggedNode>& inline_ready);
+
+  // Schedule all the expensive nodes in 'ready', and put all the inexpensive
+  // nodes in 'ready' into 'inline_ready'.
+  void ScheduleReady(const TaggedNodeSeq& ready,
+                     std::deque<TaggedNode>* inline_ready);
+
+  // Provide debugging output about an outstanding node in the executor.
+  void DumpCompletedNodeState(const int node_id, const Entry* input_vector);
+  void DumpPendingNodeState(const int node_id, const Entry* input_vector,
+                            bool show_nodes_with_no_ready_inputs);
+  void DumpActiveNodeState(const int node_id, const Entry* input_vector);
+
+  // Provide debugging output about an outstanding iteration in the executor.
+  void DumpIterationState(IterationState* iteration);
+
+  // Provide debugging output of the state of the executor.
+  void DumpState();
+
+  // One thread of control finishes.
+  void Finish();
+
+  // A standalone routine for this expression so that we can express
+  // that we don't want thread safety analysis on this reference (it's
+  // safe to do without the lock because the iterations array never
+  // resizes and this particular iteration's array element will not
+  // be changed out from under us because the iteration is still alive).
+  Entry* GetInputTensors(FrameState* input_frame,
+                         int64 input_iter) const NO_THREAD_SAFETY_ANALYSIS {
+    return input_frame->GetIteration(input_iter)->input_tensors;
+  }
+
+  const Node* stored_node;
+  FrameState* stored_output_frame;
+  int64 stored_output_iter;
+  EntryVector stored_outputs;
+};  // class DebugExecutorState
+
+}  // end namespace
+
+// ::tensorflow::Status NewLocalDebugExecutor(const LocalExecutorParams& params,
+//                                            const Graph* graph, DebugExecutorImpl** executor);
+
 
 class CostModel;
 class Device;
@@ -94,16 +545,16 @@ class DebugSession : public Session {
   typedef DebugSession ME;
 
   // IDE(cais)
-  Executor* debug_executor;
+  DebugExecutorImpl* debug_executor;
 
   // We create one executor and its dependent library runtime for
   // every partition.
-  struct PerPartitionExecutorsAndLib {
-    Executor* executor = nullptr;
+  struct PerPartitionDebugExecutorsAndLib {
+    DebugExecutorImpl* executor = nullptr;
     FunctionLibraryRuntime* flib = nullptr;
   };
 
-  // An ExecutorsAndKeys is created for a given set of feeds/fetches.
+  // An DebugExecutorsAndKeys is created for a given set of feeds/fetches.
   // 'func_defs' are the function definition used by all the
   // underlying executors. 'graph' is the entire graph being
   // executed. 'name_to_node' maps node name to node. We keep 'graph'
@@ -111,15 +562,15 @@ class DebugSession : public Session {
   // 'items' is the executor for a partition of the graph bundled with
   // its dependent library runtime. 'input_keys' are the rendezvous keys
   // for the feeds and 'output_keys' are rendezvous keys for the fetches.
-  struct ExecutorsAndKeys {
+  struct DebugExecutorsAndKeys {
     FunctionLibraryDefinition* func_defs = nullptr;
     Graph* graph = nullptr;
     NameNodeMap* name_to_node = nullptr;
-    std::vector<PerPartitionExecutorsAndLib> items;
+    std::vector<PerPartitionDebugExecutorsAndLib> items;
     std::unordered_map<string, string> input_keys;
     std::unordered_map<string, string> output_keys;
 
-    ~ExecutorsAndKeys() {
+    ~DebugExecutorsAndKeys() {
       for (auto item : items) {
         delete item.executor;
         delete item.flib;
@@ -167,7 +618,7 @@ class DebugSession : public Session {
   ::tensorflow::Status GetOrCreateExecutors(
       gtl::ArraySlice<string> inputs, gtl::ArraySlice<string> outputs,
       gtl::ArraySlice<string> target_nodes,
-      ExecutorsAndKeys** executors_and_keys, RunStateArgs* run_state_args);
+      DebugExecutorsAndKeys** executors_and_keys, RunStateArgs* run_state_args);
 
   // Creates several graphs given the existing graph_def_ and the
   // input feeds and fetches, given 'devices'.
@@ -184,13 +635,13 @@ class DebugSession : public Session {
   // Feeds more inputs to the executors, triggering further execution.
   ::tensorflow::Status SendInputs(
       const std::vector<std::pair<string, Tensor>>& inputs,
-      const ExecutorsAndKeys* executors_and_keys,
+      const DebugExecutorsAndKeys* executors_and_keys,
       IntraProcessRendezvous* rendez);
 
   // Fetches more outputs from the executors. It waits until the output
   // tensors are computed.
   ::tensorflow::Status RecvOutputs(const std::vector<string>& output_names,
-                                   const ExecutorsAndKeys* executors_and_keys,
+                                   const DebugExecutorsAndKeys* executors_and_keys,
                                    RunState* run_state,
                                    std::vector<Tensor>* outputs);
 
@@ -199,7 +650,7 @@ class DebugSession : public Session {
   ::tensorflow::Status CheckFetch(
       const std::vector<std::pair<string, Tensor>>& feeds,
       const std::vector<string>& fetches,
-      const ExecutorsAndKeys* executors_and_keys, const RunState* run_state);
+      const DebugExecutorsAndKeys* executors_and_keys, const RunState* run_state);
 
   // Use the appropriate WaitForNotification function based on whether
   // operation_timeout_in_ms is greater than 0.
@@ -225,7 +676,7 @@ class DebugSession : public Session {
   // Holds mappings from signature to the executors that process
   // it. The reason for a level of indirection around mapped_type is
   // to guarantee address stability.
-  std::unordered_map<string, ExecutorsAndKeys*> executors_
+  std::unordered_map<string, DebugExecutorsAndKeys*> executors_
       GUARDED_BY(executor_lock_);
 
   // Holds mappings from handle to partial run state.

@@ -980,6 +980,8 @@ tf_cuda_library(
         exclude = [
             "**/*test*",
             "**/*main.cc",
+            "common_runtime/debug_session.cc",  # IDE(cais)
+            "common_runtime/debug_session.h",  # IDE(cais)
             "common_runtime/direct_session.cc",
             "common_runtime/direct_session.h",
             "common_runtime/gpu_device_context.h",
@@ -992,6 +994,7 @@ tf_cuda_library(
         ],
         exclude = [
             "**/*test*",
+            "common_runtime/debug_session.h",  # IDE(cais)
             "common_runtime/direct_session.h",
             "common_runtime/gpu_device_context.h",
         ],

@@ -490,38 +490,30 @@ TF_DebuggerResponse* TF_SendDebugMessage(TF_Session* s,
   tensorflow::DebuggerRequest request(debug_msg);
 
   // If the command is "inject_value", Get tensor value input
-  Tensor input_tensor;  //TODO(cais): Avoid unnecessary constructions
   if (debug_msg.find("inject_value ") == 0) {
-    // TODO(cais): Make a copy of the input tensor
     TF_Tensor* src = input_tensors[0];
-    input_tensor = tensorflow::TensorCApi::MakeTensor(src->dtype, src->shape, src->buffer);
+    request.input_tensor = tensorflow::TensorCApi::MakeTensor(src->dtype, src->shape, src->buffer);
     
     std::cout << "src = " << src << "; src->buffer = " << src->buffer
               << "; src->buffer->data() = " << src->buffer->data()
-              << "; inject_value = " << input_tensor.DebugString()
-              << "; &input_tensor = " << &input_tensor
-              << "; input_tensor.buf_ = " << input_tensor.buf_
+              << "; inject_value = " << request.input_tensor.DebugString()
+              << "; input tensor address = " << &(request.input_tensor)
               << "; request.input_tensor address = " << &(request.input_tensor) << std::endl;  //DEBUG
-
-    request.input_tensor = input_tensor;
   }
-
   // std::cout << "Calling SendDebugMessage()" << std::endl;  //DEBUG
 
   DebuggerResponse debugger_response = s->session->SendDebugMessage(request);
 
   // std::cout << "Calling TF_DebuggerResponse()" << std::endl;  //DEBUG
-  TF_DebuggerResponse* debugger_response_output = new TF_DebuggerResponse(debugger_response); //TODO(cais): memory leak
-  // output->debugger_response;
+  TF_DebuggerResponse* debugger_response_output = new TF_DebuggerResponse(debugger_response);
 
-  // IDE(cais): Dummy TODO(cais): Replace with true values
+  // IDE(cais)
   // Assume length = 1
   for (size_t i = 0; i < 1; ++i) {
     output_tensors[i] = NULL;
   }
 
-
-
+  // Send output tensors, in the case of inspect_value
   if (debugger_response.has_output_tensor) {
     // std::cout << "Transferring output_tensor" << std::endl;  //DEBUG
     Tensor output_tensor(debugger_response.output_tensor);
@@ -533,20 +525,6 @@ TF_DebuggerResponse* TF_SendDebugMessage(TF_Session* s,
                                       output_tensor.shape(), buf};
     // TODO(cais): Logical branch for string tensors
   }
-
-  // std::cout << "Creating dummy tensor" << std::endl;  //DEBUG
-  // TensorShape new_tensor_shape({3, 3});
-  // Tensor new_tensor(tensorflow::DT_FLOAT, new_tensor_shape);
-  // auto new_tensor_flat = new_tensor.flat<float>();
-  // for (int i = 0; i < 3 * 3; ++i) {
-  //   new_tensor_flat(i) = 20.0 * (i + 1);
-  // }
-
-  // TensorBuffer* buf = tensorflow::TensorCApi::Buffer(new_tensor);
-  // buf->Ref();
-
-  // output_tensors[0] = new TF_Tensor{static_cast<TF_DataType>(new_tensor.dtype()), 
-                                    // new_tensor.shape(), buf};
 
   return debugger_response_output;
 }

@@ -424,12 +424,9 @@ void Tensor::CopyFromInternal(const Tensor& other, const TensorShape& shape) {
   CHECK_EQ(shape.num_elements(), other.NumElements());
   shape_ = shape;
   set_dtype(other.dtype());
-
   if (buf_ != other.buf_) {
     UnrefIfNonNull(buf_);
-
     buf_ = other.buf_;
-
     RefIfNonNull(buf_);
   }
 }

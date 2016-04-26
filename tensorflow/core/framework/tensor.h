@@ -352,10 +352,6 @@ class Tensor {
   /// This tensor shares other's underlying storage.
   void UnsafeCopyFromInternal(const Tensor&, const TensorShape&);
 
-  // TensorBuffer* get_buf() const; // IDE(cais)
-
-  TensorBuffer* buf_;
-
  private:
   void CheckType(DataType expected_dtype) const;
   void CheckTypeAndIsAligned(DataType expected_dtype) const;
@@ -372,7 +368,8 @@ class Tensor {
   gtl::InlinedVector<int64, 4> ComputeFlatOuterDims(int64 num_out_dims) const;
 
   TensorShape shape_;
-  
+  TensorBuffer* buf_;
+
   friend class DMAHelper;
   friend class TensorCApi;
   friend class TensorReference;       // For access to buf_
@@ -436,10 +433,6 @@ template <typename T>
 T* Tensor::base() const {
   return buf_ == nullptr ? nullptr : buf_->base<T>();
 }
-
-// TensorBuffer* Tensor::get_buf() const {
-//   return buf_;
-// }
 
 template <typename T, size_t NDIMS>
 typename TTypes<T, NDIMS>::Tensor Tensor::tensor() {

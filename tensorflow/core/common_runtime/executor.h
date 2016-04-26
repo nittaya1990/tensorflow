@@ -21,13 +21,131 @@ limitations under the License.
 #include "tensorflow/core/framework/session_state.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/graph/graph.h"
-#include "tensorflow/core/lib/core/debugger.h"
 #include "tensorflow/core/lib/core/notification.h"
 #include "tensorflow/core/lib/core/status.h"
+#include "tensorflow/core/lib/strings/stringprintf.h"
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/macros.h"
 
 namespace tensorflow {
+
+namespace {
+
+bool IsInitializationOp(const Node* node) {
+  return node->op_def().allows_uninitialized_input();
+}
+
+// Sets the timeline_label field of *node_stats, using data from *node.
+// Returns true iff the node is a transfer node.
+// TODO(tucker): merge with the DetailText function in session.cc
+// in a common location.
+bool SetTimelineLabel(const Node* node, NodeExecStats* node_stats) {
+  bool is_transfer_node = false;
+  string memory;
+  for (auto& all : node_stats->memory()) {
+    int64 tot = all.total_bytes();
+    if (tot >= 0.1 * 1048576.0) {
+      int64 peak = all.peak_bytes();
+      if (peak > 0) {
+        memory =
+            strings::StrCat(memory, "[", all.allocator_name(),
+                            strings::Printf(" %.1fMB %.1fMB] ", tot / 1048576.0,
+                                            peak / 1048576.0));
+      } else {
+        memory = strings::StrCat(memory, "[", all.allocator_name(),
+                                 strings::Printf(" %.1fMB] ", tot / 1048576.0));
+      }
+    }
+  }
+  const NodeDef& def = node->def();
+  string text = "";
+  if (IsSend(node)) {
+    string tensor_name;
+    TF_CHECK_OK(GetNodeAttr(def, "tensor_name", &tensor_name));
+    string recv_device;
+    TF_CHECK_OK(GetNodeAttr(def, "recv_device", &recv_device));
+    text = strings::StrCat(memory, def.name(), " = ", def.op(), "(",
+                           tensor_name, " @", recv_device);
+    is_transfer_node = true;
+  } else if (IsRecv(node)) {
+    string tensor_name;
+    TF_CHECK_OK(GetNodeAttr(def, "tensor_name", &tensor_name));
+    string send_device;
+    TF_CHECK_OK(GetNodeAttr(def, "send_device", &send_device));
+    text = strings::StrCat(memory, def.name(), " = ", def.op(), "(",
+                           tensor_name, " @", send_device);
+    is_transfer_node = true;
+  } else {
+    text = strings::StrCat(
+        memory, def.name(), " = ", def.op(), "(",
+        str_util::Join(
+            std::vector<StringPiece>(def.input().begin(), def.input().end()),
+            ", "),
+        ")");
+  }
+  node_stats->set_timeline_label(text);
+  return is_transfer_node;
+}
+
+// Helper routines for collecting step stats.
+namespace nodestats {
+inline int64 NowInUsec() { return Env::Default()->NowMicros(); }
+
+void SetScheduled(NodeExecStats* nt, int64 t) { nt->set_scheduled_micros(t); }
+
+void SetAllStart(NodeExecStats* nt) { nt->set_all_start_micros(NowInUsec()); }
+
+void SetOpStart(NodeExecStats* nt) {
+  DCHECK_NE(nt->all_start_micros(), 0);
+  nt->set_op_start_rel_micros(NowInUsec() - nt->all_start_micros());
+}
+
+void SetOpEnd(NodeExecStats* nt) {
+  DCHECK_NE(nt->all_start_micros(), 0);
+  nt->set_op_end_rel_micros(NowInUsec() - nt->all_start_micros());
+}
+
+void SetAllEnd(NodeExecStats* nt) {
+  DCHECK_NE(nt->all_start_micros(), 0);
+  nt->set_all_end_rel_micros(NowInUsec() - nt->all_start_micros());
+}
+
+void SetOutput(NodeExecStats* nt, int slot, const Tensor* v) {
+  DCHECK(v);
+  NodeOutput* no = nt->add_output();
+  no->set_slot(slot);
+  v->FillDescription(no->mutable_tensor_description());
+}
+
+void SetMemory(NodeExecStats* nt, OpKernelContext* ctx) {
+  for (const auto& allocator_pair : ctx->wrapped_allocators()) {
+    AllocatorMemoryUsed* memory = nt->add_memory();
+    // retrieving the sizes from the wrapped allocator removes the
+    // executor's reference to it, so allocator_pair.second must not
+    // be dereferenced again after this statement
+    auto sizes = allocator_pair.second->GetSizesAndUnRef();
+    memory->set_allocator_name(allocator_pair.first->Name());
+    int tb = sizes.first;
+    memory->set_total_bytes(tb);
+    if (allocator_pair.first->TracksAllocationSizes()) {
+      memory->set_peak_bytes(sizes.second);
+    }
+  }
+}
+
+void SetReferencedTensors(NodeExecStats* nt,
+                          const TensorReferenceVector& tensors) {
+  // be careful not to increment the reference count on any tensor
+  // while recording the information
+  for (size_t i = 0; i < tensors.size(); ++i) {
+    AllocationDescription* description = nt->add_referenced_tensor();
+    tensors.at(i).FillDescription(description);
+  }
+}
+
+}  // end namespace nodestats
+
+}  // end namespace
 
 class StepStatsCollector;
 
@@ -47,14 +165,6 @@ class StepStatsCollector;
 class Executor {
  public:
   virtual ~Executor() {}
-
-  // IDE(cais)
-  virtual DebuggerResponse HandleDebuggerMessage(const DebuggerRequest& request) {
-    std::cerr << "ERROR: Not implemented" << std::endl;
-
-    DebuggerResponse response;
-    return response;
-  }
 
   // RunAsync() executes the graph computation. "done" is run when the
   // graph computation completes. If any error happens during the
@@ -229,6 +339,48 @@ Status CreateNonCachedKernel(Device* device, FunctionLibraryRuntime* flib,
 
 // Deletes "kernel" returned by CreateKernel.
 void DeleteNonCachedKernel(OpKernel* kernel);
+
+struct NodeItem {
+  // A graph node.
+  const Node* node = nullptr;
+
+  // The kernel for this node.
+  OpKernel* kernel = nullptr;
+
+  bool kernel_is_expensive = false;  // True iff kernel->IsExpensive()
+  bool kernel_is_async = false;      // True iff kernel->AsAsync() != nullptr
+  bool is_merge = false;             // True iff IsMerge(node)
+
+  // Cached values of node->num_inputs() and node->num_outputs(), to
+  // avoid levels of indirection.
+  int num_inputs;
+  int num_outputs;
+
+  // ExecutorImpl::tensors_[input_start] is the 1st positional input
+  // for this node.
+  int input_start = 0;
+
+  // ExecutorImpl::output_attrs_[output_attr_start] is the 1st
+  // positional attribute for the 0th output of this node.
+  int output_attr_start = 0;
+
+  DataType input_type(int i) const {
+    DCHECK_LT(i, num_inputs);
+    return (i < 4) ? inlined_input_type[i] : node->input_type(i);
+  }
+  DataType output_type(int i) const {
+    DCHECK_LT(i, num_outputs);
+    return (i < 4) ? inlined_output_type[i] : node->output_type(i);
+  }
+  // Cache first 4 input and output types to reduce levels of indirection
+  DataType inlined_input_type[4];
+  DataType inlined_output_type[4];
+};
+
+
+typedef gtl::InlinedVector<TensorValue, 4> TensorValueVec;
+typedef gtl::InlinedVector<DeviceContext*, 4> DeviceContextVec;
+typedef gtl::InlinedVector<AllocatorAttributes, 4> AllocatorAttributeVec;
 
 }  // end namespace tensorflow
 

@@ -67,7 +67,7 @@ typedef std::vector<Safe_PyObjectPtr> Safe_PyObjectVector;
 Safe_PyObjectPtr make_safe(PyObject* o);
 
 
-void TF_DebugDummy_wrapper(TF_Session* session,
+void TF_Debug_wrapper(TF_Session* session,
                            const string& msg,
                            const FeedVector& inputs,
                            Status* out_status,
@@ -77,7 +77,6 @@ std::string DebuggerResponseCommandWrapper(TF_DebuggerResponse* debugger_respons
 bool DebuggerResponseIsCompletedWrapper(TF_DebuggerResponse* debugger_response);
 std::vector<std::string> DebuggerResponseCompletedNodesWrapper(TF_DebuggerResponse* debugger_response);
 std::vector<std::string> DebuggerResponseRemainingNodesWrapper(TF_DebuggerResponse* debugger_response);
-// tensorflow::Tensor& DebuggerResponseOutputTensorWrapper(TF_DebuggerResponse* debugger_response);  // TODO(cais): Pass reference
 
 // Run the graph associated with the session starting with the
 // supplied inputs[].  Regardless of success or failure, inputs[] are

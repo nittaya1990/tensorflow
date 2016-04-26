@@ -244,13 +244,11 @@ template <typename T>
 Status ResourceMgr::LookupOrCreate(const string& container, const string& name,
                                    T** resource,
                                    std::function<Status(T**)> creator) {
-
   Status s;
   *resource = nullptr;
   while (*resource == nullptr) {
     s = Lookup(container, name, resource);
     if (s.ok()) break;
-
     s = creator(resource);
     if (!s.ok()) break;
     s = Create(container, name, *resource);

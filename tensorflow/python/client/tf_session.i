@@ -265,7 +265,6 @@ tensorflow::ImportNumpy();
 %unignore TF_CloseSession;
 %unignore TF_DeleteSession;
 %unignore TF_ExtendGraph;
-// %unignore TF_NewLibrary;
 %unignore TF_LoadLibrary;
 %unignore TF_GetOpList;
 %include "tensorflow/core/public/tensor_c_api.h"
@@ -291,10 +290,10 @@ tensorflow::ImportNumpy();
 %}
 
 
-%noexception tensorflow::TF_DebugDummy_wrapper;
-%rename(TF_DebugDummy) tensorflow::TF_DebugDummy_wrapper;
+%noexception tensorflow::TF_Debug_wrapper;
+%rename(TF_Debug) tensorflow::TF_Debug_wrapper;
 %unignore tensorflow;
-%unignore TF_DebugDummy;
+%unignore TF_Debug;
 %unignore DebuggerResponseIsCompletedWrapper;
 %unignore DebuggerResponseCompletedNodesWrapper;
 %unignore DebuggerResponseRemainingNodesWrapper;
