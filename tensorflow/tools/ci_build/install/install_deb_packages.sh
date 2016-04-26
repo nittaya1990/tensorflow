@@ -16,15 +16,10 @@
 
 set -e
 
-# Install FFmpeg from an alternate repository.
-apt-get install -y software-properties-common
-add-apt-repository -y ppa:mc3man/trusty-media
-# Install CMake 3.x
-add-apt-repository -y ppa:george-edison55/cmake-3.x
-apt-get update
-
 # Install dependencies from ubuntu deb repository.
 apt-get update
+
+# gfortran, atlas, blas and lapack required by scipy pip install
 apt-get install -y \
     autoconf \
     automake \
@@ -34,6 +29,10 @@ apt-get install -y \
     curl \
     ffmpeg \
     git \
+    gfortran \
+    libatlas-base-dev \
+    libblas-dev \
+    liblapack-dev \
     libtool \
     openjdk-8-jdk \
     openjdk-8-jre-headless \
@@ -41,12 +40,10 @@ apt-get install -y \
     python-dev \
     python-numpy \
     python-pip \
-    python-scipy \
     python-virtualenv \
     python3-dev \
     python3-numpy \
     python3-pip \
-    python3-scipy \
     sudo \
     swig \
     unzip \

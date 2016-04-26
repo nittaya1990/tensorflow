@@ -9,6 +9,8 @@ package(default_visibility = ["//visibility:public"])
 
 licenses(["notice"])  # Apache 2.0
 
+exports_files(["LICENSE"])
+
 load(
     "//tensorflow:tensorflow.bzl",
     "tf_cc_test",
@@ -173,6 +175,7 @@ cc_library(
     srcs = ["save_restore_tensor.cc"],
     hdrs = ["save_restore_tensor.h"],
     deps = [
+        ":bounds_check",
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
     ],
@@ -261,6 +264,8 @@ tf_kernel_libraries(
         "concat_op",
         "constant_op",
         "diag_op",
+        "batch_matrix_band_part_op",
+        "batch_matrix_diag_op",
         "edit_distance_op",
         "gather_nd_op",
         "gather_op",
@@ -285,11 +290,13 @@ tf_kernel_libraries(
         "where_op",
     ],
     deps = [
+        ":batchtospace_op",
         ":bounds_check",
         ":concat_lib",
         ":depth_space_ops",
         ":fill_functor",
         ":ops_util",
+        ":spacetobatch_op",
         ":split_lib",
         ":transpose_functor",
         "//tensorflow/core:array_grad",
@@ -298,8 +305,26 @@ tf_kernel_libraries(
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core:lib_internal",
+        "//tensorflow/core:proto_text",
         "//tensorflow/core:protos_all_cc",
         "//third_party/eigen3",
+    ],
+)
+
+tf_cc_test(
+    name = "batch_norm_op_test",
+    size = "small",
+    deps = [
+        ":batch_norm_op",
+        ":ops_testutil",
+        ":ops_util",
+        "//tensorflow/core:core_cpu",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:protos_all_cc",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core:testlib",
     ],
 )
 
@@ -325,6 +350,23 @@ tf_cc_test(
     size = "small",
     deps = [
         ":constant_op",
+        ":ops_testutil",
+        ":ops_util",
+        "//tensorflow/core:core_cpu",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:protos_all_cc",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core:testlib",
+    ],
+)
+
+tf_cc_test(
+    name = "example_parsing_ops_test",
+    size = "small",
+    deps = [
+        ":example_parsing_ops",
         ":ops_testutil",
         ":ops_util",
         "//tensorflow/core:core_cpu",
@@ -523,6 +565,7 @@ tf_kernel_libraries(
         "padding_fifo_queue_op",
         "queue_ops",
         "random_shuffle_queue_op",
+        "session_ops",
         "stack_ops",
         "tensor_array_ops",
     ],
@@ -593,14 +636,16 @@ cc_library(
     ],
 )
 
-cc_library(
+tf_kernel_library(
     name = "tensor_array",
     srcs = ["tensor_array.cc"],
     hdrs = ["tensor_array.h"],
     visibility = ["//visibility:private"],
     deps = [
+        ":aggregate_ops",
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
+        "//third_party/eigen3",
     ],
 )
 
@@ -633,6 +678,7 @@ tf_kernel_libraries(
         "sample_distorted_bounding_box_op",
     ],
     deps = [
+        ":bounds_check",
         ":eigen_helpers",
         ":image_resizer_state",
         "//tensorflow/core:framework",
@@ -878,10 +924,32 @@ tf_cc_test(
     ],
 )
 
+tf_cc_tests(
+    size = "small",
+    tests = [
+        "sparse_add_op_test",
+        "sparse_reduce_sum_op_test",
+    ],
+    deps = [
+        ":ops_testutil",
+        ":ops_util",
+        ":sparse_add_op",
+        ":sparse_reduce_sum_op",
+        "//tensorflow/core:core_cpu",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:protos_all_cc",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core:testlib",
+    ],
+)
+
 tf_cc_test(
     name = "cwise_ops_test",
     size = "small",
     deps = [
+        ":bounds_check",
         ":cwise_op",
         ":ops_testutil",
         ":ops_util",
@@ -1120,6 +1188,26 @@ tf_kernel_library(
 )
 
 tf_kernel_library(
+    name = "batchtospace_op",
+    prefix = "batchtospace_op",
+    deps = [
+        "//tensorflow/core:framework",
+        "//tensorflow/core:lib",
+        "//third_party/eigen3",
+    ],
+)
+
+tf_kernel_library(
+    name = "spacetobatch_op",
+    prefix = "spacetobatch_op",
+    deps = [
+        "//tensorflow/core:framework",
+        "//tensorflow/core:lib",
+        "//third_party/eigen3",
+    ],
+)
+
+tf_kernel_library(
     name = "depth_space_ops",
     srcs = [
         "depthtospace_op.cc",
@@ -1156,6 +1244,7 @@ tf_kernel_libraries(
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core:parsing_ops_op_lib",
+        "//tensorflow/core:proto_text",
         "//tensorflow/core:protos_all_cc",
     ],
 )
@@ -1204,8 +1293,10 @@ tf_kernel_libraries(
         "sparse_add_grad_op",
         "sparse_add_op",
         "sparse_concat_op",
+        "sparse_reduce_sum_op",
         "sparse_reorder_op",
         "sparse_split_op",
+        "sparse_tensor_dense_add_op",
         "sparse_tensor_dense_matmul_op",
         "sparse_to_dense_op",
         "sparse_xent_op",
@@ -1214,6 +1305,7 @@ tf_kernel_libraries(
     deps = [
         ":bounds_check",
         ":fill_functor",
+        ":scatter_op",
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core:sparse_ops_op_lib",
@@ -1224,7 +1316,6 @@ tf_kernel_libraries(
 tf_cuda_cc_tests(
     size = "small",
     tests = [
-        "sparse_add_op_test",
         "sparse_tensor_dense_matmul_op_test",
         "sparse_to_dense_op_test",
         "sparse_xent_op_test",
@@ -1282,6 +1373,7 @@ tf_kernel_libraries(
     name = "string",
     prefixes = [
         "string_to_hash_bucket_op",
+        "reduce_join_op",
     ],
     deps = [
         "//tensorflow/core:framework",
@@ -1497,6 +1589,7 @@ filegroup(
         "restore_op.cc",
         "save_op.cc",
         "save_restore_tensor.cc",
+        "session_ops.cc",
         "softplus_op.cc",
         "softsign_op.cc",
         "sparse_to_dense_op.cc",

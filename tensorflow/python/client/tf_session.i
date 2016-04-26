@@ -226,7 +226,7 @@ tensorflow::ImportNumpy();
     $result = PyUnicode_FromStringAndSize(
 %#endif
       *$2, strlen(*$2));
-    delete *$2;
+    delete[] *$2;
   }
 }
 
