@@ -138,7 +138,7 @@ class BaseSession(SessionInterface):
   def debug(self, message, feed=None):
     if feed is None:
       feed = {}
-    
+
     output = tf_session.TF_Debug(self._session, message, feed)
     if isinstance(output, list):
       output = output[0]

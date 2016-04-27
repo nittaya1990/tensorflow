@@ -20,7 +20,6 @@ limitations under the License.
 #include "tensorflow/python/lib/core/numpy.h"
 
 #include "tensorflow/core/framework/graph.pb.h"
-#include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/gtl/inlined_vector.h"
@@ -52,17 +51,23 @@ typedef std::unique_ptr<PyObject, Py_DECREF_wrapper_type> Safe_PyObjectPtr;
 typedef std::vector<Safe_PyObjectPtr> Safe_PyObjectVector;
 Safe_PyObjectPtr make_safe(PyObject* o);
 
-
 void TF_Debug_wrapper(TF_Session* session,
-                           const string& msg,
-                           const FeedVector& inputs,
-                           Status* out_status,
-                           PyObjectVector* out_values); //const PyObjectVector* out_values
+                      const string& msg,
+                      const FeedVector& inputs,
+                      Status* out_status,
+                      PyObjectVector* out_values);
 
-std::string DebuggerResponseCommandWrapper(TF_DebuggerResponse* debugger_response);
-bool DebuggerResponseIsCompletedWrapper(TF_DebuggerResponse* debugger_response);
-std::vector<std::string> DebuggerResponseCompletedNodesWrapper(TF_DebuggerResponse* debugger_response);
-std::vector<std::string> DebuggerResponseRemainingNodesWrapper(TF_DebuggerResponse* debugger_response);
+std::string DebuggerResponseCommandWrapper(
+    TF_DebuggerResponse* debugger_response);
+
+bool DebuggerResponseIsCompletedWrapper(
+    TF_DebuggerResponse* debugger_response);
+
+std::vector<std::string> DebuggerResponseCompletedNodesWrapper(
+    TF_DebuggerResponse* debugger_response);
+
+std::vector<std::string> DebuggerResponseRemainingNodesWrapper(
+    TF_DebuggerResponse* debugger_response);
 
 // Run the graph associated with the session starting with the
 // supplied inputs[].  Regardless of success or failure, inputs[] are

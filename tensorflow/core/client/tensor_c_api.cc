@@ -482,7 +482,7 @@ void TF_Run_Helper(TF_Session* s, const char* handle,
 
 extern "C" {
 
-// IDE(cais)
+// tfdb(cais)
 TF_DebuggerResponse* TF_SendDebugMessage(TF_Session* s,
                                          const std::string& debug_msg,
                                          TF_Tensor** input_tensors,
@@ -492,22 +492,25 @@ TF_DebuggerResponse* TF_SendDebugMessage(TF_Session* s,
   // If the command is "inject_value", Get tensor value input
   if (debug_msg.find("inject_value ") == 0) {
     TF_Tensor* src = input_tensors[0];
-    request.input_tensor = tensorflow::TensorCApi::MakeTensor(src->dtype, src->shape, src->buffer);
-    
+    request.input_tensor =
+      tensorflow::TensorCApi::MakeTensor(src->dtype, src->shape, src->buffer);
+
     std::cout << "src = " << src << "; src->buffer = " << src->buffer
               << "; src->buffer->data() = " << src->buffer->data()
               << "; inject_value = " << request.input_tensor.DebugString()
               << "; input tensor address = " << &(request.input_tensor)
-              << "; request.input_tensor address = " << &(request.input_tensor) << std::endl;  //DEBUG
+              << "; request.input_tensor address = " << &(request.input_tensor)
+              << std::endl;  // DEBUG
   }
   // std::cout << "Calling SendDebugMessage()" << std::endl;  //DEBUG
 
   DebuggerResponse debugger_response = s->session->SendDebugMessage(request);
 
   // std::cout << "Calling TF_DebuggerResponse()" << std::endl;  //DEBUG
-  TF_DebuggerResponse* debugger_response_output = new TF_DebuggerResponse(debugger_response);
+  TF_DebuggerResponse* debugger_response_output =
+      new TF_DebuggerResponse(debugger_response);
 
-  // IDE(cais)
+  // tfdb(cais)
   // Assume length = 1
   for (size_t i = 0; i < 1; ++i) {
     output_tensors[i] = NULL;
@@ -521,12 +524,12 @@ TF_DebuggerResponse* TF_SendDebugMessage(TF_Session* s,
     if (output_tensor.dtype() != tensorflow::DT_STRING) {
       TensorBuffer* buf = tensorflow::TensorCApi::Buffer(output_tensor);
       buf->Ref();
-      output_tensors[0] = new TF_Tensor{static_cast<TF_DataType>(output_tensor.dtype()), 
-                                        output_tensor.shape(), buf};
+      output_tensors[0] =
+          new TF_Tensor{static_cast<TF_DataType>(output_tensor.dtype()),
+                        output_tensor.shape(), buf};
     } else {
       output_tensors[0] = tensorflow::TF_Tensor_EncodeStrings(output_tensor);
     }
-    
   }
 
   return debugger_response_output;
@@ -540,18 +543,15 @@ bool DebuggerResponseIsCompleted(TF_DebuggerResponse* debugger_response) {
   return debugger_response->debugger_response.is_completed;
 }
 
-std::vector<std::string> DebuggerResponseCompletedNodes(TF_DebuggerResponse* debugger_response) {
+std::vector<std::string> DebuggerResponseCompletedNodes(
+    TF_DebuggerResponse* debugger_response) {
   return debugger_response->debugger_response.completed_nodes;
 }
 
-std::vector<std::string> DebuggerResponseRemainingNodes(TF_DebuggerResponse* debugger_response) {
+std::vector<std::string> DebuggerResponseRemainingNodes(
+    TF_DebuggerResponse* debugger_response) {
   return debugger_response->debugger_response.remaining_nodes;
 }
-
-// tensorflow::Tensor& DebuggerResponseOutputTensor(TF_DebuggerResponse* debugger_response) {
-
-//   return debugger_response->debugger_response.output_tensor;
-// }
 
 void TF_Run(TF_Session* s, const TF_Buffer* run_options,
             // Input tensors
@@ -563,8 +563,8 @@ void TF_Run(TF_Session* s, const TF_Buffer* run_options,
             const char** c_target_node_names, int ntargets,
             TF_Buffer* run_metadata, TF_Status* status) {
   TF_Run_Helper(s, nullptr, run_options, c_input_names, c_inputs, ninputs,
-                c_output_tensor_names, c_outputs, noutputs, c_target_node_names,
-                ntargets, run_metadata, status);
+                c_output_tensor_names, c_outputs, noutputs,
+                c_target_node_names, ntargets, run_metadata, status);
 }
 
 void TF_PRunSetup(TF_Session* s,
@@ -629,5 +629,4 @@ TF_Library* TF_LoadLibrary(const char* library_filename, TF_Status* status) {
 
 TF_Buffer TF_GetOpList(TF_Library* lib_handle) { return lib_handle->op_list; }
 
-}  
-// end extern "C"
+}  // end extern "C"

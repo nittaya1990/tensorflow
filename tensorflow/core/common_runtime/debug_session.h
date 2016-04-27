@@ -53,7 +53,7 @@ namespace tensorflow {
 // 1-D, 0 element tensor.
 static const Tensor* const kEmptyTensor = new Tensor;
 
-class DebugExecutorState;  // IDE(cais)
+class DebugExecutorState;  // tfdb(cais)
 
 class DebugExecutorImpl : public Executor {
  public:
@@ -62,7 +62,7 @@ class DebugExecutorImpl : public Executor {
 
   ~DebugExecutorImpl() override;
 
-  // IDE(cais)
+  // tfdb(cais)
   DebuggerResponse HandleDebuggerMessage(const DebuggerRequest& request);
 
   Status Initialize();
@@ -92,8 +92,8 @@ class DebugExecutorImpl : public Executor {
 
   static void InitializePending(const Graph* graph, PendingCounts* counts);
 
-  std::vector<string> GetCompletedNodes();
-  std::vector<string> GetNotCompletedNodes();
+  std::vector<std::string> GetCompletedNodes();
+  std::vector<std::string> GetNotCompletedNodes();
 
   // Owned.
   LocalExecutorParams params_;
@@ -126,7 +126,7 @@ class DebugExecutorImpl : public Executor {
 
   DebugExecutorState* executor_state;
 
-  // IDE(cais)
+  // tfdb(cais)
   std::unordered_map<string, Tensor> injected_tensors;
 };  // end class DebugExecutorImpl
 
@@ -140,7 +140,7 @@ class DebugExecutorState {
 
   void RunAsync(Executor::DoneCallback done);
 
-  // IDE(cais)
+  // tfdb(cais)
   void InjectNodeValue(Tensor value);
 
  private:
@@ -546,7 +546,7 @@ class DebugSession : public Session {
  private:
   typedef DebugSession ME;
 
-  // IDE(cais)
+  // tfdb(cais)
   DebugExecutorImpl* debug_executor;
 
   // We create one executor and its dependent library runtime for

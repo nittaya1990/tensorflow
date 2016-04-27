@@ -107,8 +107,6 @@ tensorflow::ImportNumpy();
     // The ndarray must be stored as contiguous bytes in C (row-major) order.
     PyObject* array_object = PyArray_FromAny(
         value, nullptr, 0, 0, NPY_ARRAY_CARRAY, nullptr);
-
-    std::cout << "array_object = " << array_object << std::endl;
     if (!array_object) {
       SWIG_fail;
     }
@@ -288,7 +286,6 @@ tensorflow::ImportNumpy();
         raise ValueError(TF_Message(status))
     return opts
 %}
-
 
 %noexception tensorflow::TF_Debug_wrapper;
 %rename(TF_Debug) tensorflow::TF_Debug_wrapper;

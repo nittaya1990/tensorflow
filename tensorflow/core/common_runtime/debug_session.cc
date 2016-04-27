@@ -116,7 +116,7 @@ Status DebugExecutorImpl::Initialize() {
   device_record_tensor_accesses_ =
       params_.device->RequiresRecordingAccessedTensors();
 
-  // IDE(cais): Precompute node execution order
+  // tfdb(cais): Precompute node execution order
   std::cout << "### Precomputing node execution order ###" << std::endl;
   node_order.clear();
 
@@ -232,7 +232,7 @@ Status DebugExecutorImpl::Initialize() {
   return SetAllocAttrs();
 }
 
-// IDE(cais)
+// tfdb(cais)
 DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
   const DebuggerRequest& debugger_request) {
   static const string STEP("step");
@@ -246,8 +246,8 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
   response.command = debugger_request.command;  // Record command in response
 
   // Determind completed nodes and remaining nodes
-  std::vector<string> completed_nodes = GetCompletedNodes();
-  std::vector<string> not_completed_nodes = GetNotCompletedNodes();
+  std::vector<std::string> completed_nodes = GetCompletedNodes();
+  std::vector<std::string> not_completed_nodes = GetNotCompletedNodes();
 
   response.completed_nodes = completed_nodes;
   response.remaining_nodes = not_completed_nodes;
@@ -573,9 +573,9 @@ void DebugExecutorImpl::InitializePending(const Graph* graph,
   }
 }
 
-// IDE(cais)
-std::vector<string> DebugExecutorImpl::GetCompletedNodes() {
-  std::vector<string> completed_nodes;
+// tfdb(cais)
+std::vector<std::string> DebugExecutorImpl::GetCompletedNodes() {
+  std::vector<std::string> completed_nodes;
 
   if (!break_at_node.empty()) {
     for (const string& node_name : node_order) {
@@ -590,8 +590,8 @@ std::vector<string> DebugExecutorImpl::GetCompletedNodes() {
   return completed_nodes;
 }
 
-std::vector<string> DebugExecutorImpl::GetNotCompletedNodes() {
-  std::vector<string> not_completed_nodes;
+std::vector<std::string> DebugExecutorImpl::GetNotCompletedNodes() {
+  std::vector<std::string> not_completed_nodes;
 
   // First locate the current break point
   std::deque<string>::const_iterator it = node_order.cbegin();
@@ -616,7 +616,7 @@ std::vector<string> DebugExecutorImpl::GetNotCompletedNodes() {
 }
 
 void DebugExecutorState::RunAsync(Executor::DoneCallback done) {
-  // IDE(cais): Create new thread for debugging control: Keyboard for now
+  // tfdb(cais): Create new thread for debugging control: Keyboard for now
   const Graph* graph = impl_->graph_;
   std::cout << "In RunAsync: graph->num_nodes() = "
             << graph->num_nodes() << std::endl;  // DEBUG
@@ -1134,7 +1134,7 @@ void DebugExecutorState::PropagateOutputs(const TaggedNode& tagged_node,
   }
 }
 
-// IDE(cais)
+// tfdb(cais)
 void DebugExecutorState::InjectNodeValue(Tensor value) {
   std::cout << "=== In InjectNodeValue()" << std::endl
             << "      Tensor address = " << &value << std::endl
@@ -1205,7 +1205,7 @@ void DebugExecutorState::ActivateNode(const Node* node, const bool is_dead,
     const int dst_id = dst_node->id();
     const int src_slot = e->src_output();
 
-    // IDE(cais): Record output
+    // tfdb(cais): Record output
     const Node* output_src_node = e->src();
     const string& output_src_node_name = output_src_node->name();
 
@@ -1257,7 +1257,7 @@ void DebugExecutorState::ActivateNode(const Node* node, const bool is_dead,
     } else {
       // std::cout << "  ActivateNode:   IsMerge is false" << std::endl;
       // if (outputs[src_slot].has_value) {
-      // // IDE(cais): Print value
+      // // tfdb(cais): Print value
       // DEBUG
       // std::cout << "  ActivateNode:   outputs[src_slot] has value: "
       //           << outputs[src_slot].val.DebugString() << std::endl;
@@ -1278,7 +1278,7 @@ void DebugExecutorState::ActivateNode(const Node* node, const bool is_dead,
       Entry* input_tensors = output_iter_state->input_tensors;
       int dst_loc = dst_item.input_start + dst_slot;
 
-      // IDE(cais)
+      // tfdb(cais)
       if (outputs[src_slot].val.IsInitialized()) {
         // Store a copy of the output value
         // std::cout << "  *** Storing output value copy from node "
@@ -2119,7 +2119,7 @@ Status DebugSession::Run(const RunOptions& run_options,
     //           << executor_idx++ << " / "
     //           << num_executors << std::endl; // DEBUG
 
-    debug_executor = item.executor;  // IDE(cais)
+    debug_executor = item.executor;  // tfdb(cais)
     item.executor->RunAsync(args, barrier->Get());
 
     // std::cout << "Calling Run()" << std::endl; // DEBUG
@@ -2552,7 +2552,7 @@ Status DebugSession::GetOrCreateExecutors(
       }
     };
 
-    // IDE(cais): Disabled optimizer, so that RunAsync needs to run only once.
+    // tfdb(cais): Disabled optimizer, so that RunAsync needs to run only once.
     // DEBUG
     // std::cout << "Calling optimzer.Optimizer() on graph "
               // << graph_counter << " of " << graphs.size() << std::endl;

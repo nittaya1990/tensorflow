@@ -46,9 +46,9 @@ class DebuggerResponse {
 
   string command;
   bool is_completed;
-  std::vector<string> all_nodes;
-  std::vector<string> completed_nodes;
-  std::vector<string> remaining_nodes;
+  std::vector<std::string> all_nodes;
+  std::vector<std::string> completed_nodes;
+  std::vector<std::string> remaining_nodes;
 
   bool has_output_tensor;
   Tensor output_tensor;
