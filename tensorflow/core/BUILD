@@ -165,7 +165,7 @@ cc_library(
         "lib/core/bits.h",
         "lib/core/casts.h",
         "lib/core/coding.h",
-        "lib/core/debugger.h",  # IDE(cais)
+        "lib/core/debugger.h",  # tfdb(cais)
         "lib/core/errors.h",
         "lib/core/notification.h",
         "lib/core/status.h",
@@ -980,8 +980,8 @@ tf_cuda_library(
         exclude = [
             "**/*test*",
             "**/*main.cc",
-            "common_runtime/debug_session.cc",  # IDE(cais)
-            "common_runtime/debug_session.h",  # IDE(cais)
+            "common_runtime/debug_session.cc",  # tfdb(cais)
+            "common_runtime/debug_session.h",  # tfdb(cais)
             "common_runtime/direct_session.cc",
             "common_runtime/direct_session.h",
             "common_runtime/gpu_device_context.h",
@@ -994,7 +994,7 @@ tf_cuda_library(
         ],
         exclude = [
             "**/*test*",
-            "common_runtime/debug_session.h",  # IDE(cais)
+            "common_runtime/debug_session.h",  # tfdb(cais)
             "common_runtime/direct_session.h",
             "common_runtime/gpu_device_context.h",
         ],

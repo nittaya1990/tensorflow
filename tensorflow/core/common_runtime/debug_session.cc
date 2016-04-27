@@ -40,10 +40,8 @@ limitations under the License.
 #include "tensorflow/core/framework/log_memory.h"
 #include "tensorflow/core/framework/node_def_util.h"
 #include "tensorflow/core/framework/op_kernel.h"
-#include "tensorflow/core/framework/op_segment.h"
 #include "tensorflow/core/framework/step_stats.pb.h"
 #include "tensorflow/core/framework/tensor.h"
-#include "tensorflow/core/framework/tensor_reference.h"
 #include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/framework/types.pb.h"
 #include "tensorflow/core/graph/algorithm.h"
@@ -82,7 +80,8 @@ namespace tensorflow {
 
 namespace {
 
-DebugExecutorImpl::DebugExecutorImpl(const LocalExecutorParams& p, const Graph* g)
+DebugExecutorImpl::DebugExecutorImpl(const LocalExecutorParams& p,
+                                     const Graph* g)
     : debugger_notification(), node_value_store(), node_ref_store(),
       params_(p), graph_(g), initial_pending_counts_(graph_->num_node_ids()),
       thread_pool_(), break_at_node(), injected_tensors() {
@@ -125,7 +124,7 @@ Status DebugExecutorImpl::Initialize() {
   std::unordered_set<string> visited_nodes;
   std::unordered_set<string> done_nodes;
 
-  for (const Node* n: graph_->nodes()) {
+  for (const Node* n : graph_->nodes()) {
     if (n->in_edges().size() == 0) {
       std::cout << "Pushing to node_queue: " << n->name() << std::endl;
       node_queue.push_back(n->name());
@@ -133,19 +132,19 @@ Status DebugExecutorImpl::Initialize() {
     }
   }
 
-  while (! node_queue.empty()) {
+  while (!node_queue.empty()) {
     // Pop all the ready nodes from the queue
-    while (! node_queue.empty()) {
+    while (!node_queue.empty()) {
       const string& processed_node = node_queue.front();
 
-      std::cout << "Popping from node_queue: " << processed_node << std::endl;  
+      std::cout << "Popping from node_queue: " << processed_node << std::endl;
       node_queue.pop_front();
-      node_order.push_back(processed_node);    
+      node_order.push_back(processed_node);
       visited_nodes.insert(processed_node);
       done_nodes.insert(processed_node);
     }
-    
-    for (const Node* n: graph_->nodes()) {
+
+    for (const Node* n : graph_->nodes()) {
       // Skip visited nodes
       if (visited_nodes.count(n->name()) > 0) {
         continue;
@@ -234,16 +233,14 @@ Status DebugExecutorImpl::Initialize() {
 }
 
 // IDE(cais)
-DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(const DebuggerRequest& debugger_request) {
+DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
+  const DebuggerRequest& debugger_request) {
   static const string STEP("step");
   static const string STEP_PREFIX("step ");
   static const string PRINT_PREFIX("print ");
   static const string CONTINUE_PREFIX("continue ");
   static const string WHERE("where");
   static const string INJECT_VALUE_PREFIX("inject_value ");
-
-  // std::cout << "In DebugExecutorImpl::HandleDebuggerMessage: debugger_message = \""
-  //           << debugger_message << "\"" << std::endl;
 
   DebuggerResponse response;
   response.command = debugger_request.command;  // Record command in response
@@ -254,8 +251,10 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(const DebuggerRequest&
 
   response.completed_nodes = completed_nodes;
   response.remaining_nodes = not_completed_nodes;
-  // std::cout << "response.completed_nodes.size() = " << response.completed_nodes.size() << std::endl;  //DEBUG
-  // std::cout << "response.remaining_nodes.size() = " << response.remaining_nodes.size() << std::endl;  //DEBUG
+  // std::cout << "response.completed_nodes.size() = "
+  //           << response.completed_nodes.size() << std::endl;  // DEBUG
+  // std::cout << "response.remaining_nodes.size() = "
+  //           << response.remaining_nodes.size() << std::endl;  // DEBUG
 
   // In response, provide info about whether this debug round is complete
   if (not_completed_nodes.empty()) {
@@ -263,12 +262,21 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(const DebuggerRequest&
   }
 
   if (debugger_request.command.find(STEP) == 0) {
+    // Step once or multiple times
+
     if (debugger_request.command == STEP) {
+      // Step once
+
       debugger_notification->NotifyOnce();
     } else if (debugger_request.command.find(STEP_PREFIX) == 0) {
-      int n_steps = atoi(debugger_request.command.substr(STEP_PREFIX.size()).c_str());
+      // Step multiple times
 
-      if (n_steps > 0) {
+      int n_steps = 0;
+      bool convert_okay = strings::safe_strto32(
+          debugger_request.command.substr(STEP_PREFIX.size()).c_str(),
+                                          &n_steps);
+
+      if (convert_okay && n_steps > 0) {
         debugger_notification->Notify(n_steps);
       } else {
         std::cerr << "Syntax error in step command: \""
@@ -278,39 +286,47 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(const DebuggerRequest&
       std::cerr << "Syntax error in step command: \""
                 << debugger_request.command << "\"" << std::endl;  // DEBUG
     }
-  } else if (debugger_request.command.find(PRINT_PREFIX) == 0) {  // Print the tensor value on a node
-    const string& node_name = debugger_request.command.substr(PRINT_PREFIX.size());
+  } else if (debugger_request.command.find(PRINT_PREFIX) == 0) {
+    // Print the tensor value on a node
+
+    const string& node_name =
+        debugger_request.command.substr(PRINT_PREFIX.size());
 
     for (const Node* n : graph_->nodes()) {
       if (node_name == n->name()) {
         if (node_value_store.count(node_name) == 1) {
           const Tensor& node_val = node_value_store.at(node_name);
-          std::cout << "Found node \"" << node_name
-                    << "\": IsInitialized() = " << node_val.IsInitialized()
-                    << "; value = " << node_val.DebugString() << std::endl;
+
+          // std::cout << "Found node \"" << node_name
+          //           << "\": IsInitialized() = " << node_val.IsInitialized()
+          //           << "; value = " << node_val.DebugString() << std::endl;
+          // DEBUG
 
           response.output_tensor = node_val;
           response.has_output_tensor = true;
-          // std::cout << "Set has_output_tensor to true" << std::endl;  //DEBUG
+          // DEBUG
+          // std::cout << "Set has_output_tensor to true" << std::endl;
 
           break;
         } else if (node_ref_store.count(node_name) == 1) {
           const Tensor* node_ref = node_ref_store.at(node_name);
 
-          std::cout << "Found node \"" << node_name << " through stored reference: "
-                    << node_ref << std::endl;
+          std::cout << "Found node \"" << node_name
+                    << " through stored reference: " << node_ref << std::endl;
 
           response.output_tensor = *node_ref;
           response.has_output_tensor = true;
 
           break;
         }
-
       }
     }
-  
+
   } else if (debugger_request.command.find(CONTINUE_PREFIX) == 0) {
-    const string& node_name = debugger_request.command.substr(CONTINUE_PREFIX.size());
+    // Continue execution
+
+    const string& node_name =
+        debugger_request.command.substr(CONTINUE_PREFIX.size());
 
     // See if the node is already completed
     bool already_completed = false;
@@ -322,21 +338,23 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(const DebuggerRequest&
     }
 
     if (already_completed) {
-      std::cerr << "ERROR: Node \"" << node_name << "\" is already completed" << std::endl;
+      std::cerr << "ERROR: Node \"" << node_name
+                << "\" is already completed" << std::endl;
     } else {
       size_t steps_to_go = 0;
       bool found_node = false;
 
       for (const string& remaining_node : not_completed_nodes) {
-        steps_to_go ++;
+        steps_to_go++;
         if (remaining_node == node_name) {
           found_node = true;
           break;
         }
       }
 
-      if (! found_node) {
-        std::cerr << "ERROR: Node \"" << node_name << "\" cannot be found" << std::endl;
+      if (!found_node) {
+        std::cerr << "ERROR: Node \"" << node_name
+                  << "\" cannot be found" << std::endl;  // DEBUG
       } else {
         // std::cout << "Steps to go: " << steps_to_go << std::endl;
         debugger_notification->Notify(steps_to_go);
@@ -344,28 +362,34 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(const DebuggerRequest&
     }
 
   } else if (debugger_request.command == WHERE) {
-    // No special action required here
+    // Get current debugger location: No special action required here
+
   } else if (debugger_request.command.find(INJECT_VALUE_PREFIX) == 0) {
-    const string& node_name = debugger_request.command.substr(INJECT_VALUE_PREFIX.size());
+    // Inject value to the current (just completed) node
+
+    const string& node_name =
+        debugger_request.command.substr(INJECT_VALUE_PREFIX.size());
 
     std::cout << "inject_value to node \"" << node_name << "\": "
-              << debugger_request.input_tensor.DebugString() 
-              << "; source address = " << &(debugger_request.input_tensor) << std::endl;
-    
-    if (! node_name.empty()) {
+              << debugger_request.input_tensor.DebugString()
+              << "; source address = " << &(debugger_request.input_tensor)
+              << std::endl;
+
+    if (!node_name.empty()) {
       executor_state->InjectNodeValue(debugger_request.input_tensor);
     } else {
-      std::cerr << "Invalid node name for inject_value" << std::endl;  //DEBUG
+      // DEBUG
+      std::cerr << "Invalid node name for inject_value" << std::endl;
     }
   } else if (debugger_request.command.empty()) {
     // NOOP
+
   } else {
     std::cerr << "Unrecognized command: \""
               << debugger_request.command << "\"" << std::endl;
   }
 
   return response;
-
 }
 
 void DebugExecutorImpl::RunAsync(const Args& args, DoneCallback done) {
@@ -373,7 +397,9 @@ void DebugExecutorImpl::RunAsync(const Args& args, DoneCallback done) {
 
   executor_state->RunAsync(done);
 
-  // std::cout << "Exiting RunAsync: marking debugger_notification as completed" << std::endl;
+  // std::cout
+  //     << "Exiting RunAsync: marking debugger_notification as completed"
+  //     << std::endl;
   debugger_notification->MarkAsCompleted();
 }
 
@@ -473,7 +499,8 @@ Status DebugExecutorImpl::InferAllocAttr(
   return s;
 }
 
-DebugExecutorState::DebugExecutorState(const Executor::Args& args, DebugExecutorImpl* impl)
+DebugExecutorState::DebugExecutorState(const Executor::Args& args,
+                                       DebugExecutorImpl* impl)
     : step_id_(args.step_id),
       rendezvous_(args.rendezvous),
       session_state_(args.session_state),
@@ -521,7 +548,8 @@ DebugExecutorState::~DebugExecutorState() {
 void DebugExecutorImpl::InitializePending(const Graph* graph,
                                      PendingCounts* counts) {
   for (int id = 0; id < graph->num_node_ids(); id++) {
-    counts->set_initial_count(id, 0, 0);  // Make sure everything is initialized
+    // Make sure everything is initialized
+    counts->set_initial_count(id, 0, 0);
   }
   for (const Node* n : graph->nodes()) {
     const int id = n->id();
@@ -549,14 +577,14 @@ void DebugExecutorImpl::InitializePending(const Graph* graph,
 std::vector<string> DebugExecutorImpl::GetCompletedNodes() {
   std::vector<string> completed_nodes;
 
-  if (! break_at_node.empty()) {
+  if (!break_at_node.empty()) {
     for (const string& node_name : node_order) {
       completed_nodes.push_back(node_name);
 
       if (node_name == break_at_node) {
         break;
       }
-    }    
+    }
   }
 
   return completed_nodes;
@@ -567,13 +595,13 @@ std::vector<string> DebugExecutorImpl::GetNotCompletedNodes() {
 
   // First locate the current break point
   std::deque<string>::const_iterator it = node_order.cbegin();
-  if (! break_at_node.empty()) {
+  if (!break_at_node.empty()) {
     while (it != node_order.cend()) {
       if (*it == break_at_node) {
-        it ++;
+        it++;
         break;
       } else {
-        it ++;
+        it++;
       }
     }
   }
@@ -581,7 +609,7 @@ std::vector<string> DebugExecutorImpl::GetNotCompletedNodes() {
   while (it != node_order.cend()) {
       not_completed_nodes.push_back(*it);
 
-      it ++;
+      it++;
     }
 
   return not_completed_nodes;
@@ -590,7 +618,8 @@ std::vector<string> DebugExecutorImpl::GetNotCompletedNodes() {
 void DebugExecutorState::RunAsync(Executor::DoneCallback done) {
   // IDE(cais): Create new thread for debugging control: Keyboard for now
   const Graph* graph = impl_->graph_;
-  std::cout << "In RunAsync: graph->num_nodes() = " << graph->num_nodes() << std::endl; //DEBUG
+  std::cout << "In RunAsync: graph->num_nodes() = "
+            << graph->num_nodes() << std::endl;  // DEBUG
 
   impl_->node_value_store.clear();
 
@@ -606,18 +635,19 @@ void DebugExecutorState::RunAsync(Executor::DoneCallback done) {
 
   // Initialize the ready queue.
   for (const Node* n : impl_->root_nodes_) {
-    std::cout << "Pushing root node " << n->name() << " to ready queue" << std::endl; //DEBUG
+    std::cout << "Pushing root node " << n->name()
+              << " to ready queue" << std::endl;  // DEBUG
     DCHECK_EQ(n->in_edges().size(), 0);
     ready.push_back(TaggedNode{n, root_frame_, 0, false});
   }
 
   if (ready.empty()) {
-    std::cout << "Readu queue is empty()" << std::endl; //DEBUG
+    std::cout << "Readu queue is empty()" << std::endl;  // DEBUG
     done(Status::OK());
   } else {
     num_outstanding_ops_ = ready.size();
-    // std::cout << "Ready queue is NOT empty(); num_outstanding_ops_ = " 
-    //           << num_outstanding_ops_ << std::endl; //DEBUG
+    // std::cout << "Ready queue is NOT empty(); num_outstanding_ops_ = "
+    //           << num_outstanding_ops_ << std::endl;  // DEBUG
     root_frame_->iterations[0]->outstanding_ops = ready.size();
     done_cb_ = done;
     // Schedule to run all the ready ops in thread pool.
@@ -658,8 +688,10 @@ void DeleteParams(OpKernelContext::Params* p) {
 
 }  // namespace
 
-void DebugExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
-  // std::cout << "In Process: tagged_node = " << tagged_node.node->name() << std::endl;
+void DebugExecutorState::Process(TaggedNode tagged_node,
+                                 int64 scheduled_usec) {
+  // std::cout << "In Process: tagged_node = "
+  //           << tagged_node.node->name() << std::endl;
 
   const NodeItem* nodes = impl_->nodes_;
   TaggedNodeSeq ready;
@@ -772,7 +804,7 @@ void DebugExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
           gtl::vector_as_array(&impl_->output_attrs_) + item.output_attr_start;
 
       if (item.kernel_is_async) {
-        // std::cout << "  kernel is async" << std::endl; //DEBUG
+        // std::cout << "  kernel is async" << std::endl; // DEBUG
         // Asynchronous computes.
         AsyncOpKernel* async = item.kernel->AsAsync();
         DCHECK(async != nullptr);
@@ -822,13 +854,11 @@ void DebugExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
         if (stats_collector_) nodestats::SetOpStart(stats);
         device->ComputeAsync(async, ctx, done);
       } else {
-        // std::cout << "  kernel is sync: " << op_kernel->name() << std::endl; //DEBUG
+        // std::cout << "  kernel is sync: "
+        //           << op_kernel->name() << std::endl; // DEBUG
         // Synchronous computes.
         OpKernelContext ctx(&params, item.num_outputs);
         if (stats_collector_) nodestats::SetOpStart(stats);
-
-        // IDE(cais); TOOD(cais): For Variable value injection, op_kernel needs to
-        // be kept track of, as a private member of DebugExecutorState.
 
         device->Compute(CHECK_NOTNULL(op_kernel), &ctx);
         // The final node in the step is always a Sink node. Block
@@ -853,7 +883,7 @@ void DebugExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     }
 
     if (!launched_asynchronously) {
-      // std::cout << "  Process: Launched synchronously" << std::endl; //DEBUG
+      // std::cout << "  Process: Launched synchronously" << std::endl; // DEBUG
       // Clears inputs.
       const int num_inputs = item.num_inputs;
       for (int i = 0; i < num_inputs; ++i) {
@@ -868,16 +898,19 @@ void DebugExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
       }
       // Propagates outputs.
       if (s.ok()) {
-        // std::cout << "  Process: Calling PropagateOutputs(): ready.size() = " << ready.size() << std::endl;
+        // std::cout << "  Process: Calling PropagateOutputs(): "
+        //           << "ready.size() = " << ready.size() << std::endl;
         PropagateOutputs(tagged_node, outputs, &ready);
-        // std::cout << "  Process: DONE calling PropagateOutputs(): ready.size() = " << ready.size() << std::endl;
+        // std::cout << "  Process: DONE calling PropagateOutputs(): "
+        //           << "ready.size() = " << ready.size() << std::endl;
       }
       outputs.clear();
       if (!accessed_tensors.empty()) {
         if (stats_collector_)
           nodestats::SetReferencedTensors(stats, accessed_tensors);
         // device_context is set above in synchronous computes
-        device->ConsumeListOfAccessedTensors(device_context, accessed_tensors);
+        device->ConsumeListOfAccessedTensors(device_context,
+                                             accessed_tensors);
       }
       if (stats_collector_) {
         scheduled_usec = nodestats::NowInUsec();
@@ -891,11 +924,13 @@ void DebugExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
   if (completed) Finish();
 }
 
-Status DebugExecutorState::PrepareInputs(const NodeItem& item, Entry* first_input,
-                                    TensorValueVec* inputs,
-                                    DeviceContextVec* input_device_contexts,
-                                    AllocatorAttributeVec* input_alloc_attrs,
-                                    bool* is_input_dead) {
+Status DebugExecutorState::PrepareInputs(
+    const NodeItem& item,
+    Entry* first_input,
+    TensorValueVec* inputs,
+    DeviceContextVec* input_device_contexts,
+    AllocatorAttributeVec* input_alloc_attrs,
+    bool* is_input_dead) {
   const Node* node = item.node;
 
   inputs->clear();
@@ -958,9 +993,10 @@ Status DebugExecutorState::PrepareInputs(const NodeItem& item, Entry* first_inpu
   return Status::OK();
 }
 
-Status DebugExecutorState::ProcessOutputs(const NodeItem& item, OpKernelContext* ctx,
-                                     EntryVector* outputs,
-                                     NodeExecStats* stats) {
+Status DebugExecutorState::ProcessOutputs(const NodeItem& item,
+                                          OpKernelContext* ctx,
+                                          EntryVector* outputs,
+                                          NodeExecStats* stats) {
   const Node* node = item.node;
   outputs->clear();
   outputs->resize(item.num_outputs);
@@ -1032,7 +1068,8 @@ Status DebugExecutorState::ProcessOutputs(const NodeItem& item, OpKernelContext*
                                   DataTypeString(dtype),
                                   " does not match declared output type ",
                                   DataTypeString(item.output_type(i)),
-                                  " for node ", SummarizeNodeDef(node->def())));
+                                  " for node ",
+                                  SummarizeNodeDef(node->def())));
       }
       if (LogMemory::IsEnabled()) {
         LogMemory::RecordTensorOutput(ctx->op_kernel().name(), ctx->step_id(),
@@ -1077,7 +1114,8 @@ void DebugExecutorState::PropagateOutputs(const TaggedNode& tagged_node,
       // std::cout << "--- Calling ActivateNode() with stored_output_frame: "
       //           << stored_output_frame->frame_name
       //           << "; output_iter = " << stored_output_iter
-      //           << "; outputs.size() = " << stored_outputs.size() << std::endl;  //DEBUG
+      //           << "; outputs.size() = " << stored_outputs.size()
+      //           << std::endl;  // DEBUG
       ActivateNode(tagged_node.node, tagged_node.is_dead, output_frame,
                    output_iter, outputs, ready);
     }
@@ -1098,25 +1136,30 @@ void DebugExecutorState::PropagateOutputs(const TaggedNode& tagged_node,
 
 // IDE(cais)
 void DebugExecutorState::InjectNodeValue(Tensor value) {
-  std::cout << "=== In InjectNodeValue()" << std::endl;  //DEBUG
-  std::cout << "      Tensor address = " << &value << std::endl;  //DEBUG
-  std::cout << "      Tensor value = " << value.DebugString() << std::endl;  //DEBUG
-  std::cout << "      stored_node->name() = " << stored_node->name() << std::endl;  //DEBUG
-  std::cout << "      stored_output_frame->iteration_count = "
+  std::cout << "=== In InjectNodeValue()" << std::endl
+            << "      Tensor address = " << &value << std::endl
+            << "      Tensor value = " << value.DebugString()
+            << std::endl
+            << "      stored_node->name() = " << stored_node->name()
+            << std::endl
+            << "      stored_output_frame->iteration_count = "
             << stored_output_frame->iteration_count
             << "; stored_output_frame->frame_name = "
-            << stored_output_frame->frame_name << std::endl;  //DEBUG
-  std::cout << "      stored_output_iter = " << stored_output_iter << std::endl;  //DEBUG
-  std::cout << "      stored_outputs.size() = " << stored_outputs.size() << std::endl;  //DEBUG
+            << stored_output_frame->frame_name << std::endl
+            << "      stored_output_iter = " << stored_output_iter
+            << std::endl
+            << "      stored_outputs.size() = " << stored_outputs.size()
+            << std::endl;
 
   const NodeItem* nodes = impl_->nodes_;
-  IterationState* output_iter_state = stored_output_frame->GetIteration(stored_output_iter);
+  IterationState* output_iter_state =
+      stored_output_frame->GetIteration(stored_output_iter);
 
   for (const Edge* e : stored_node->out_edges()) {
     const Node* dst_node = e->dst();
     const int dst_id = dst_node->id();
     const int src_slot = e->src_output();
-    std::cout << "      src_slot = " << src_slot << std::endl;  //DEBUG
+    std::cout << "      src_slot = " << src_slot << std::endl;  // DEBUG
 
     bool dst_need_input = !e->IsControlEdge();
 
@@ -1131,7 +1174,7 @@ void DebugExecutorState::InjectNodeValue(Tensor value) {
                   << stored_outputs[src_slot].ref << " --> "
                   << &value << std::endl;
         *(stored_outputs[src_slot].ref) = value;
-      } else { // TODO(cais): Is this logic correct?  
+      } else {  // TODO(cais): Is this logic correct?
         std::cout << "      Injecting values" << std::endl;
         Entry injected_entry;
         injected_entry.val = value;
@@ -1139,14 +1182,14 @@ void DebugExecutorState::InjectNodeValue(Tensor value) {
         input_tensors[dst_loc] = injected_entry;
       }
 
-      // TODO(cais): For cases other than the simplest one, the following fields also need to be updated.
+      // TODO(cais): For cases other than the simplest one, the following
+      //             fields also need to be updated.
       // injected_entry.ref = stored_outputs[src_slot].ref;
       // injected_entry.ref_mu = stored_outputs[src_slot].ref_mu;
       // injected_entry.has_value = stored_outputs[src_slot].has_value;
       // injected_entry.alloc_attr = stored_outputs[src_slot].alloc_attr;
-      // injected_entry.device_context = stored_outputs[src_slot].device_context;
-
-      
+      // injected_entry.device_context =
+      //     stored_outputs[src_slot].device_context;
     }
   }
 }
@@ -1155,7 +1198,6 @@ void DebugExecutorState::ActivateNode(const Node* node, const bool is_dead,
                                  FrameState* output_frame, int64 output_iter,
                                  const EntryVector& outputs,
                                  TaggedNodeSeq* ready) {
-
   const NodeItem* nodes = impl_->nodes_;
   IterationState* output_iter_state = output_frame->GetIteration(output_iter);
   for (const Edge* e : node->out_edges()) {
@@ -1166,9 +1208,10 @@ void DebugExecutorState::ActivateNode(const Node* node, const bool is_dead,
     // IDE(cais): Record output
     const Node* output_src_node = e->src();
     const string& output_src_node_name = output_src_node->name();
-    
-    // std::cout << "  ActivateNode: " << node->name() << " --> " << dst_node->name()
-    //           << "; dst_id = " << dst_id 
+
+    // std::cout << "  ActivateNode: " << node->name()
+    //           << " --> " << dst_node->name()
+    //           << "; dst_id = " << dst_id
     //           << "; src_slot = " << src_slot << std::endl;
 
     bool dst_dead = false;
@@ -1214,9 +1257,10 @@ void DebugExecutorState::ActivateNode(const Node* node, const bool is_dead,
     } else {
       // std::cout << "  ActivateNode:   IsMerge is false" << std::endl;
       // if (outputs[src_slot].has_value) {
-        // // IDE(cais): Print value
-        // std::cout << "  ActivateNode:   outputs[src_slot] has value: "
-        //           << outputs[src_slot].val.DebugString() << std::endl; //DEBUG
+      // // IDE(cais): Print value
+      // DEBUG
+      // std::cout << "  ActivateNode:   outputs[src_slot] has value: "
+      //           << outputs[src_slot].val.DebugString() << std::endl;
       // }
       // A non-merge node is ready if all its inputs are ready. We wait
       // for all inputs to come in even if we know the node is dead. This
@@ -1237,14 +1281,17 @@ void DebugExecutorState::ActivateNode(const Node* node, const bool is_dead,
       // IDE(cais)
       if (outputs[src_slot].val.IsInitialized()) {
         // Store a copy of the output value
-        // std::cout << "  *** Storing output value copy from node " << output_src_node_name << std::endl;
+        // std::cout << "  *** Storing output value copy from node "
+        //           << output_src_node_name << std::endl;
         Tensor tensor_val_copy(outputs[src_slot].val);
 
         impl_->node_value_store.insert({output_src_node_name, tensor_val_copy});
       } else if (outputs[src_slot].ref != nullptr) {
-        std::cout << "outputs[src_slot].ref = " << outputs[src_slot].ref << std::endl;
+        std::cout << "outputs[src_slot].ref = "
+                  << outputs[src_slot].ref << std::endl;  // DEBUG
 
-        impl_->node_ref_store.insert({output_src_node_name, outputs[src_slot].ref});
+        impl_->node_ref_store.insert(
+            {output_src_node_name, outputs[src_slot].ref});
       }
 
 
@@ -1254,7 +1301,8 @@ void DebugExecutorState::ActivateNode(const Node* node, const bool is_dead,
     // Add dst to the ready queue if it's ready
     if (dst_ready) {
       dst_dead = dst_dead && !IsControlTrigger(dst_node);
-      // std::cout << "  ActivateNode:   *** Pushing node to ready: " << dst_node->name() << std::endl;
+      // std::cout << "  ActivateNode:   *** Pushing node to ready: "
+      //           << dst_node->name() << std::endl;
       ready->push_back(
           TaggedNode(dst_node, output_frame, output_iter, dst_dead));
       output_iter_state->outstanding_ops++;
@@ -1318,7 +1366,8 @@ bool DebugExecutorState::NodeDone(const Status& s, const Node* node,
   //   std::cout << step_idx + 1;
   // }
 
-  // std::cout << " / " << impl_->node_order.size() << ")" << std::endl;  //DEBUG
+  // DEBUG
+  // std::cout << " / " << impl_->node_order.size() << ")" << std::endl;
 
   if (stats_collector_) {
     nodestats::SetAllEnd(stats);
@@ -1359,27 +1408,31 @@ bool DebugExecutorState::NodeDone(const Status& s, const Node* node,
 
   // Schedule the ready nodes in 'ready'.
   if (s.ok()) {
-    // std::cout << "  NodeDone() calling ScheduleReady():" << std::endl;  //DEBUG
+    // DEBUG
+    // std::cout << "  NodeDone() calling ScheduleReady():" << std::endl;
     // std::cout << "    ready.size() = " << ready.size() << ": [";
     // for (const TaggedNode& t_node : ready) {
     //   std::cout << t_node.node->name() << ", ";
     // }
-    // std::cout << "]" << std::endl; //DEBUG
+    // std::cout << "]" << std::endl; // DEBUG
 
-    // std::cout << "    inline_ready->size() = " << inline_ready->size() << ": [";
+    // std::cout << "    inline_ready->size() = "
+    //           << inline_ready->size() << ": [";
     // for (TaggedNode& t_node : *inline_ready) {
     //   std::cout << t_node.node->name() << ", ";
     // }
-    // std::cout << "]" << std::endl; //DEBUG
+    // std::cout << "]" << std::endl; // DEBUG
 
-    impl_->debugger_notification->WaitForNotification(); // Wait to proceed
+    // tfdb(cais): Wait to proceed
+    impl_->debugger_notification->WaitForNotification();
 
     ScheduleReady(ready, inline_ready);
   }
   return completed;
 }
 
-void DebugExecutorState::ProcessInline(const std::deque<TaggedNode>& inline_ready) {
+void DebugExecutorState::ProcessInline(
+    const std::deque<TaggedNode>& inline_ready) {
   if (inline_ready.empty()) return;
   int64 scheduled_usec = 0;
   if (stats_collector_) {
@@ -1398,13 +1451,15 @@ void DebugExecutorState::ScheduleReady(const TaggedNodeSeq& ready,
   if (stats_collector_) {
     scheduled_usec = nodestats::NowInUsec();
   }
-  // std::cout << "In ScheduleReady(); scheduled_usec = " << scheduled_usec << std::endl; //DEBUG
+  // std::cout << "In ScheduleReady(); scheduled_usec = "
+  //           << scheduled_usec << std::endl; // DEBUG
 
   if (inline_ready == nullptr) {
     // Schedule to run all the ready ops in thread pool.
     for (auto& tagged_node : ready) {
-      // std::cout << "Calling runner_ with Process() A (inline_ready = nullptr): "
-                // << "node: " << tagged_node.node->name() << std::endl; //DEBUG
+      // std::cout
+      //     << "Calling runner_ with Process() A (inline_ready = nullptr): "
+      //     << "node: " << tagged_node.node->name() << std::endl; // DEBUG
       runner_(std::bind(&ME::Process, this, tagged_node, scheduled_usec));
     }
     return;
@@ -1416,13 +1471,15 @@ void DebugExecutorState::ScheduleReady(const TaggedNodeSeq& ready,
     const NodeItem& item = nodes[tagged_node.node->id()];
     if (tagged_node.is_dead || !item.kernel_is_expensive) {
       // Inline this inexpensive node.
-      // std::cout << "Pushing inexpensive node " << tagged_node.node->name() << std::endl; //DEBUG
+      // std::cout << "Pushing inexpensive node "
+      //           << tagged_node.node->name() << std::endl; // DEBUG
       inline_ready->push_back(tagged_node);
     } else {
       if (curr_expensive_node) {
         // Dispatch to another thread since there is plenty of work to
         // do for this thread.
-        // std::cout << "Calling runner_ with Process() B" << std::endl; //DEBUG
+        // std::cout << "Calling runner_ with Process() B"
+        //           << std::endl; // DEBUG
         runner_(std::bind(&ME::Process, this, *curr_expensive_node,
                           scheduled_usec));
       }
@@ -1433,12 +1490,12 @@ void DebugExecutorState::ScheduleReady(const TaggedNodeSeq& ready,
     if (inline_ready->empty()) {
       // Tail recursion optimization
       // std::cout << "Tail recursion: Pushing expensive node "
-                // << curr_expensive_node->node->name() << std::endl; //DEBUG
+                // << curr_expensive_node->node->name() << std::endl; // DEBUG
       inline_ready->push_back(*curr_expensive_node);
     } else {
       // There are inline nodes to run already. We dispatch this expensive
       // node to other thread.
-      // std::cout << "Calling runner_ with Process() C" << std::endl; //DEBUG
+      // std::cout << "Calling runner_ with Process() C" << std::endl; // DEBUG
       runner_(
           std::bind(&ME::Process, this, *curr_expensive_node, scheduled_usec));
     }
@@ -1848,7 +1905,7 @@ void DebugSession::SchedClosure(std::function<void()> c) {
   // safe given the reasoning above.
   c();
 #else
-  c(); // cais IDE
+  c();  // tfdb(cais)
 #endif  // __ANDROID__
 }
 
@@ -1874,7 +1931,7 @@ DebugSession::DebugSession(const SessionOptions& options,
     LOG(INFO) << "Device mapping:\n" << mapping_str;
   }
   for (auto d : device_mgr_->ListDevices()) {
-    // std::cout << "Adding device: " <<  d->name() << std::endl; //DEBUG
+    // std::cout << "Adding device: " <<  d->name() << std::endl; // DEBUG
     devices_.push_back(d);
     device_set_.AddDevice(d);
     d->op_segment()->AddHold(session_handle_);
@@ -1899,7 +1956,7 @@ DebugSession::~DebugSession() {
     d->op_segment()->RemoveHold(session_handle_);
   }
   delete cancellation_manager_;
-  
+
   for (auto it : cost_models_) {
     delete it.second;
   }
@@ -1992,7 +2049,7 @@ Status DebugSession::Run(const RunOptions& run_options,
                           const std::vector<string>& target_nodes,
                           std::vector<Tensor>* outputs,
                           RunMetadata* run_metadata) {
-  std::cout << "In Run() 6-arg" << std::endl; //DEBUG
+  std::cout << "In Run() 6-arg" << std::endl;  // DEBUG
   {
     mutex_lock l(graph_def_lock_);
     if (!graph_created_) {
@@ -2009,7 +2066,7 @@ Status DebugSession::Run(const RunOptions& run_options,
   }
 
 
-  // std::cout << "Calling GetOrCreateExecutors()" << std::endl; //DEBUG
+  // std::cout << "Calling GetOrCreateExecutors()" << std::endl; // DEBUG
   // Check if we already have an executor for these arguments.
   DebugExecutorsAndKeys* executors_and_keys;
   RunStateArgs run_state_args;
@@ -2022,15 +2079,15 @@ Status DebugSession::Run(const RunOptions& run_options,
   run_state.rendez = new IntraProcessRendezvous(device_mgr_.get());
 
   // Send inputs.
-  // std::cout << "Calling SendInputs()" << std::endl; //DEBUG
+  // std::cout << "Calling SendInputs()" << std::endl; // DEBUG
   TF_RETURN_IF_ERROR(SendInputs(inputs, executors_and_keys, run_state.rendez));
 
   // Start parallel Executors.
   const int num_executors = executors_and_keys->items.size();
-  std::cout << "num_executors = " << num_executors << std::endl; //DEBUG
+  std::cout << "num_executors = " << num_executors << std::endl;  // DEBUG
   ExecutorBarrier* barrier = new ExecutorBarrier(
       num_executors, run_state.rendez, [&run_state](const Status& ret) {
-        // std::cout << "In barrier StatusCallback" << std::endl; //DEBUG
+        // std::cout << "In barrier StatusCallback" << std::endl;  // DEBUG
         {
           mutex_lock l(run_state.mu_);
           run_state.status.Update(ret);
@@ -2042,7 +2099,7 @@ Status DebugSession::Run(const RunOptions& run_options,
   args.step_id = step_id_counter_.fetch_add(1);
   args.rendezvous = run_state.rendez;
   args.cancellation_manager = cancellation_manager_;
-  args.runner = [this](Executor::Args::Closure c) { 
+  args.runner = [this](Executor::Args::Closure c) {
     SchedClosure(c);
   };
   if (LogMemory::IsEnabled()) {
@@ -2056,15 +2113,16 @@ Status DebugSession::Run(const RunOptions& run_options,
     run_state.collector = args.stats_collector;
   }
 
-  int executor_idx = 0;
+  // int executor_idx = 0;
   for (const auto& item : executors_and_keys->items) {
     // std::cout << "Calling RunAsync() from Run(): "
-              // << executor_idx++ << " / " << num_executors << std::endl; //DEBUG
+    //           << executor_idx++ << " / "
+    //           << num_executors << std::endl; // DEBUG
 
     debug_executor = item.executor;  // IDE(cais)
     item.executor->RunAsync(args, barrier->Get());
 
-    // std::cout << "Calling Run()" << std::endl; //DEBUG
+    // std::cout << "Calling Run()" << std::endl; // DEBUG
     // item.executor->Run(args); // cais IDE
   }
 
@@ -2077,7 +2135,7 @@ Status DebugSession::Run(const RunOptions& run_options,
     TF_RETURN_IF_ERROR(run_state.status);
   }
 
-  // std::cout << "Exiting Run()" << std::endl;  //DEBUG
+  // std::cout << "Exiting Run()" << std::endl;  // DEBUG
 
   // Receive outputs.
   TF_RETURN_IF_ERROR(
@@ -2151,7 +2209,8 @@ Status DebugSession::PRunSetup(const std::vector<string>& input_names,
   int executor_idx = 0;
   for (auto& item : executors_and_keys->items) {
     std::cout << "Calling RunAsync() from PRunSetup(): executor "
-              << executor_idx++ << " / " << num_executors << std::endl; //DEBUG
+              << executor_idx++ << " / "
+              << num_executors << std::endl;  // DEBUG
 
     DebugExecutorImpl* exec = item.executor;
     debug_executor = exec;
@@ -2248,9 +2307,10 @@ Status DebugSession::PRun(const string& handle, const NamedTensorList& inputs,
   return s;
 }
 
-Status DebugSession::SendInputs(const NamedTensorList& inputs,
-                                 const DebugExecutorsAndKeys* executors_and_keys,
-                                 IntraProcessRendezvous* rendez) {
+Status DebugSession::SendInputs(
+    const NamedTensorList& inputs,
+    const DebugExecutorsAndKeys* executors_and_keys,
+    IntraProcessRendezvous* rendez) {
   Status s;
   // Insert the input tensors into the local rendezvous by their
   // rendezvous key.
@@ -2270,10 +2330,11 @@ Status DebugSession::SendInputs(const NamedTensorList& inputs,
   return Status::OK();
 }
 
-Status DebugSession::RecvOutputs(const std::vector<string>& output_names,
-                                  const DebugExecutorsAndKeys* executors_and_keys,
-                                  RunState* run_state,
-                                  std::vector<Tensor>* outputs) {
+Status DebugSession::RecvOutputs(
+    const std::vector<string>& output_names,
+    const DebugExecutorsAndKeys* executors_and_keys,
+    RunState* run_state,
+    std::vector<Tensor>* outputs) {
   Status s;
   if (!output_names.empty()) {
     outputs->resize(output_names.size());
@@ -2312,10 +2373,11 @@ Status DebugSession::RecvOutputs(const std::vector<string>& output_names,
   return Status::OK();
 }
 
-Status DebugSession::CheckFetch(const NamedTensorList& feeds,
-                                 const std::vector<string>& fetches,
-                                 const DebugExecutorsAndKeys* executors_and_keys,
-                                 const RunState* run_state) {
+Status DebugSession::CheckFetch(
+    const NamedTensorList& feeds,
+    const std::vector<string>& fetches,
+    const DebugExecutorsAndKeys* executors_and_keys,
+    const RunState* run_state) {
   const Graph* graph = executors_and_keys->graph;
   const NameNodeMap* name_to_node = executors_and_keys->name_to_node;
 
@@ -2372,8 +2434,10 @@ Status DebugSession::CheckFetch(const NamedTensorList& feeds,
 }
 
 Status DebugSession::GetOrCreateExecutors(
-    gtl::ArraySlice<string> inputs, gtl::ArraySlice<string> outputs,
-    gtl::ArraySlice<string> target_nodes, DebugExecutorsAndKeys** executors_and_keys,
+    gtl::ArraySlice<string> inputs,
+    gtl::ArraySlice<string> outputs,
+    gtl::ArraySlice<string> target_nodes,
+    DebugExecutorsAndKeys** executors_and_keys,
     RunStateArgs* run_state_args) {
   // Sort the inputs and outputs, so we don't create separate
   // executors when a user passes in the same inputs/outputs in
@@ -2440,13 +2504,13 @@ Status DebugSession::GetOrCreateExecutors(
     }
   }
   ek->items.reserve(graphs.size());
-  
+
   auto runner = [this](Executor::Args::Closure c) { SchedClosure(c); };
   const auto& optimizer_opts =
       options_.config.graph_options().optimizer_options();
   GraphOptimizer optimizer(optimizer_opts);
 
-  int graph_counter = 0;
+  // int graph_counter = 0;  // TODO(cais): Remove
   for (auto iter = graphs.begin(); iter != graphs.end(); ++iter) {
     const string& partition_name = iter->first;
     Graph* partition_graph = iter->second;
@@ -2489,11 +2553,13 @@ Status DebugSession::GetOrCreateExecutors(
     };
 
     // IDE(cais): Disabled optimizer, so that RunAsync needs to run only once.
+    // DEBUG
     // std::cout << "Calling optimzer.Optimizer() on graph "
-              // << graph_counter << " of " << graphs.size() << std::endl; //DEBUG
-    // optimizer.Optimize(lib, device, &partition_graph); 
+              // << graph_counter << " of " << graphs.size() << std::endl;
+    // optimizer.Optimize(lib, device, &partition_graph);
+    // DEBUG
     // std::cout << "~ DONE calling optimzer.Optimizer() on graph "
-              // << graph_counter++ << " of " << graphs.size() << std::endl; //DEBUG
+    // << graph_counter++ << " of " << graphs.size() << std::endl;
     s = ValidateMemoryTypes(DeviceType(device->device_type()), partition_graph);
     if (!s.ok()) {
       break;
@@ -2504,8 +2570,9 @@ Status DebugSession::GetOrCreateExecutors(
 
     // s = NewLocalDebugExecutor(params, partition_graph, &item->executor);
 
-    // Status NewLocalDebugExecutor(const LocalExecutorParams& params, const Graph* graph,
-    //                       Executor** executor) {
+    // Status NewLocalDebugExecutor(const LocalExecutorParams& params,
+    //                              const Graph* graph,
+    //                              Executor** executor) {
     DebugExecutorImpl* impl = new DebugExecutorImpl(params, partition_graph);
     s = impl->Initialize();
     if (s.ok()) {
@@ -2513,7 +2580,7 @@ Status DebugSession::GetOrCreateExecutors(
     } else {
       delete impl;
     }
-    
+
     if (!s.ok()) {
       break;
     }
@@ -2705,10 +2772,10 @@ Status DebugSession::CreateGraphs(gtl::ArraySlice<string> feeds,
   return ::tensorflow::Status::OK();
 }
 
-// ::tensorflow::DebuggerResponse DebugSession::SendDebugMessage(const string& debug_msg) {
-::tensorflow::DebuggerResponse DebugSession::SendDebugMessage(const DebuggerRequest& request) {
+::tensorflow::DebuggerResponse DebugSession::SendDebugMessage(
+    const DebuggerRequest& request) {
   // std::cout << "In DebugSession::SendDebugMessage(): debug_msg = \""
-  //           << debug_msg << "\"" << std::endl;
+  //           << debug_msg << "\"" << std::endl;  // DEBUG
 
   // TODO(cais): mutex lock needed?
   {
@@ -2739,7 +2806,9 @@ void DebugSession::WaitForNotification(RunState* run_state,
                                         int64 timeout_in_ms) {
   if (timeout_in_ms > 0) {
     bool timed_out =
-        run_state->executors_done.WaitForNotificationWithTimeout(timeout_in_ms);
+        run_state->executors_done.WaitForNotificationWithTimeout(
+            timeout_in_ms);
+
     if (timed_out) {
       {
         mutex_lock l(run_state->mu_);

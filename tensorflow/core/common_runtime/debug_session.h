@@ -489,8 +489,8 @@ class DebugExecutorState {
 }  // end namespace
 
 // ::tensorflow::Status NewLocalDebugExecutor(const LocalExecutorParams& params,
-//                                            const Graph* graph, DebugExecutorImpl** executor);
-
+//                                            const Graph* graph,
+//                                            DebugExecutorImpl** executor);
 
 class CostModel;
 class Device;
@@ -532,8 +532,10 @@ class DebugSession : public Session {
                             std::vector<Tensor>* outputs) override;
   ::tensorflow::Status Close() override;
 
-  // ::tensorflow::DebuggerResponse SendDebugMessage(const string& debug_msg) override;
-  ::tensorflow::DebuggerResponse SendDebugMessage(const DebuggerRequest& request) override;
+  // ::tensorflow::DebuggerResponse SendDebugMessage(const string& debug_msg)
+  //     override;
+  ::tensorflow::DebuggerResponse
+      SendDebugMessage(const DebuggerRequest& request) override;
 
   // NOTE: This is a temporary api that is only meant to enable testing.
   // This api will be replaced with better ones soon, so DO NOT USE
@@ -640,17 +642,19 @@ class DebugSession : public Session {
 
   // Fetches more outputs from the executors. It waits until the output
   // tensors are computed.
-  ::tensorflow::Status RecvOutputs(const std::vector<string>& output_names,
-                                   const DebugExecutorsAndKeys* executors_and_keys,
-                                   RunState* run_state,
-                                   std::vector<Tensor>* outputs);
+  ::tensorflow::Status RecvOutputs(
+      const std::vector<string>& output_names,
+      const DebugExecutorsAndKeys* executors_and_keys,
+      RunState* run_state,
+      std::vector<Tensor>* outputs);
 
   // Check if the specified fetches can be computed from the feeds
   // that we have already provided.
   ::tensorflow::Status CheckFetch(
       const std::vector<std::pair<string, Tensor>>& feeds,
       const std::vector<string>& fetches,
-      const DebugExecutorsAndKeys* executors_and_keys, const RunState* run_state);
+      const DebugExecutorsAndKeys* executors_and_keys,
+      const RunState* run_state);
 
   // Use the appropriate WaitForNotification function based on whether
   // operation_timeout_in_ms is greater than 0.

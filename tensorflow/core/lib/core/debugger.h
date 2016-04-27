@@ -35,7 +35,7 @@ class DebuggerRequest {
 class DebuggerResponse {
  public:
   /// Create a success status.
-  DebuggerResponse() 
+  DebuggerResponse()
     : command(),
       is_completed(false),
       all_nodes(),
@@ -52,10 +52,8 @@ class DebuggerResponse {
 
   bool has_output_tensor;
   Tensor output_tensor;
-  
-
 };
 
-} // namespace tensorflow
+}  // end namespace tensorflow
 
 #endif  // TENSORFLOW_CORE_LIB_CORE_STATUS_H_

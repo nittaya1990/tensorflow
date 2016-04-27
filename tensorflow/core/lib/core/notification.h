@@ -65,14 +65,14 @@ class Notification {
 
 class MultiUseNotification {
  public:
-  MultiUseNotification() : 
+  MultiUseNotification() :
       pos_(0), target_pos_(1), target_pos_inc_(1), completed_(false) {}
   ~MultiUseNotification() {}
 
   void NotifyOnce() {
     mutex_lock l(mu_);
     // assert(!notified_);
-    pos_ ++;
+    pos_++;
     cv_.notify_all();
   }
 
@@ -96,12 +96,12 @@ class MultiUseNotification {
     while (pos_ < target_pos_) {
       cv_.wait(l);
     }
-    
+
     // if (pos == target_pos_) {
       // No increment will be done unless target_pos_ has caught up with pos_.
       // For example, if pos_ is incremented with a large step through Notify()
       // from 2 to 4, target_pos_ will not be incremented at 2 or 3, but will
-      // be incremented only when it 
+      // be incremented only when it
 
     target_pos_ += target_pos_inc_;
     // }

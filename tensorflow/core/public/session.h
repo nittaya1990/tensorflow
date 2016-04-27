@@ -180,7 +180,8 @@ class Session {
 
   // IDE(cais)
   virtual DebuggerResponse SendDebugMessage(const DebuggerRequest& request) {
-    std::cerr << "ERROR: SendDebugMessage not supported for this session." << std::endl;
+    std::cerr << "ERROR: SendDebugMessage not supported for this session."
+              << std::endl;
 
     DebuggerResponse debugger_response;
     return debugger_response;
