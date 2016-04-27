@@ -518,12 +518,15 @@ TF_DebuggerResponse* TF_SendDebugMessage(TF_Session* s,
     // std::cout << "Transferring output_tensor" << std::endl;  //DEBUG
     Tensor output_tensor(debugger_response.output_tensor);
 
-    TensorBuffer* buf = tensorflow::TensorCApi::Buffer(output_tensor);
-    buf->Ref();
-
-    output_tensors[0] = new TF_Tensor{static_cast<TF_DataType>(output_tensor.dtype()), 
-                                      output_tensor.shape(), buf};
-    // TODO(cais): Logical branch for string tensors
+    if (output_tensor.dtype() != tensorflow::DT_STRING) {
+      TensorBuffer* buf = tensorflow::TensorCApi::Buffer(output_tensor);
+      buf->Ref();
+      output_tensors[0] = new TF_Tensor{static_cast<TF_DataType>(output_tensor.dtype()), 
+                                        output_tensor.shape(), buf};
+    } else {
+      output_tensors[0] = tensorflow::TF_Tensor_EncodeStrings(output_tensor);
+    }
+    
   }
 
   return debugger_response_output;
