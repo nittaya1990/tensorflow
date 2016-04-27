@@ -49,7 +49,7 @@ limitations under the License.
 
 namespace tensorflow {
 
-namespace {
+// namespace {
 // 1-D, 0 element tensor.
 static const Tensor* const kEmptyTensor = new Tensor;
 
@@ -486,7 +486,7 @@ class DebugExecutorState {
   EntryVector stored_outputs;
 };  // class DebugExecutorState
 
-}  // end namespace
+// }  // end namespace
 
 // ::tensorflow::Status NewLocalDebugExecutor(const LocalExecutorParams& params,
 //                                            const Graph* graph,

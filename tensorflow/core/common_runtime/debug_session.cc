@@ -78,7 +78,7 @@ limitations under the License.
 
 namespace tensorflow {
 
-namespace {
+// namespace {
 
 DebugExecutorImpl::DebugExecutorImpl(const LocalExecutorParams& p,
                                      const Graph* g)
@@ -655,7 +655,7 @@ void DebugExecutorState::RunAsync(Executor::DoneCallback done) {
   }
 }
 
-namespace {
+// namespace {
 
 // Helpers to make a copy of 'p' and makes a copy of the input type
 // vector and the device context vector.
@@ -686,7 +686,7 @@ void DeleteParams(OpKernelContext::Params* p) {
   delete p;
 }
 
-}  // namespace
+// }  // end namespace
 
 void DebugExecutorState::Process(TaggedNode tagged_node,
                                  int64 scheduled_usec) {
@@ -1874,7 +1874,7 @@ string GetRendezvousKey(const string& tensor_name,
                          frame_iter.frame_id, ":", frame_iter.iter_id);
 }
 
-}  // namespace
+// }  // end namespace
 
 std::atomic_int_fast64_t DebugSession::step_id_counter_(1);
 
