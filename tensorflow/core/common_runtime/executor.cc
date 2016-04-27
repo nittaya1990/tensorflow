@@ -57,7 +57,6 @@ limitations under the License.
 #include "tensorflow/core/util/tensor_slice_reader_cache.h"
 
 namespace tensorflow {
-
 namespace {
 
 // 1-D, 0 element tensor.

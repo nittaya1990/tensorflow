@@ -377,7 +377,6 @@ struct NodeItem {
   DataType inlined_output_type[4];
 };
 
-
 typedef gtl::InlinedVector<TensorValue, 4> TensorValueVec;
 typedef gtl::InlinedVector<DeviceContext*, 4> DeviceContextVec;
 typedef gtl::InlinedVector<AllocatorAttributes, 4> AllocatorAttributeVec;
