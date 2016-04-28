@@ -281,6 +281,24 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
           debug_round.step()
           break
 
+  def testPlaceHolderFeed(self):
+    with session.Session("debug") as debug_sess:
+      a = array_ops.placeholder(shape=[2], dtype=np.float32, name="ph_A")
+      b = array_ops.placeholder(shape=[2], dtype=np.float32, name="ph_B")
+      s = math_ops.add(a, b, name="ph_s")
+
+      a_feed = np.array([10.0, 20.0]).astype(np.float32)
+      b_feed = np.array([30.0, 40.0]).astype(np.float32)
+      feed = {
+          a: a_feed,
+          b: b_feed
+      }
+
+      debug_round = debugger.DebugRound(debug_sess, s, feed=feed)
+
+      result = self._auto_step(debug_round)
+      self.assertAllClose(a_feed + b_feed, result)
+
   def testVariablesWithInjection(self):
     with session.Session("debug") as debug_sess:
       A0 = np.array([[10.0]]).astype(np.float32)
