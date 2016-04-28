@@ -57,7 +57,27 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
     self._init_delay_sec = 0.1
     self._step_delay_sec = 0.02
 
-  def _auto_step(self, debug_round):
+  def _auto_step(self, debug_round, do_inspect=True, val_replace=None):
+    """Automatically step through a debug session, with options.
+
+    Args:
+      debug_round: A DebugRound object.
+      do_inspect: Inspect the values during stepping, this will lead to a return
+        value that equals the result of the execution.
+      val_replace: A dictionary for node value injection. The keys are the node
+        names. The values are callables that take one input argument (old node
+        value) and returns a new node value that is injected to the node
+        specified by the corresponding dict key once the node has just finished
+        executing.
+
+    Returns:
+      If do_inspect == True, the result of the graph execution.
+    """
+
+    if not do_inspect and val_replace is not None:
+      raise ValueError("val_replace cannot be performed if do_inspect is set "
+                       "to False")
+
     result = None
     while True:
       debug_round.step()
@@ -68,9 +88,17 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
       node_just_completed = node_order[node_idx]
 
-      node_val = debug_round.inspect_value(node_just_completed)
-      if node_val is not None:
-        result = node_val
+      if do_inspect:
+        node_val = debug_round.inspect_value(node_just_completed)
+        if node_val is not None:
+          result = node_val
+
+        if val_replace is not None and node_just_completed in val_replace:
+          replace_func = val_replace[node_just_completed]
+          new_val = replace_func(node_val)
+
+          print("Calling inject_value with %s" % repr(new_val))
+          debug_round.inject_value(new_val)
 
       if is_complete:
         debug_round.step()
@@ -236,14 +264,12 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
           node_value = debug_round.inspect_value("phawi_a")
           self.assertAllClose(np.array([[6.0]]), node_value)
 
-          debug_round.inject_value("phawi_a",
-                                   np.array([[60.0]]).astype(np.float32))
+          debug_round.inject_value(np.array([[60.0]]).astype(np.float32))
         elif node_order[curr_pos] == "phawi_b":
           node_value = debug_round.inspect_value("phawi_b")
           self.assertAllClose(np.array([[7.0]]), node_value)
 
-          debug_round.inject_value("phawi_b",
-                                   np.array([[70.0]]).astype(np.float32))
+          debug_round.inject_value(np.array([[70.0]]).astype(np.float32))
         elif node_order[curr_pos] == "phawi_s":
           node_value = debug_round.inspect_value("phawi_s")
 
@@ -264,12 +290,56 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
       debug_round.join()
 
-      # Verify that the debug breaks on the last node
-      self.assertEquals(len(debug_round.query_node_order()) - 1,
-                        debug_round.where())
+  def testVariablesWithInjection(self):
+    with session.Session("debug") as debug_sess:
+      A0 = np.array([[10.0]]).astype(np.float32)
+      B0 = np.array([[20.0]]).astype(np.float32)
 
+      A = variables.Variable(A0, name="vwi_A")
+      B = variables.Variable(B0, name="vwi_B")
+
+      aa = A.assign_add(B0)
+
+      # Initialize variables
+      init_A = A.initializer
+      debug_round = debugger.DebugRound(debug_sess, init_A)
+      self._auto_step(debug_round, do_inspect=False)
+      debug_round.join()
+
+      init_B = B.initializer
+      debug_round = debugger.DebugRound(debug_sess, init_B)
+      self._auto_step(debug_round, do_inspect=False)
+      debug_round.join()
+
+      # Perform calculation
+      debug_round = debugger.DebugRound(debug_sess, aa)
       self._auto_step(debug_round)
+      debug_round.join()
 
+      # Get the updated value of A
+      debug_round = debugger.DebugRound(debug_sess, A)
+      result = self._auto_step(debug_round)
+
+      # The new value of A should now be A0 + B0, due to the assign_add op
+      self.assertAllClose(A0 + B0, result)
+      debug_round.join()
+
+      # Now, run the assign_add op again, but replace A with the old (initial)
+      # value.
+      def inject_A(old_val):
+        return A0
+      injection = {"vwi_A": inject_A}
+
+      debug_round = debugger.DebugRound(debug_sess, aa)
+      result = self._auto_step(debug_round, val_replace=injection)
+
+      # Get the updated value of A again
+      debug_round = debugger.DebugRound(debug_sess, A)
+      result = self._auto_step(debug_round)
+
+      # Note: If it were not for the value injection, this would be equal to
+      # A0 + 2 * B0 now.
+      self.assertAllClose(A0 + B0, result)
 
 if __name__ == '__main__':
   googletest.main()

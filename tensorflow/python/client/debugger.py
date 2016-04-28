@@ -34,6 +34,8 @@ class DebugRound(object):
 
   def __init__(self, debug_sess, node, num_times=1, feed=None):
     """DebugRound constructor.
+    This sets up the feeds but does not actually run through the evaluated
+    subgraph. Instead, it breaks at the first node (_SOURCE).
 
     Args:
       debug_sess: A tf.Session object of the "debug" type.
@@ -64,6 +66,8 @@ class DebugRound(object):
     where_output = self._sess.debug("where")
     self._node_order = where_output["completed_nodes"] + \
                        where_output["remaining_nodes"]
+
+    self._curr_node = self._node_order[0]
 
   def _startDebugMainThread(self, node, feed=None):
     def target_func():
@@ -104,6 +108,10 @@ class DebugRound(object):
       raise ValueError("Invalid number of steps for stepping: %d" % num_steps)
 
     time.sleep(self._step_delay_sec)
+
+    # Determine just completed node (i.e., current node)
+    self._curr_node = self._node_order[self.where()]
+
     return output
 
   def cont(self, node_name=None):
@@ -185,7 +193,7 @@ class DebugRound(object):
 
     return node_value
 
-  def inject_value(self, node_name, new_value):
+  def inject_value(self, new_value):
     """Inject a new Tensor value (numpy array) to the current node.
 
     Args:
@@ -194,8 +202,8 @@ class DebugRound(object):
     """
 
     # TODO(cais): If no node_name is supplied, use the just completed node
-    self._sess.debug("inject_value %s" % node_name,
-                     feed={node_name: new_value})
+    self._sess.debug("inject_value %s" % self._curr_node,
+                     feed={self._curr_node: new_value})
 
   def join(self):
     """Join the main debug thread."""
