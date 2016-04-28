@@ -69,6 +69,14 @@ class DebugRound(object):
 
     self._curr_node = self._node_order[0]
 
+    # Breakpoint states
+    # Node name breakpoints. Elements are strings.
+    self._node_breakpoints = []
+
+    # Conditional (perdicate) breakpoints. Elements are callables of the form
+    # break_or_not = should_i_break(node_name, node_value)
+    self._pred_breakpoints = []
+
   def _startDebugMainThread(self, node, feed=None):
     def target_func():
       self._sess.run(node, feed_dict=feed)
@@ -145,11 +153,19 @@ class DebugRound(object):
       raise ValueError("Cannot continue to node named '%s' because that node "
                        "has already finished executing" % node_name)
 
+    output = None
     while True:
       pos = self.where()
-      print("cont(): pos = %d" % pos)
+      node_just_completed = self._node_order[pos]
+
+      # Break if this is a node breakpoint
+      if node_just_completed in self._node_breakpoints:
+        break
+
+      # Break if the specified target node is reached
       if pos == node_idx:
         break
+
       output = self.step()
 
     return output
@@ -201,9 +217,54 @@ class DebugRound(object):
       new_value: new Tensor value (numpy array)
     """
 
-    # TODO(cais): If no node_name is supplied, use the just completed node
     self._sess.debug("inject_value %s" % self._curr_node,
                      feed={self._curr_node: new_value})
+
+  def break_after(self, node_name):
+    """Insert a breakpoint to the debug round.
+
+    Args:
+      node_name: Name of the node. This has to point to a node that exists in
+        the executed subgraph, or an exception will be raised.
+
+    Returns:
+      A handle for the breakpoint. The handle can later be used with methods of
+        this class such as remove_breakpoint
+
+    Raises:
+      ValueError: If the input node_name is not present in the executed subgraph.
+    """
+    # Verify that node_name is in the node order
+    if node_name not in self._node_order:
+      raise ValueError("There is no node named '%s' in the subgraph being "
+                       "executed" % node_name)
+
+    # If the node breakpoint already exists, return right away
+    if node_name in self._node_breakpoints:
+      return node_name
+
+    self._node_breakpoints.append(node_name)
+
+    bp_handle = node_name  # A handle for the breakpoint
+    return bp_handle
+
+  def remove_breakpoint(self, handle):
+    """Remove a breakpoint references by the handle.
+
+    Args:
+      handle: Handle to the breakpoint, either node breakpoint or predicate
+        breakpoint
+
+    Raises:
+      ValueError: If the breakpoint with the specified handle does not exist
+        in this debug round.
+    """
+
+    if handle in self._node_breakpoints:
+      self._node_breakpoints.remove(handle)
+    else:
+      raise ValueError("Breakpoint with the specified handle does not exist "
+                       "in this debug round.")
 
   def join(self):
     """Join the main debug thread."""

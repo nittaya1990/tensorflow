@@ -97,7 +97,6 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
           replace_func = val_replace[node_just_completed]
           new_val = replace_func(node_val)
 
-          print("Calling inject_value with %s" % repr(new_val))
           debug_round.inject_value(new_val)
 
       if is_complete:
@@ -118,7 +117,6 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       node_order = debug_round.query_node_order()
       self.assertTrue(isinstance(node_order, list))
       num_nodes = len(node_order)
-      print(node_order)  # DEBUG
 
       curr_pos = debug_round.where()
       self.assertEquals(0, curr_pos)
@@ -153,8 +151,6 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
           debug_round.step()
           break
 
-      debug_round.join()
-
   def testPlaceHolderAddingMultiSteps(self):
     with session.Session("debug") as debug_sess:
       a = constant_op.constant(6.0, shape=[1, 1], name="a")
@@ -187,13 +183,10 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
         self.assertEquals(curr_pos == num_nodes - 1, is_complete)
 
         node_just_completed = node_order[node_idx]
-        print("Node just completed: %s" % node_just_completed)
 
         if is_complete:
           debug_round.step()
           break
-
-      debug_round.join()
 
   def testPlaceHolderAddingContinue(self):
     with session.Session("debug") as debug_sess:
@@ -214,7 +207,6 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       self.assertEquals(node_order.index("s"), debug_round.where())
 
       self._auto_step(debug_round)
-      debug_round.join()
 
   def testPlaceHolderAddingContinueToEnd(self):
     with session.Session("debug") as debug_sess:
@@ -234,7 +226,6 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
                         debug_round.where())
 
       self._auto_step(debug_round)
-      debug_round.join()
 
   def testPlaceHolderAddingWithInjection(self):
     with session.Session("debug") as debug_sess:
@@ -282,13 +273,10 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
         self.assertEquals(curr_pos == num_nodes - 1, is_complete)
 
         node_just_completed = node_order[node_idx]
-        print("Node just completed: %s" % node_just_completed)
 
         if is_complete:
           debug_round.step()
           break
-
-      debug_round.join()
 
   def testVariablesWithInjection(self):
     with session.Session("debug") as debug_sess:
@@ -304,17 +292,14 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       init_A = A.initializer
       debug_round = debugger.DebugRound(debug_sess, init_A)
       self._auto_step(debug_round, do_inspect=False)
-      debug_round.join()
 
       init_B = B.initializer
       debug_round = debugger.DebugRound(debug_sess, init_B)
       self._auto_step(debug_round, do_inspect=False)
-      debug_round.join()
 
       # Perform calculation
       debug_round = debugger.DebugRound(debug_sess, aa)
       self._auto_step(debug_round)
-      debug_round.join()
 
       # Get the updated value of A
       debug_round = debugger.DebugRound(debug_sess, A)
@@ -322,7 +307,6 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
       # The new value of A should now be A0 + B0, due to the assign_add op
       self.assertAllClose(A0 + B0, result)
-      debug_round.join()
 
       # Now, run the assign_add op again, but replace A with the old (initial)
       # value.
@@ -340,6 +324,55 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       # Note: If it were not for the value injection, this would be equal to
       # A0 + 2 * B0 now.
       self.assertAllClose(A0 + B0, result)
+
+  def testNodeBreakpoint(self):
+    with session.Session("debug") as debug_sess:
+      M = constant_op.constant(
+          np.array([[1.0, 2.0], [3.0, 4.0]]).astype(np.float32),
+          name="nbp_M")
+      Mt = array_ops.transpose(M, name="nbp_Mt")
+
+      debug_round = debugger.DebugRound(debug_sess, Mt)
+
+      node_order = debug_round.query_node_order()
+      self.assertTrue(1, node_order.count("nbp_M"))
+
+      # Insert a breakpoint after nbp_M
+      debug_round.break_after("nbp_M")
+
+      # cont() without arg (toward the end) should break at nbp_M
+      debug_round.cont()
+      self.assertEquals("nbp_M", node_order[debug_round.where()])
+
+      # Finish the rest of the execution (if any)
+      result = self._auto_step(debug_round)
+
+      self.assertAllClose(np.array([[1.0, 3.0], [2.0, 4.0]]).astype(np.float32),
+                          result)
+
+  def testNodeBreakpointRemoval(self):
+    with session.Session("debug") as debug_sess:
+      M = constant_op.constant(
+          np.array([[1.0, 2.0], [3.0, 4.0]]).astype(np.float32),
+          name="nbpr_M")
+      Mt = array_ops.transpose(M, name="nbpr_Mt")
+
+      debug_round = debugger.DebugRound(debug_sess, Mt)
+
+      node_order = debug_round.query_node_order()
+      self.assertEquals(1, node_order.count("nbpr_M"))
+
+      # Insert a breakpoint after nbp_M
+      bp_handle = debug_round.break_after("nbpr_M")
+      debug_round.remove_breakpoint(bp_handle)
+
+      # cont() without arg (toward the end) should not hit any breakpoints
+      debug_round.cont()
+      self.assertEquals(len(node_order) - 1, debug_round.where())
+
+      # Finish the rest of the execution (if any)
+      result = self._auto_step(debug_round)
+
 
 if __name__ == '__main__':
   googletest.main()
