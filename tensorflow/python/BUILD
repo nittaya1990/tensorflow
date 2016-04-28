@@ -1057,6 +1057,17 @@ py_library(
     ],
 )
 
+py_library(
+    name = "debugger",
+    srcs = ["client/debugger.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":framework",
+        ":ops",
+        ":pywrap_tensorflow",
+    ],
+)
+
 py_test(
     name = "server_lib_test",
     size = "small",
@@ -1098,6 +1109,19 @@ py_test(
     srcs = ["client/session_test.py"],
     srcs_version = "PY2AND3",
     deps = [
+        ":framework",
+        ":framework_test_lib",
+        ":session",
+    ],
+)
+
+py_test(
+    name = "debug_session_test",
+    size = "small",
+    srcs = ["client/debug_session_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":debugger",
         ":framework",
         ":framework_test_lib",
         ":session",
