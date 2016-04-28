@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import threading
 import time
+import uuid
 
 
 class DebugRound(object):
@@ -75,7 +76,7 @@ class DebugRound(object):
 
     # Conditional (perdicate) breakpoints. Elements are callables of the form
     # break_or_not = should_i_break(node_name, node_value)
-    self._pred_breakpoints = []
+    self._pred_breakpoints = {}
 
   def _startDebugMainThread(self, node, feed=None):
     def target_func():
@@ -138,6 +139,8 @@ class DebugRound(object):
         the node has already finished executing.
     """
 
+    starting_node = self._node_order[self.where()]
+
     if node_name is None:
       # If no node name is specified, try to continue to the end.
       node_name = self._node_order[-1]
@@ -159,8 +162,28 @@ class DebugRound(object):
       node_just_completed = self._node_order[pos]
 
       # Break if this is a node breakpoint
-      if node_just_completed in self._node_breakpoints:
+      if node_just_completed in self._node_breakpoints and \
+         node_just_completed != starting_node:
+        # If this cont() call starts from this breakpoint node, we will not
+        # break here again.
         break
+
+      # Break if a predicate breakpoint is met
+      if len(self._pred_breakpoints) > 0:
+        should_break = False
+
+        node_val = self.inspect_value(node_just_completed)
+        if node_val is not None:
+          for bp_key in self._pred_breakpoints:
+            pred = self._pred_breakpoints[bp_key]
+            if pred(node_just_completed, node_val):
+              should_break = True
+              break
+
+        if should_break and node_just_completed != starting_node:
+          # If this cont() call starts from this node, we will not break here
+          # again.
+          break
 
       # Break if the specified target node is reached
       if pos == node_idx:
@@ -221,7 +244,7 @@ class DebugRound(object):
                      feed={self._curr_node: new_value})
 
   def break_after(self, node_name):
-    """Insert a breakpoint to the debug round.
+    """Insert a break-right-after-node breakpoint to the debug round.
 
     Args:
       node_name: Name of the node. This has to point to a node that exists in
@@ -236,7 +259,7 @@ class DebugRound(object):
     """
     # Verify that node_name is in the node order
     if node_name not in self._node_order:
-      raise ValueError("There is no node named '%s' in the subgraph being "
+      raise ValueError("Node named '%s' does not exist in the subgraph being "
                        "executed" % node_name)
 
     # If the node breakpoint already exists, return right away
@@ -247,6 +270,70 @@ class DebugRound(object):
 
     bp_handle = node_name  # A handle for the breakpoint
     return bp_handle
+
+  def break_before(self, node_name):
+    """Insert a break-right-before-node breakpoint to the debug round.
+
+    Args:
+      node_name: Name of the node. This node has to exist in the executed
+        subgraph, and the node must not be the first node, or an exception will
+        be raised.
+
+    Returns:
+      A handle for the breakpoint. The handle can later be used with methods of
+        this class such as remove_breakpoint
+
+    Raises:
+      ValueError: If the input node_name is not present in the executed subgraph,
+        or if the node is the first node in the executed subgraph.
+    """
+
+    # Verify that node_name is in the node order
+    if node_name not in self._node_order:
+      raise ValueError("Node named '%s' does not exist in the executed "
+                       "subgraph" % node_name)
+
+    node_idx = self._node_order.index(node_name)
+    if node_idx == 0:
+      raise ValueError("Node named '%s' is the first node in the executed "
+                       "subgraph, hence the debug round cannot break before "
+                       "it" % node_name)
+
+    return self.break_after(self._node_order[node_idx - 1])
+
+  def break_if(self, predicate):
+    """Break if a predicate regarding node name and/or value is met.
+
+    Args:
+      predicate: A callable that takes two input arguments and returns a boolean
+        indicating whether the debug round should break.
+        The first input argument is the node name, while the second one is the
+        node value. This callable will be evaluated after the completion of each
+        node and if it returns true, the debug round will break there.
+
+    Returns:
+      A handle for the breakpoint.
+
+    Raises:
+      ValueError: If predicate is not callable
+    """
+    # TODO(cais): Check for duplicate predicates? Is that possible?
+    # TODO(cais): Verify that the predicate has valid input and return signature.
+
+    # Verify that predicate is callable
+    if not callable(predicate):
+      raise ValueError("Input predicate is not callable")
+
+    # The handle for the predicate breakpoint is non-clashing a random hex string
+    while True:
+      handle = uuid.uuid4().hex
+      if handle not in self._node_breakpoints and \
+         handle not in self._pred_breakpoints:
+        break
+
+    self._pred_breakpoints[handle] = predicate
+
+    return handle
 
   def remove_breakpoint(self, handle):
     """Remove a breakpoint references by the handle.
@@ -262,9 +349,20 @@ class DebugRound(object):
 
     if handle in self._node_breakpoints:
       self._node_breakpoints.remove(handle)
+    elif handle in self._pred_breakpoints:
+      self._pred_breakpoints.pop(handle)
     else:
       raise ValueError("Breakpoint with the specified handle does not exist "
                        "in this debug round.")
+
+  def get_breakpoints(self):
+    """Get all breakpoints, node and predicate.
+
+    Returns:
+      node_breakpoints: A list of all node breakpoints.
+      pred_breakpoints: A dict of all predicate breakpoints.
+    """
+    return self._node_breakpoints, self._pred_breakpoints
 
   def join(self):
     """Join the main debug thread."""

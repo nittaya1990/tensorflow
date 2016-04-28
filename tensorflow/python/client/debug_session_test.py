@@ -60,6 +60,9 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
   def _auto_step(self, debug_round, do_inspect=True, val_replace=None):
     """Automatically step through a debug session, with options.
 
+    Because _auto_step uses step(), it is not affected by breakpoints in the
+    debug_round object.
+
     Args:
       debug_round: A DebugRound object.
       do_inspect: Inspect the values during stepping, this will lead to a return
@@ -105,7 +108,7 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
     return result
 
-  def testPlaceHolderAddingSingleSteps(self):
+  def testConstantAddingSingleSteps(self):
     with session.Session("debug") as debug_sess:
       a = constant_op.constant(6.0, shape=[1, 1], name="tphass_a")
       b = constant_op.constant(7.0, shape=[1, 1], name="tphass_b")
@@ -151,7 +154,7 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
           debug_round.step()
           break
 
-  def testPlaceHolderAddingMultiSteps(self):
+  def testConstantAddingMultiSteps(self):
     with session.Session("debug") as debug_sess:
       a = constant_op.constant(6.0, shape=[1, 1], name="a")
       b = constant_op.constant(7.0, shape=[1, 1], name="b")
@@ -188,7 +191,7 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
           debug_round.step()
           break
 
-  def testPlaceHolderAddingContinue(self):
+  def testConstantAddingContinue(self):
     with session.Session("debug") as debug_sess:
       a = constant_op.constant(6.0, shape=[1, 1], name="a")
       b = constant_op.constant(7.0, shape=[1, 1], name="b")
@@ -208,7 +211,7 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
       self._auto_step(debug_round)
 
-  def testPlaceHolderAddingContinueToEnd(self):
+  def testConstantAddingContinueToEnd(self):
     with session.Session("debug") as debug_sess:
       a = constant_op.constant(6.0, shape=[1, 1], name="a")
       b = constant_op.constant(7.0, shape=[1, 1], name="b")
@@ -227,7 +230,7 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
       self._auto_step(debug_round)
 
-  def testPlaceHolderAddingWithInjection(self):
+  def testConstantAddingWithInjection(self):
     with session.Session("debug") as debug_sess:
       a = constant_op.constant(np.array([[6.0]]).astype(np.float32),
                                name="phawi_a")
@@ -308,22 +311,24 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       # The new value of A should now be A0 + B0, due to the assign_add op
       self.assertAllClose(A0 + B0, result)
 
-      # Now, run the assign_add op again, but replace A with the old (initial)
-      # value.
-      def inject_A(old_val):
-        return A0
-      injection = {"vwi_A": inject_A}
+      # Do it twice to test repeated value injection to the same node
+      for i in xrange(2):
+        # Now, run the assign_add op again, but replace A with the old (initial)
+        # value.
+        def inject_A(old_val):
+          return A0
+        injection = {"vwi_A": inject_A}
 
-      debug_round = debugger.DebugRound(debug_sess, aa)
-      result = self._auto_step(debug_round, val_replace=injection)
+        debug_round = debugger.DebugRound(debug_sess, aa)
+        result = self._auto_step(debug_round, val_replace=injection)
 
-      # Get the updated value of A again
-      debug_round = debugger.DebugRound(debug_sess, A)
-      result = self._auto_step(debug_round)
+        # Get the updated value of A again
+        debug_round = debugger.DebugRound(debug_sess, A)
+        result = self._auto_step(debug_round)
 
-      # Note: If it were not for the value injection, this would be equal to
-      # A0 + 2 * B0 now.
-      self.assertAllClose(A0 + B0, result)
+        # Note: If it were not for the value injection, this would be equal to
+        # A0 + 2 * B0 or A0 + 3 * B0 by now.
+        self.assertAllClose(A0 + B0, result)
 
   def testNodeBreakpoint(self):
     with session.Session("debug") as debug_sess:
@@ -338,7 +343,12 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       self.assertTrue(1, node_order.count("nbp_M"))
 
       # Insert a breakpoint after nbp_M
-      debug_round.break_after("nbp_M")
+      bp_handle = debug_round.break_after("nbp_M")
+
+      # Verify breakpoint getter
+      node_bps, pred_bps = debug_round.get_breakpoints()
+      self.assertEquals([bp_handle], node_bps)
+      self.assertEquals({}, pred_bps)
 
       # cont() without arg (toward the end) should break at nbp_M
       debug_round.cont()
@@ -350,23 +360,163 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       self.assertAllClose(np.array([[1.0, 3.0], [2.0, 4.0]]).astype(np.float32),
                           result)
 
-  def testNodeBreakpointRemoval(self):
+  def testNodeBreakpoint(self):
     with session.Session("debug") as debug_sess:
       M = constant_op.constant(
           np.array([[1.0, 2.0], [3.0, 4.0]]).astype(np.float32),
-          name="nbpr_M")
-      Mt = array_ops.transpose(M, name="nbpr_Mt")
+          name="nbp_M")
+      Mt = array_ops.transpose(M, name="nbp_Mt")
 
       debug_round = debugger.DebugRound(debug_sess, Mt)
 
       node_order = debug_round.query_node_order()
-      self.assertEquals(1, node_order.count("nbpr_M"))
+      self.assertTrue(1, node_order.count("nbp_M"))
 
       # Insert a breakpoint after nbp_M
-      bp_handle = debug_round.break_after("nbpr_M")
-      debug_round.remove_breakpoint(bp_handle)
+      bp_handle = debug_round.break_after("nbp_M")
 
-      # cont() without arg (toward the end) should not hit any breakpoints
+      # Verify breakpoint getter
+      node_bps, pred_bps = debug_round.get_breakpoints()
+      self.assertEquals([bp_handle], node_bps)
+      self.assertEquals({}, pred_bps)
+
+      # cont() without arg (toward the end) should break at nbp_M
+      debug_round.cont()
+      self.assertEquals("nbp_M", node_order[debug_round.where()])
+
+      # Finish the rest of the execution (if any)
+      result = self._auto_step(debug_round)
+
+      self.assertAllClose(np.array([[1.0, 3.0], [2.0, 4.0]]).astype(np.float32),
+                          result)
+
+  def testBeforeNodeBreakpointRemoval(self):
+    with session.Session("debug") as debug_sess:
+      M = constant_op.constant(
+          np.array([[1.0, 2.0], [3.0, 4.0]]).astype(np.float32),
+          name="bfnbp_M")
+      Mt = array_ops.transpose(M, name="bfnbp_Mt")
+
+      debug_round = debugger.DebugRound(debug_sess, Mt)
+
+      node_order = debug_round.query_node_order()
+      self.assertEquals(1, node_order.count("bfnbp_Mt"))
+
+      # Insert a breakpoint before bfnbp_Mt
+      bp_handle = debug_round.break_before("bfnbp_Mt")
+
+      # Verify breakpoint getter
+      node_bps, pred_bps = debug_round.get_breakpoints()
+      self.assertEquals([bp_handle], node_bps)
+      self.assertEquals({}, pred_bps)
+
+      debug_round.cont()
+
+      # Verify that the debug round has broken at the node before bfnbp_Mt
+      self.assertEquals(node_order.index("bfnbp_Mt") - 1, debug_round.where())
+
+      # Finish the rest of the execution (if any)
+      self._auto_step(debug_round)
+
+  def testInvalidNodeBreakpoint(self):
+    with session.Session("debug") as debug_sess:
+      M = constant_op.constant(
+          np.array([[1.0, 2.0], [3.0, 4.0]]).astype(np.float32),
+          name="inbp_M")
+      Mt = array_ops.transpose(M, name="inbp_Mt")
+
+      debug_round = debugger.DebugRound(debug_sess, Mt)
+      node_order = debug_round.query_node_order()
+
+      with self.assertRaisesRegexp(ValueError, "does not exist"):
+        debug_round.break_after("foo_bar_qux_baz")
+
+      # Verify breakpoint getter
+      node_bps, pred_bps = debug_round.get_breakpoints()
+      self.assertEquals([], node_bps)
+      self.assertEquals({}, pred_bps)
+
+      # There is no valid breakpoint, so cont() should go till the end
+      debug_round.cont()
+      self.assertEquals(len(node_order) - 1, debug_round.where())
+
+      # Finish the rest of the execution (if any)
+      self._auto_step(debug_round)
+
+  def testPredBreakpoint(self):
+    with session.Session("debug") as debug_sess:
+      a = constant_op.constant(np.array(11.0).astype(np.float32),
+                               name="pbp_a")
+      b = constant_op.constant(np.array(22.0).astype(np.float32),
+                               name="pbp_b")
+      s = math_ops.add(a, b, name="pbp_s")
+
+      # This predicate is not expected to be met
+      def pred1(node_name, node_val):
+        return node_val > 5.0 and node_val < 6.0
+
+      # This predicate is expected to be met after b and s
+      def pred2(node_name, node_val):
+        return node_val > 20.0
+
+      debug_round = debugger.DebugRound(debug_sess, s)
+      node_order = debug_round.query_node_order()
+
+      bp_handle_1 = debug_round.break_if(pred1)
+      bp_handle_2 = debug_round.break_if(pred2)
+
+      # Verify breakpoint getter
+      node_bps, pred_bps = debug_round.get_breakpoints()
+      self.assertEquals([], node_bps)
+      self.assertEquals(2, len(pred_bps))
+      self.assertTrue(bp_handle_1 in pred_bps)
+      self.assertTrue(bp_handle_2 in pred_bps)
+
+      # First, the debug round should break at pbp_b
+      debug_round.cont()
+      self.assertEquals("pbp_b", node_order[debug_round.where()])
+
+      # Second, the debug round should break at pbp_s
+      debug_round.cont()
+      self.assertEquals("pbp_s", node_order[debug_round.where()])
+      s_val = debug_round.inspect_value("pbp_s")
+
+      # Finish the rest of the execution (if any)
+      result = self._auto_step(debug_round)
+      self.assertAllClose(np.array(33.0).astype(np.float32), s_val)
+
+  def testPredBreakpointRemoval(self):
+    with session.Session("debug") as debug_sess:
+      a = constant_op.constant(np.array(11.0).astype(np.float32),
+                               name="pbpr_a")
+      b = constant_op.constant(np.array(22.0).astype(np.float32),
+                               name="pbpr_b")
+      s = math_ops.add(a, b, name="pbpr_s")
+
+      # This predicate is not expected to be met
+      def pred1(node_name, node_val):
+        return node_val > 5.0 and node_val < 6.0
+
+      # This predicate is expected to be met after b and s
+      def pred2(node_name, node_val):
+        return node_val > 20.0
+
+      debug_round = debugger.DebugRound(debug_sess, s)
+      node_order = debug_round.query_node_order()
+
+      bp_handle_1 = debug_round.break_if(pred1)
+      bp_handle_2 = debug_round.break_if(pred2)
+
+      # Remove pred2. This should lead to no breaking in debug round's cont().
+      debug_round.remove_breakpoint(bp_handle_2)
+
+      # Verify breakpoint getter
+      node_bps, pred_bps = debug_round.get_breakpoints()
+      self.assertEquals([], node_bps)
+      self.assertEquals(1, len(pred_bps))
+      self.assertTrue(bp_handle_1 in pred_bps)
+      self.assertFalse(bp_handle_2 in pred_bps)
+
       debug_round.cont()
       self.assertEquals(len(node_order) - 1, debug_round.where())
 
