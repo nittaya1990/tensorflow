@@ -24,6 +24,7 @@ import time
 import numpy as np
 import six
 from six.moves import xrange  # pylint: disable=redefined-builtin
+import tensorflow as tf
 
 from tensorflow.core.lib.core import error_codes_pb2
 from tensorflow.core.protobuf import config_pb2
@@ -57,6 +58,7 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
     self._step_delay_sec = 0.02
 
   def _auto_step(self, debug_round):
+    result = None
     while True:
       debug_round.step()
 
@@ -65,17 +67,22 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       is_complete = debug_round.is_complete()
 
       node_just_completed = node_order[node_idx]
-      print("Node just completed: %s" % node_just_completed)
+
+      node_val = debug_round.inspect_value(node_just_completed)
+      if node_val is not None:
+        result = node_val
 
       if is_complete:
         debug_round.step()
         break
 
+    return result
+
   def testPlaceHolderAddingSingleSteps(self):
     with session.Session("debug") as debug_sess:
-      a = constant_op.constant(6.0, shape=[1, 1], name="a")
-      b = constant_op.constant(7.0, shape=[1, 1], name="b")
-      s = math_ops.add(a, b, name="s")
+      a = constant_op.constant(6.0, shape=[1, 1], name="tphass_a")
+      b = constant_op.constant(7.0, shape=[1, 1], name="tphass_b")
+      s = math_ops.add(a, b, name="tphass_s")
 
       # Create a DebugRound object
       debug_round = debugger.DebugRound(debug_sess, s)
@@ -83,6 +90,7 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       node_order = debug_round.query_node_order()
       self.assertTrue(isinstance(node_order, list))
       num_nodes = len(node_order)
+      print(node_order)  # DEBUG
 
       curr_pos = debug_round.where()
       self.assertEquals(0, curr_pos)
@@ -94,6 +102,17 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
         node_idx = debug_round.where()
         self.assertEquals(curr_pos + 1, node_idx)
         curr_pos = node_idx
+
+        # Verify inspect_value returns correct values
+        if node_order[curr_pos] == "tphass_a":
+          node_value = debug_round.inspect_value("tphass_a")
+          self.assertAllClose(np.array([[6.0]]), node_value)
+        elif node_order[curr_pos] == "tphass_b":
+          node_value = debug_round.inspect_value("tphass_b")
+          self.assertAllClose(np.array([[7.0]]), node_value)
+        elif node_order[curr_pos] == "tphass_s":
+          node_value = debug_round.inspect_value("tphass_s")
+          self.assertAllClose(np.array([[13.0]]), node_value)
 
         # Verify is_complete
         is_complete = debug_round.is_complete()
@@ -167,6 +186,7 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       self.assertEquals(node_order.index("s"), debug_round.where())
 
       self._auto_step(debug_round)
+      debug_round.join()
 
   def testPlaceHolderAddingContinueToEnd(self):
     with session.Session("debug") as debug_sess:
@@ -180,6 +200,69 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       # Calling cont() without node_name specified should let the debug round
       # continue to the end
       debug_round.cont()
+
+      # Verify that the debug breaks on the last node
+      self.assertEquals(len(debug_round.query_node_order()) - 1,
+                        debug_round.where())
+
+      self._auto_step(debug_round)
+      debug_round.join()
+
+  def testPlaceHolderAddingWithInjection(self):
+    with session.Session("debug") as debug_sess:
+      a = constant_op.constant(np.array([[6.0]]).astype(np.float32),
+                               name="phawi_a")
+      b = constant_op.constant(np.array([[7.0]]).astype(np.float32),
+                               name="phawi_b")
+      s = math_ops.add(a, b, name="phawi_s")
+
+      # Create a DebugRound object
+      debug_round = debugger.DebugRound(debug_sess, s)
+      node_order = debug_round.query_node_order()
+      num_nodes = len(node_order)
+      self.assertEquals(0, debug_round.where())
+      curr_pos = 0
+
+      while True:
+        debug_round.step()
+
+        # Verify that stepping causes the "where index" to increment properly
+        node_idx = debug_round.where()
+        self.assertEquals(curr_pos + 1, node_idx)
+        curr_pos = node_idx
+
+        # Verify inspect_value returns correct values
+        if node_order[curr_pos] == "phawi_a":
+          node_value = debug_round.inspect_value("phawi_a")
+          self.assertAllClose(np.array([[6.0]]), node_value)
+
+          debug_round.inject_value("phawi_a",
+                                   np.array([[60.0]]).astype(np.float32))
+        elif node_order[curr_pos] == "phawi_b":
+          node_value = debug_round.inspect_value("phawi_b")
+          self.assertAllClose(np.array([[7.0]]), node_value)
+
+          debug_round.inject_value("phawi_b",
+                                   np.array([[70.0]]).astype(np.float32))
+        elif node_order[curr_pos] == "phawi_s":
+          node_value = debug_round.inspect_value("phawi_s")
+
+          # The sum should reflect the two newly injected values
+          self.assertAllClose(np.array([[130.0]]).astype(np.float32),
+                              node_value)
+
+        # Verify is_complete
+        is_complete = debug_round.is_complete()
+        self.assertEquals(curr_pos == num_nodes - 1, is_complete)
+
+        node_just_completed = node_order[node_idx]
+        print("Node just completed: %s" % node_just_completed)
+
+        if is_complete:
+          debug_round.step()
+          break
+
+      debug_round.join()
 
       # Verify that the debug breaks on the last node
       self.assertEquals(len(debug_round.query_node_order()) - 1,

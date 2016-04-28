@@ -146,7 +146,6 @@ class DebugRound(object):
 
     return output
 
-
   def where(self):
     """Queries the debugger's current position in the node execution order.
 
@@ -159,15 +158,44 @@ class DebugRound(object):
 
   def is_complete(self):
     """Queries whether the debug round is completed.
-    That is, whether all nodes in the executed subgraph have finished executing.
+    That is, whether all nodes in the executed subgraph have finished
+      executing.
 
     Returns:
       A boolean indicating whether the debug round is complete.
     """
     return self.where() == len(self._node_order) - 1
 
-  def inspect_value(self):
-    
+  def inspect_value(self, node_name):
+    """Inspect the value of a node.
+
+    Args:
+      node_name: name of the node to inspect the value of.
+
+    Returns:
+      A tensor value (numpy array) if the node exists and has finished
+        executing.
+    None if the node doesn't exist or has not finished executing.
+    """
+    output = self._sess.debug("print %s" % node_name)
+    node_value = output["node_value"]
+
+    if node_value is not None:
+      self._res = node_value
+
+    return node_value
+
+  def inject_value(self, node_name, new_value):
+    """Inject a new Tensor value (numpy array) to the current node.
+
+    Args:
+      node_name: name of the node.
+      new_value: new Tensor value (numpy array)
+    """
+
+    # TODO(cais): If no node_name is supplied, use the just completed node
+    self._sess.debug("inject_value %s" % node_name,
+                     feed={node_name: new_value})
 
   def join(self):
     """Join the main debug thread."""
