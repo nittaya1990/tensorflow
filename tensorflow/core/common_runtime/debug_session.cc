@@ -135,7 +135,7 @@ Status DebugExecutorImpl::Initialize() {
   while (!node_queue.empty()) {
     // Pop all the ready nodes from the queue
     while (!node_queue.empty()) {
-      const string& processed_node = node_queue.front();
+      const string processed_node = node_queue.front();
 
       std::cout << "Popping from node_queue: " << processed_node << std::endl;
       node_queue.pop_front();
@@ -246,8 +246,8 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
   response.command = debugger_request.command;  // Record command in response
 
   // Determind completed nodes and remaining nodes
-  std::vector<std::string> completed_nodes = GetCompletedNodes();
-  std::vector<std::string> not_completed_nodes = GetNotCompletedNodes();
+  std::vector<string> completed_nodes = GetCompletedNodes();
+  std::vector<string> not_completed_nodes = GetNotCompletedNodes();
 
   response.completed_nodes = completed_nodes;
   response.remaining_nodes = not_completed_nodes;
@@ -574,8 +574,8 @@ void DebugExecutorImpl::InitializePending(const Graph* graph,
 }
 
 // tfdb(cais)
-std::vector<std::string> DebugExecutorImpl::GetCompletedNodes() {
-  std::vector<std::string> completed_nodes;
+std::vector<string> DebugExecutorImpl::GetCompletedNodes() {
+  std::vector<string> completed_nodes;
 
   if (!break_at_node.empty()) {
     for (const string& node_name : node_order) {
@@ -590,8 +590,8 @@ std::vector<std::string> DebugExecutorImpl::GetCompletedNodes() {
   return completed_nodes;
 }
 
-std::vector<std::string> DebugExecutorImpl::GetNotCompletedNodes() {
-  std::vector<std::string> not_completed_nodes;
+std::vector<string> DebugExecutorImpl::GetNotCompletedNodes() {
+  std::vector<string> not_completed_nodes;
 
   // First locate the current break point
   std::deque<string>::const_iterator it = node_order.cbegin();

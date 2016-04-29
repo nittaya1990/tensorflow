@@ -28,7 +28,7 @@ class DebugRound(object):
   """Debug round class.
 
   A DebugRound object is a handle to a round of debugging. The round of
-  debgging is created by specifying a graph node to execute and the number of
+  debugging is created by specifying a graph node to execute and the number of
   times it should be executed for. The DebugRound object is stateful and keeps
   track of node order, the list of completed nodes, breakpoint, etc.
   """

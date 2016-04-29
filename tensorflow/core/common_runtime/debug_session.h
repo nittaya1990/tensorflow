@@ -92,8 +92,8 @@ class DebugExecutorImpl : public Executor {
 
   static void InitializePending(const Graph* graph, PendingCounts* counts);
 
-  std::vector<std::string> GetCompletedNodes();
-  std::vector<std::string> GetNotCompletedNodes();
+  std::vector<string> GetCompletedNodes();
+  std::vector<string> GetNotCompletedNodes();
 
   // Owned.
   LocalExecutorParams params_;

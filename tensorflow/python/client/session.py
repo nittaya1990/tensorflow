@@ -67,6 +67,7 @@ def _get_feeds_for_indexed_slices(feed, feed_val):
   return list(zip([feed.values, feed.indices] if feed.dense_shape is None else
                   [feed.values, feed.indices, feed.dense_shape], feed_val))
 
+
 class BaseSession(SessionInterface):
   """A class for interacting with a TensorFlow computation.
 

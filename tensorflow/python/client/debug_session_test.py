@@ -38,11 +38,6 @@ ops.RegisterShape("ConstructionFails")(None)
 
 class DebugSessionTest(test_util.TensorFlowTestCase):
 
-  def setUp(self):
-    # TODO(cais): Proper mutex locking to push down to
-    self._init_delay_sec = 0.1
-    self._step_delay_sec = 0.02
-
   def _auto_step(self, debug_round, do_inspect=True, val_replace=None):
     """Automatically step through a debug session, with options.
 
@@ -363,7 +358,7 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       self.assertAllClose(np.array([[1.0, 3.0], [2.0, 4.0]]).astype(np.float32),
                           result)
 
-  def testBeforeNodeBreakpointRemoval(self):
+  def testBeforeNodeBreakpoint(self):
     with session.Session("debug") as debug_sess:
       m = constant_op.constant(
           np.array([[1.0, 2.0], [3.0, 4.0]]).astype(np.float32),
