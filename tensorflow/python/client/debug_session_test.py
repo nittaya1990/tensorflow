@@ -18,36 +18,22 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import threading
-import time
-
 import numpy as np
-import six
 from six.moves import xrange  # pylint: disable=redefined-builtin
-import tensorflow as tf
 
-from tensorflow.core.lib.core import error_codes_pb2
-from tensorflow.core.protobuf import config_pb2
 from tensorflow.python.client import debugger
 from tensorflow.python.client import session
-from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import tensor_util
 from tensorflow.python.framework import test_util
-from tensorflow.python.framework import versions
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import constant_op
-from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import state_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
-from tensorflow.python.util import compat
 
 
 # NOTE(mrry): Dummy shape registration for op used in the tests.
-ops.RegisterShape('ConstructionFails')(None)
+ops.RegisterShape("ConstructionFails")(None)
 
 
 class DebugSessionTest(test_util.TensorFlowTestCase):
@@ -64,10 +50,10 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
     debug_round object.
 
     Args:
-      debug_round: A DebugRound object.
+      debug_round: a DebugRound object.
       do_inspect: Inspect the values during stepping, this will lead to a return
         value that equals the result of the execution.
-      val_replace: A dictionary for node value injection. The keys are the node
+      val_replace: a dictionary for node value injection. The keys are the node
         names. The values are callables that take one input argument (old node
         value) and returns a new node value that is injected to the node
         specified by the corresponding dict key once the node has just finished
@@ -75,6 +61,9 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
     Returns:
       If do_inspect == True, the result of the graph execution.
+
+    Raises:
+      ValueError: If val_replace is specified by do_inspect is False.
     """
 
     if not do_inspect and val_replace is not None:
@@ -185,8 +174,6 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
         is_complete = debug_round.is_complete()
         self.assertEquals(curr_pos == num_nodes - 1, is_complete)
 
-        node_just_completed = node_order[node_idx]
-
         if is_complete:
           debug_round.step()
           break
@@ -275,8 +262,6 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
         is_complete = debug_round.is_complete()
         self.assertEquals(curr_pos == num_nodes - 1, is_complete)
 
-        node_just_completed = node_order[node_idx]
-
         if is_complete:
           debug_round.step()
           break
@@ -301,91 +286,61 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
   def testVariablesWithInjection(self):
     with session.Session("debug") as debug_sess:
-      A0 = np.array([[10.0]]).astype(np.float32)
-      B0 = np.array([[20.0]]).astype(np.float32)
+      a0 = np.array([[10.0]]).astype(np.float32)
+      b0 = np.array([[20.0]]).astype(np.float32)
 
-      A = variables.Variable(A0, name="vwi_A")
-      B = variables.Variable(B0, name="vwi_B")
+      a = variables.Variable(a0, name="vwi_A")
+      b = variables.Variable(b0, name="vwi_B")
 
-      aa = A.assign_add(B0)
+      aa = a.assign_add(b0)
 
       # Initialize variables
-      init_A = A.initializer
-      debug_round = debugger.DebugRound(debug_sess, init_A)
+      init_a = a.initializer
+      debug_round = debugger.DebugRound(debug_sess, init_a)
       self._auto_step(debug_round, do_inspect=False)
 
-      init_B = B.initializer
-      debug_round = debugger.DebugRound(debug_sess, init_B)
+      init_b = b.initializer
+      debug_round = debugger.DebugRound(debug_sess, init_b)
       self._auto_step(debug_round, do_inspect=False)
 
       # Perform calculation
       debug_round = debugger.DebugRound(debug_sess, aa)
       self._auto_step(debug_round)
 
-      # Get the updated value of A
-      debug_round = debugger.DebugRound(debug_sess, A)
+      # Get the updated value of a
+      debug_round = debugger.DebugRound(debug_sess, a)
       result = self._auto_step(debug_round)
 
-      # The new value of A should now be A0 + B0, due to the assign_add op
-      self.assertAllClose(A0 + B0, result)
+      # The new value of a should now be a0 + b0, due to the assign_add op
+      self.assertAllClose(a0 + b0, result)
 
       # Do it twice to test repeated value injection to the same node
-      for i in xrange(2):
-        # Now, run the assign_add op again, but replace A with the old (initial)
+      for _ in xrange(2):
+        # Now, run the assign_add op again, but replace a with the old (initial)
         # value.
-        def inject_A(old_val):
-          return A0
-        injection = {"vwi_A": inject_A}
+        def inject_a(_):
+          return a0
+        injection = {"vwi_A": inject_a}
 
         debug_round = debugger.DebugRound(debug_sess, aa)
         result = self._auto_step(debug_round, val_replace=injection)
 
-        # Get the updated value of A again
-        debug_round = debugger.DebugRound(debug_sess, A)
+        # Get the updated value of a again
+        debug_round = debugger.DebugRound(debug_sess, a)
         result = self._auto_step(debug_round)
 
         # Note: If it were not for the value injection, this would be equal to
-        # A0 + 2 * B0 or A0 + 3 * B0 by now.
-        self.assertAllClose(A0 + B0, result)
+        # a0 + 2 * b0 or a0 + 3 * b0 by now.
+        self.assertAllClose(a0 + b0, result)
 
   def testNodeBreakpoint(self):
     with session.Session("debug") as debug_sess:
-      M = constant_op.constant(
+      m = constant_op.constant(
           np.array([[1.0, 2.0], [3.0, 4.0]]).astype(np.float32),
           name="nbp_M")
-      Mt = array_ops.transpose(M, name="nbp_Mt")
+      mt = array_ops.transpose(m, name="nbp_Mt")
 
-      debug_round = debugger.DebugRound(debug_sess, Mt)
-
-      node_order = debug_round.query_node_order()
-      self.assertTrue(1, node_order.count("nbp_M"))
-
-      # Insert a breakpoint after nbp_M
-      bp_handle = debug_round.break_after("nbp_M")
-
-      # Verify breakpoint getter
-      node_bps, pred_bps = debug_round.get_breakpoints()
-      self.assertEquals([bp_handle], node_bps)
-      self.assertEquals({}, pred_bps)
-
-      # cont() without arg (toward the end) should break at nbp_M
-      debug_round.cont()
-      self.assertEquals("nbp_M", node_order[debug_round.where()])
-
-      # Finish the rest of the execution (if any)
-      result = self._auto_step(debug_round)
-
-      self.assertAllClose(np.array([[1.0, 3.0], [2.0, 4.0]]).astype(np.float32),
-                          result)
-
-  def testNodeBreakpoint(self):
-    with session.Session("debug") as debug_sess:
-      M = constant_op.constant(
-          np.array([[1.0, 2.0], [3.0, 4.0]]).astype(np.float32),
-          name="nbp_M")
-      Mt = array_ops.transpose(M, name="nbp_Mt")
-
-      debug_round = debugger.DebugRound(debug_sess, Mt)
+      debug_round = debugger.DebugRound(debug_sess, mt)
 
       node_order = debug_round.query_node_order()
       self.assertTrue(1, node_order.count("nbp_M"))
@@ -410,12 +365,12 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
   def testBeforeNodeBreakpointRemoval(self):
     with session.Session("debug") as debug_sess:
-      M = constant_op.constant(
+      m = constant_op.constant(
           np.array([[1.0, 2.0], [3.0, 4.0]]).astype(np.float32),
           name="bfnbp_M")
-      Mt = array_ops.transpose(M, name="bfnbp_Mt")
+      mt = array_ops.transpose(m, name="bfnbp_Mt")
 
-      debug_round = debugger.DebugRound(debug_sess, Mt)
+      debug_round = debugger.DebugRound(debug_sess, mt)
 
       node_order = debug_round.query_node_order()
       self.assertEquals(1, node_order.count("bfnbp_Mt"))
@@ -438,12 +393,12 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
   def testInvalidNodeBreakpoint(self):
     with session.Session("debug") as debug_sess:
-      M = constant_op.constant(
+      m = constant_op.constant(
           np.array([[1.0, 2.0], [3.0, 4.0]]).astype(np.float32),
           name="inbp_M")
-      Mt = array_ops.transpose(M, name="inbp_Mt")
+      mt = array_ops.transpose(m, name="inbp_Mt")
 
-      debug_round = debugger.DebugRound(debug_sess, Mt)
+      debug_round = debugger.DebugRound(debug_sess, mt)
       node_order = debug_round.query_node_order()
 
       with self.assertRaisesRegexp(ValueError, "does not exist"):
@@ -470,11 +425,11 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       s = math_ops.add(a, b, name="pbp_s")
 
       # This predicate is not expected to be met
-      def pred1(node_name, node_val):
+      def pred1(_, node_val):
         return node_val > 5.0 and node_val < 6.0
 
       # This predicate is expected to be met after b and s
-      def pred2(node_name, node_val):
+      def pred2(_, node_val):
         return node_val > 20.0
 
       debug_round = debugger.DebugRound(debug_sess, s)
@@ -500,7 +455,7 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       s_val = debug_round.inspect_value("pbp_s")
 
       # Finish the rest of the execution (if any)
-      result = self._auto_step(debug_round)
+      self._auto_step(debug_round)
       self.assertAllClose(np.array(33.0).astype(np.float32), s_val)
 
   def testPredBreakpointRemoval(self):
@@ -512,11 +467,11 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       s = math_ops.add(a, b, name="pbpr_s")
 
       # This predicate is not expected to be met
-      def pred1(node_name, node_val):
+      def pred1(_, node_val):
         return node_val > 5.0 and node_val < 6.0
 
       # This predicate is expected to be met after b and s
-      def pred2(node_name, node_val):
+      def pred2(_, node_val):
         return node_val > 20.0
 
       debug_round = debugger.DebugRound(debug_sess, s)
@@ -539,8 +494,8 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       self.assertEquals(len(node_order) - 1, debug_round.where())
 
       # Finish the rest of the execution (if any)
-      result = self._auto_step(debug_round)
+      self._auto_step(debug_round)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
   googletest.main()

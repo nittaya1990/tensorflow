@@ -2522,8 +2522,12 @@ Status DebugSession::GetOrCreateExecutors(
 
     ek->items.resize(ek->items.size() + 1);
     auto* item = &(ek->items.back());
-    item->flib = NewFunctionLibraryRuntime(device, runner, graph_def_version,
-                                           fdefs, optimizer_opts);
+
+    // item->flib = NewFunctionLibraryRuntime(device, runner, graph_def_version,
+    //                                        fdefs, optimizer_opts);
+    item->flib =
+        NewFunctionLibraryRuntime(device_mgr_.get(), device, runner,
+                                  graph_def_version, fdefs, optimizer_opts);
 
     LocalExecutorParams params;
     params.device = device;
@@ -2560,7 +2564,12 @@ Status DebugSession::GetOrCreateExecutors(
     // DEBUG
     // std::cout << "~ DONE calling optimzer.Optimizer() on graph "
     // << graph_counter++ << " of " << graphs.size() << std::endl;
-    s = ValidateMemoryTypes(DeviceType(device->device_type()), partition_graph);
+
+    // s = ValidateMemoryTypes(DeviceType(device->device_type()),
+    //                         partition_graph);
+    s = EnsureMemoryTypes(DeviceType(device->device_type()), device->name(),
+                          partition_graph);
+
     if (!s.ok()) {
       break;
     }

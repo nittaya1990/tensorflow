@@ -35,6 +35,7 @@ class DebugRound(object):
 
   def __init__(self, debug_sess, node, num_times=1, feed=None):
     """DebugRound constructor.
+
     This sets up the feeds but does not actually run through the evaluated
     subgraph. Instead, it breaks at the first node (_SOURCE).
 
@@ -42,6 +43,8 @@ class DebugRound(object):
       debug_sess: A tf.Session object of the "debug" type.
       node: Name of the graph node to execute (evaluate).
       num_times: Number of times to execute the node for (default: 1).
+      feed: feed_dict for the run. Same as the run feed_dict of normal
+        sessions.
 
     Raises:
       ValueError: If the supplied debug_sess does not have sess_str == "debug"
@@ -62,11 +65,11 @@ class DebugRound(object):
     self._sess = debug_sess
 
     # Start the debugger main thread
-    self._main_thr = self._startDebugMainThread(node, feed=feed)
+    self._main_thr = self._start_debug_main_thread(node, feed=feed)
 
     where_output = self._sess.debug("where")
-    self._node_order = where_output["completed_nodes"] + \
-                       where_output["remaining_nodes"]
+    self._node_order = (where_output["completed_nodes"] +
+                        where_output["remaining_nodes"])
 
     self._curr_node = self._node_order[0]
 
@@ -78,7 +81,16 @@ class DebugRound(object):
     # break_or_not = should_i_break(node_name, node_value)
     self._pred_breakpoints = {}
 
-  def _startDebugMainThread(self, node, feed=None):
+  def _start_debug_main_thread(self, node, feed=None):
+    """Start the main thread of the debug Session.
+
+    Args:
+      node: The evaluated node.
+      feed: feed_dict for the node evaluation.
+
+    Returns:
+      Thread object for the debug Session's run.
+    """
     def target_func():
       self._sess.run(node, feed_dict=feed)
 
@@ -108,6 +120,9 @@ class DebugRound(object):
 
     Returns:
       debugger output after the stepping
+
+    Raises:
+      ValueError: If the number of steps is invalid.
     """
     if num_steps == 1:
       output = self._sess.debug("step")
@@ -162,14 +177,14 @@ class DebugRound(object):
       node_just_completed = self._node_order[pos]
 
       # Break if this is a node breakpoint
-      if node_just_completed in self._node_breakpoints and \
-         node_just_completed != starting_node:
+      if (node_just_completed in self._node_breakpoints and
+          node_just_completed != starting_node):
         # If this cont() call starts from this breakpoint node, we will not
         # break here again.
         break
 
       # Break if a predicate breakpoint is met
-      if len(self._pred_breakpoints) > 0:
+      if self._pred_breakpoints:
         should_break = False
 
         node_val = self.inspect_value(node_just_completed)
@@ -205,6 +220,7 @@ class DebugRound(object):
 
   def is_complete(self):
     """Queries whether the debug round is completed.
+
     That is, whether all nodes in the executed subgraph have finished
       executing.
 
@@ -236,7 +252,6 @@ class DebugRound(object):
     """Inject a new Tensor value (numpy array) to the current node.
 
     Args:
-      node_name: name of the node.
       new_value: new Tensor value (numpy array)
     """
 
@@ -251,11 +266,12 @@ class DebugRound(object):
         the executed subgraph, or an exception will be raised.
 
     Returns:
-      A handle for the breakpoint. The handle can later be used with methods of
-        this class such as remove_breakpoint
+      A handle for the breakpoint. The handle can later be used with methods
+        of this class such as remove_breakpoint.
 
     Raises:
-      ValueError: If the input node_name is not present in the executed subgraph.
+      ValueError: If the input node_name is not present in the executed
+        subgraph.
     """
     # Verify that node_name is in the node order
     if node_name not in self._node_order:
@@ -276,16 +292,16 @@ class DebugRound(object):
 
     Args:
       node_name: Name of the node. This node has to exist in the executed
-        subgraph, and the node must not be the first node, or an exception will
-        be raised.
+        subgraph, and the node must not be the first node, or an exception
+        will be raised.
 
     Returns:
-      A handle for the breakpoint. The handle can later be used with methods of
-        this class such as remove_breakpoint
+      A handle for the breakpoint. The handle can later be used with methods
+        of this class such as remove_breakpoint
 
     Raises:
-      ValueError: If the input node_name is not present in the executed subgraph,
-        or if the node is the first node in the executed subgraph.
+      ValueError: If the input node_name is not present in the executed
+        subgraph, or if the node is the first node in the executed subgraph.
     """
 
     # Verify that node_name is in the node order
@@ -318,17 +334,19 @@ class DebugRound(object):
       ValueError: If predicate is not callable
     """
     # TODO(cais): Check for duplicate predicates? Is that possible?
-    # TODO(cais): Verify that the predicate has valid input and return signature.
+    # TODO(cais): Verify that the predicate has valid input and return
+    #             signature.
 
     # Verify that predicate is callable
     if not callable(predicate):
       raise ValueError("Input predicate is not callable")
 
-    # The handle for the predicate breakpoint is non-clashing a random hex string
+    # The handle for the predicate breakpoint is non-clashing a random hex
+    # string
     while True:
       handle = uuid.uuid4().hex
-      if handle not in self._node_breakpoints and \
-         handle not in self._pred_breakpoints:
+      if (handle not in self._node_breakpoints and
+          handle not in self._pred_breakpoints):
         break
 
     self._pred_breakpoints[handle] = predicate
