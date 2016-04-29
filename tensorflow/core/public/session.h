@@ -178,7 +178,6 @@ class Session {
   /// the `SessionOptions::target` field).
   virtual Status Close() = 0;
 
-  // tfdb(cais)
   virtual DebuggerResponse SendDebugMessage(const DebuggerRequest& request) {
     std::cerr << "ERROR: SendDebugMessage not supported for this session."
               << std::endl;

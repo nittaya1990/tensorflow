@@ -270,7 +270,6 @@ extern void TF_ExtendGraph(TF_Session*, const void* proto, size_t proto_len,
 
 typedef struct TF_DebuggerResponse TF_DebuggerResponse;
 
-// tfdb(cais)
 extern TF_DebuggerResponse* TF_SendDebugMessage(TF_Session* s,
                                                 const std::string& debug_msg,
                                                 TF_Tensor** input_tensors,

@@ -482,7 +482,6 @@ void TF_Run_Helper(TF_Session* s, const char* handle,
 
 extern "C" {
 
-// tfdb(cais)
 TF_DebuggerResponse* TF_SendDebugMessage(TF_Session* s,
                                          const std::string& debug_msg,
                                          TF_Tensor** input_tensors,
@@ -510,7 +509,6 @@ TF_DebuggerResponse* TF_SendDebugMessage(TF_Session* s,
   TF_DebuggerResponse* debugger_response_output =
       new TF_DebuggerResponse(debugger_response);
 
-  // tfdb(cais)
   // Assume length = 1
   for (size_t i = 0; i < 1; ++i) {
     output_tensors[i] = NULL;

@@ -436,7 +436,6 @@ Safe_PyObjectPtr make_safe(PyObject* o) {
   return Safe_PyObjectPtr(o, Py_DECREF_wrapper);
 }
 
-// tfdb(cais)
 void TF_Debug_wrapper(TF_Session* session,
                            const string& msg,
                            const FeedVector& inputs,
