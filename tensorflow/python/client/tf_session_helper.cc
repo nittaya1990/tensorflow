@@ -459,7 +459,8 @@ void TF_Debug_wrapper(TF_Session* session,
 
   for (size_t i = 0; i < inputs.size(); ++i) {
     PyArrayObject* array = inputs[i].second;
-    std::cout << "PyArrayObject* array = " << array << std::endl;
+    // DEBUG
+    // std::cout << "PyArrayObject* array = " << array << std::endl;
 
     // Convert numpy dtype to TensorFlow dtype.
     TF_DataType dtype = TF_FLOAT;
@@ -489,7 +490,8 @@ void TF_Debug_wrapper(TF_Session* session,
       // requirements for tensorflow::Tensor. We hard code this here to
       // avoid taking a dependency on Eigen in the client code.
       void* data = tensorflow::cpu_allocator()->AllocateRaw(32, size);
-      std::cout << "PyArrayObject* data = " << data << std::endl;
+      // DEBUG
+      // std::cout << "PyArrayObject* data = " << data << std::endl;
 
       std::memcpy(data, PyArray_DATA(array), size);
 
@@ -499,7 +501,8 @@ void TF_Debug_wrapper(TF_Session* session,
             tensorflow::cpu_allocator()->DeallocateRaw(data);
           },
           nullptr);
-      std::cout << "new_tensor = " << new_tensor << std::endl;
+      // DEBUG
+      // std::cout << "new_tensor = " << new_tensor << std::endl;
 
       inputs_safe.emplace_back(make_safe(new_tensor));
       // The destruction of the numpy array will now be handled by the

@@ -117,7 +117,8 @@ Status DebugExecutorImpl::Initialize() {
       params_.device->RequiresRecordingAccessedTensors();
 
   // tfdb(cais): Precompute node execution order
-  std::cout << "### Precomputing node execution order ###" << std::endl;
+  // DEBUG
+  // std::cout << "### Precomputing node execution order ###" << std::endl;
   node_order.clear();
 
   std::deque<string> node_queue;
@@ -126,7 +127,8 @@ Status DebugExecutorImpl::Initialize() {
 
   for (const Node* n : graph_->nodes()) {
     if (n->in_edges().size() == 0) {
-      std::cout << "Pushing to node_queue: " << n->name() << std::endl;
+      // DEBUG
+      // std::cout << "Pushing to node_queue: " << n->name() << std::endl;
       node_queue.push_back(n->name());
       visited_nodes.insert(n->name());
     }
@@ -137,7 +139,8 @@ Status DebugExecutorImpl::Initialize() {
     while (!node_queue.empty()) {
       const string processed_node = node_queue.front();
 
-      std::cout << "Popping from node_queue: " << processed_node << std::endl;
+      // DEBUG
+      // std::cout << "Popping from node_queue: " << processed_node << std::endl;
       node_queue.pop_front();
       node_order.push_back(processed_node);
       visited_nodes.insert(processed_node);
@@ -161,23 +164,24 @@ Status DebugExecutorImpl::Initialize() {
       }
 
       if (all_inputs_ready) {
-        std::cout << "Pushing to node_queue: " << n->name() << std::endl;
+        // DEBUG
+        // std::cout << "Pushing to node_queue: " << n->name() << std::endl;
         node_queue.push_back(n->name());
         visited_nodes.insert(n->name());
       }
     }
   }
 
-  std::cout << "Node order: [";
-  for (size_t i = 0; i < node_order.size(); ++i) {
-    std::cout << node_order[i];
-    if (i < node_order.size() - 1) {
-      std::cout << ", ";
-    }
-  }
-  std::cout << "]" << std::endl;
+  // std::cout << "Node order: [";
+  // for (size_t i = 0; i < node_order.size(); ++i) {
+  //   std::cout << node_order[i];
+  //   if (i < node_order.size() - 1) {
+  //     std::cout << ", ";
+  //   }
+  // }
+  // std::cout << "]" << std::endl;
 
-  std::cout << "### ~ Done precomputing node execution order ###" << std::endl;
+  // std::cout << "### ~ Done precomputing node execution order ###" << std::endl;
 
   // Preprocess every node in the graph to create an instance of op
   // kernel for each node;
@@ -311,8 +315,9 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
         } else if (node_ref_store.count(node_name) == 1) {
           const Tensor* node_ref = node_ref_store.at(node_name);
 
-          std::cout << "Found node \"" << node_name
-                    << " through stored reference: " << node_ref << std::endl;
+          // DEBUG
+          // std::cout << "Found node \"" << node_name
+          //           << " through stored reference: " << node_ref << std::endl;
 
           response.output_tensor = *node_ref;
           response.has_output_tensor = true;
@@ -338,8 +343,9 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
     }
 
     if (already_completed) {
-      std::cerr << "ERROR: Node \"" << node_name
-                << "\" is already completed" << std::endl;
+      // DEBUG
+      // std::cerr << "ERROR: Node \"" << node_name
+      //           << "\" is already completed" << std::endl;
     } else {
       size_t steps_to_go = 0;
       bool found_node = false;
@@ -353,8 +359,9 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
       }
 
       if (!found_node) {
-        std::cerr << "ERROR: Node \"" << node_name
-                  << "\" cannot be found" << std::endl;  // DEBUG
+        // DEBUG
+        // std::cerr << "ERROR: Node \"" << node_name
+        //           << "\" cannot be found" << std::endl;  // DEBUG
       } else {
         // std::cout << "Steps to go: " << steps_to_go << std::endl;
         debugger_notification->Notify(steps_to_go);
@@ -370,10 +377,10 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
     const string& node_name =
         debugger_request.command.substr(INJECT_VALUE_PREFIX.size());
 
-    std::cout << "inject_value to node \"" << node_name << "\": "
-              << debugger_request.input_tensor.DebugString()
-              << "; source address = " << &(debugger_request.input_tensor)
-              << std::endl;
+    // std::cout << "inject_value to node \"" << node_name << "\": "
+    //           << debugger_request.input_tensor.DebugString()
+    //           << "; source address = " << &(debugger_request.input_tensor)
+    //           << std::endl;
 
     if (!node_name.empty()) {
       executor_state->InjectNodeValue(debugger_request.input_tensor);
@@ -618,8 +625,8 @@ std::vector<string> DebugExecutorImpl::GetNotCompletedNodes() {
 void DebugExecutorState::RunAsync(Executor::DoneCallback done) {
   // tfdb(cais): Create new thread for debugging control: Keyboard for now
   const Graph* graph = impl_->graph_;
-  std::cout << "In RunAsync: graph->num_nodes() = "
-            << graph->num_nodes() << std::endl;  // DEBUG
+  // std::cout << "In RunAsync: graph->num_nodes() = "
+  //           << graph->num_nodes() << std::endl;  // DEBUG
 
   impl_->node_value_store.clear();
 
@@ -635,14 +642,14 @@ void DebugExecutorState::RunAsync(Executor::DoneCallback done) {
 
   // Initialize the ready queue.
   for (const Node* n : impl_->root_nodes_) {
-    std::cout << "Pushing root node " << n->name()
-              << " to ready queue" << std::endl;  // DEBUG
+    // std::cout << "Pushing root node " << n->name()
+    //           << " to ready queue" << std::endl;  // DEBUG
     DCHECK_EQ(n->in_edges().size(), 0);
     ready.push_back(TaggedNode{n, root_frame_, 0, false});
   }
 
   if (ready.empty()) {
-    std::cout << "Readu queue is empty()" << std::endl;  // DEBUG
+    // std::cout << "Ready queue is empty()" << std::endl;  // DEBUG
     done(Status::OK());
   } else {
     num_outstanding_ops_ = ready.size();
@@ -1136,20 +1143,20 @@ void DebugExecutorState::PropagateOutputs(const TaggedNode& tagged_node,
 
 // tfdb(cais)
 void DebugExecutorState::InjectNodeValue(Tensor value) {
-  std::cout << "=== In InjectNodeValue()" << std::endl
-            << "      Tensor address = " << &value << std::endl
-            << "      Tensor value = " << value.DebugString()
-            << std::endl
-            << "      stored_node->name() = " << stored_node->name()
-            << std::endl
-            << "      stored_output_frame->iteration_count = "
-            << stored_output_frame->iteration_count
-            << "; stored_output_frame->frame_name = "
-            << stored_output_frame->frame_name << std::endl
-            << "      stored_output_iter = " << stored_output_iter
-            << std::endl
-            << "      stored_outputs.size() = " << stored_outputs.size()
-            << std::endl;
+  // std::cout << "=== In InjectNodeValue()" << std::endl
+  //           << "      Tensor address = " << &value << std::endl
+  //           << "      Tensor value = " << value.DebugString()
+  //           << std::endl
+  //           << "      stored_node->name() = " << stored_node->name()
+  //           << std::endl
+  //           << "      stored_output_frame->iteration_count = "
+  //           << stored_output_frame->iteration_count
+  //           << "; stored_output_frame->frame_name = "
+  //           << stored_output_frame->frame_name << std::endl
+  //           << "      stored_output_iter = " << stored_output_iter
+  //           << std::endl
+  //           << "      stored_outputs.size() = " << stored_outputs.size()
+  //           << std::endl;
 
   const NodeItem* nodes = impl_->nodes_;
   IterationState* output_iter_state =
@@ -1159,7 +1166,7 @@ void DebugExecutorState::InjectNodeValue(Tensor value) {
     const Node* dst_node = e->dst();
     const int dst_id = dst_node->id();
     const int src_slot = e->src_output();
-    std::cout << "      src_slot = " << src_slot << std::endl;  // DEBUG
+    // std::cout << "      src_slot = " << src_slot << std::endl;  // DEBUG
 
     bool dst_need_input = !e->IsControlEdge();
 
@@ -1170,12 +1177,12 @@ void DebugExecutorState::InjectNodeValue(Tensor value) {
       int dst_loc = dst_item.input_start + dst_slot;
 
       if (stored_outputs[src_slot].ref != nullptr) {
-        std::cout << "      Calling operator= on original pointer: "
-                  << stored_outputs[src_slot].ref << " --> "
-                  << &value << std::endl;
+        // std::cout << "      Calling operator= on original pointer: "
+        //           << stored_outputs[src_slot].ref << " --> "
+        //           << &value << std::endl;
         *(stored_outputs[src_slot].ref) = value;
       } else {  // TODO(cais): Is this logic correct?
-        std::cout << "      Injecting values" << std::endl;
+        // std::cout << "      Injecting values" << std::endl;
         Entry injected_entry;
         injected_entry.val = value;
         injected_entry.ref = &value;
@@ -1287,8 +1294,8 @@ void DebugExecutorState::ActivateNode(const Node* node, const bool is_dead,
 
         impl_->node_value_store.insert({output_src_node_name, tensor_val_copy});
       } else if (outputs[src_slot].ref != nullptr) {
-        std::cout << "outputs[src_slot].ref = "
-                  << outputs[src_slot].ref << std::endl;  // DEBUG
+        // std::cout << "outputs[src_slot].ref = "
+        //           << outputs[src_slot].ref << std::endl;  // DEBUG
 
         impl_->node_ref_store.insert(
             {output_src_node_name, outputs[src_slot].ref});
@@ -2049,7 +2056,7 @@ Status DebugSession::Run(const RunOptions& run_options,
                           const std::vector<string>& target_nodes,
                           std::vector<Tensor>* outputs,
                           RunMetadata* run_metadata) {
-  std::cout << "In Run() 6-arg" << std::endl;  // DEBUG
+  // std::cout << "In Run() 6-arg" << std::endl;  // DEBUG
   {
     mutex_lock l(graph_def_lock_);
     if (!graph_created_) {
@@ -2084,7 +2091,7 @@ Status DebugSession::Run(const RunOptions& run_options,
 
   // Start parallel Executors.
   const int num_executors = executors_and_keys->items.size();
-  std::cout << "num_executors = " << num_executors << std::endl;  // DEBUG
+  // std::cout << "num_executors = " << num_executors << std::endl;  // DEBUG
   ExecutorBarrier* barrier = new ExecutorBarrier(
       num_executors, run_state.rendez, [&run_state](const Status& ret) {
         // std::cout << "In barrier StatusCallback" << std::endl;  // DEBUG
@@ -2208,9 +2215,9 @@ Status DebugSession::PRunSetup(const std::vector<string>& input_names,
 
   int executor_idx = 0;
   for (auto& item : executors_and_keys->items) {
-    std::cout << "Calling RunAsync() from PRunSetup(): executor "
-              << executor_idx++ << " / "
-              << num_executors << std::endl;  // DEBUG
+    // std::cout << "Calling RunAsync() from PRunSetup(): executor "
+    //           << executor_idx++ << " / "
+    //           << num_executors << std::endl;  // DEBUG
 
     DebugExecutorImpl* exec = item.executor;
     debug_executor = exec;
@@ -2475,13 +2482,13 @@ Status DebugSession::GetOrCreateExecutors(
   // The executor_lock_ is intentionally released while executor is
   // being created.
 
-  std::cout << "Calling CreateGraphs()" << std::endl;
+  // std::cout << "Calling CreateGraphs()" << std::endl;
   FunctionLibraryDefinition* fdefs;
   std::unordered_map<string, Graph*> graphs;
   Status s = CreateGraphs(inputs, outputs, target_nodes, &fdefs, &graphs,
                           run_state_args);
   TF_RETURN_IF_ERROR(s);
-  std::cout << "~ Done calling CreateGraphs()" << std::endl;
+  // std::cout << "~ Done calling CreateGraphs()" << std::endl;
 
   std::unique_ptr<DebugExecutorsAndKeys> ek(new DebugExecutorsAndKeys);
   ek->func_defs = fdefs;
@@ -2599,7 +2606,7 @@ Status DebugSession::GetOrCreateExecutors(
     return s;
   }
 
-  std::cout << "Computing rendezvous keys..." << std::endl;
+  // std::cout << "Computing rendezvous keys..." << std::endl;
   // Compute the rendezvous keys to avoid recomputing them every time.
   //
   // We always use the first device as the device name portion of the
@@ -2625,7 +2632,7 @@ Status DebugSession::GetOrCreateExecutors(
     *executors_and_keys = ek.release();
   }
 
-  std::cout << "~ Exiting GetOrCreateExecutors()" << std::endl;
+  // std::cout << "~ Exiting GetOrCreateExecutors()" << std::endl;
   return Status::OK();
 }
 

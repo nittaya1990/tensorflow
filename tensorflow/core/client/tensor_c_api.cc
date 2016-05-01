@@ -495,12 +495,12 @@ TF_DebuggerResponse* TF_SendDebugMessage(TF_Session* s,
     request.input_tensor =
       tensorflow::TensorCApi::MakeTensor(src->dtype, src->shape, src->buffer);
 
-    std::cout << "src = " << src << "; src->buffer = " << src->buffer
-              << "; src->buffer->data() = " << src->buffer->data()
-              << "; inject_value = " << request.input_tensor.DebugString()
-              << "; input tensor address = " << &(request.input_tensor)
-              << "; request.input_tensor address = " << &(request.input_tensor)
-              << std::endl;  // DEBUG
+    // std::cout << "src = " << src << "; src->buffer = " << src->buffer
+    //           << "; src->buffer->data() = " << src->buffer->data()
+    //           << "; inject_value = " << request.input_tensor.DebugString()
+    //           << "; input tensor address = " << &(request.input_tensor)
+    //           << "; request.input_tensor address = " << &(request.input_tensor)
+    //           << std::endl;  // DEBUG
   }
   // std::cout << "Calling SendDebugMessage()" << std::endl;  //DEBUG
 
