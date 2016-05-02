@@ -546,6 +546,7 @@ void TF_Debug_wrapper(TF_Session* session,
   const std::string is_completed_key_str = "is_completed";
   const std::string node_val_key_str = "node_value";
 
+#if PY_MAJOR_VERSION < 3
   PyObject* command_key =
       PyString_FromStringAndSize(command_key_str.c_str(),
                                  command_key_str.size());
@@ -561,12 +562,33 @@ void TF_Debug_wrapper(TF_Session* session,
   PyObject* node_val_key =
       PyString_FromStringAndSize(node_val_key_str.c_str(),
                                  node_val_key_str.size());
+#else
+  PyObject* command_key =
+      PyUnicode_FromStringAndSize(command_key_str.c_str(),
+                                  command_key_str.size());
+  PyObject* completed_nodes_key =
+      PyUnicode_FromStringAndSize(completed_nodes_key_str.c_str(),
+                                  completed_nodes_key_str.size());
+  PyObject* remaining_nodes_key =
+      PyUnicode_FromStringAndSize(remaining_nodes_key_str.c_str(),
+                                  remaining_nodes_key_str.size());
+  PyObject* is_completed_key =
+      PyUnicode_FromStringAndSize(is_completed_key_str.c_str(),
+                                  is_completed_key_str.size());
+  PyObject* node_val_key =
+      PyUnicode_FromStringAndSize(node_val_key_str.c_str(),
+                                  node_val_key_str.size());
+#endif
 
   // Create output dict
   PyObject* py_array = PyDict_New();
 
   PyDict_SetItem(py_array, command_key,
+#if PY_MAJOR_VERSION < 3
                  PyString_FromStringAndSize(command.c_str(), command.size()));
+#else
+                 PyUnicode_FromStringAndSize(command.c_str(), command.size()));
+#endif
   PyDict_SetItem(py_array, is_completed_key,
                  is_completed ? Py_True : Py_False);
 
@@ -581,13 +603,21 @@ void TF_Debug_wrapper(TF_Session* session,
 
     for (size_t j = 0; j < completed_nodes.size(); ++j) {
       PyList_SetItem(completed_nodes_list, j,
+#if PY_MAJOR_VERSION < 3
                      PyString_FromStringAndSize(completed_nodes[j].c_str(),
+#else
+                     PyUnicode_FromStringAndSize(completed_nodes[j].c_str(),
+#endif
                                                 completed_nodes[j].size()));
     }
 
     for (size_t j = 0; j < remaining_nodes.size(); ++j) {
       PyList_SetItem(remaining_nodes_list, j,
+#if PY_MAJOR_VERSION < 3
                      PyString_FromStringAndSize(remaining_nodes[j].c_str(),
+#else
+                     PyUnicode_FromStringAndSize(remaining_nodes[j].c_str(),
+#endif
                                                 remaining_nodes[j].size()));
     }
 

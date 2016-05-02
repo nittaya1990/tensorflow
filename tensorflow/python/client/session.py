@@ -140,6 +140,10 @@ class BaseSession(SessionInterface):
     if feed is None:
       feed = {}
 
+    # TODO(cais): Can this be removed?
+    if not isinstance(message, bytes):
+      message = message.encode("utf-8")
+
     output = tf_session.TF_Debug(self._session, message, feed)
     if isinstance(output, list):
       output = output[0]

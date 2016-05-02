@@ -72,6 +72,9 @@ class DebugRound(object):
                         where_output["remaining_nodes"])
 
     self._curr_node = self._node_order[0]
+    # TODO(cais): Remove this
+    if not isinstance(self._curr_node, bytes):
+      self._curr_node = self._curr_node.encode("utf-8")
 
     # Breakpoint states
     # Node name breakpoints. Elements are strings.
@@ -135,6 +138,9 @@ class DebugRound(object):
 
     # Determine just completed node (i.e., current node)
     self._curr_node = self._node_order[self.where()]
+    # TODO(cais): Remove this?
+    if not isinstance(self._curr_node, bytes):
+      self._curr_node = self._curr_node.encode("utf-8")
 
     return output
 
@@ -215,7 +221,7 @@ class DebugRound(object):
       A 0-based integer indicating the current node, i.e., the node that has
         just finished executing.
     """
-    curr_node = self._sess.debug("where")["completed_nodes"][-1]
+    curr_node = str(self._sess.debug("where")["completed_nodes"][-1])
     return self._node_order.index(curr_node)
 
   def is_complete(self):
@@ -255,7 +261,8 @@ class DebugRound(object):
       new_value: new Tensor value (numpy array)
     """
 
-    self._sess.debug("inject_value %s" % self._curr_node,
+    inject_cmd = "inject_value %s" % self._curr_node
+    self._sess.debug(inject_cmd,
                      feed={self._curr_node: new_value})
 
   def break_after(self, node_name):

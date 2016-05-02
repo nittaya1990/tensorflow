@@ -132,7 +132,6 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
         self.assertEquals(curr_pos == num_nodes - 1, is_complete)
 
         node_just_completed = node_order[node_idx]
-        print("Node just completed: %s" % node_just_completed)
 
         if is_complete:
           debug_round.step()
