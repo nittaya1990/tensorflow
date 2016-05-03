@@ -152,7 +152,7 @@ void DebugExecutorImpl::SimPropagateOutputs(const string& node_name,
   // Simulates both PropagateOutputs and ActivateNodes
 
   // DEBUG
-  std::cout << "- In SimPropagateOutputs: node_name = " << node_name << std::endl;
+  // std::cout << "- In SimPropagateOutputs: node_name = " << node_name << std::endl;
 
   ready_queue->clear();
 
@@ -174,18 +174,19 @@ void DebugExecutorImpl::SimPropagateOutputs(const string& node_name,
     }
 
     if (all_inputs_ready) {
-      std::cout << "out_edge: " << the_node->name() << " --> "
-                << dst_node->name()
-                << "; has " << dst_node->in_edges().size() << " input(s); "
-                << "all_inputs_ready = " << all_inputs_ready
-                << "; Pushing node " << dst_node->name() << " to ready_queue" << std::endl;  // DEBUG
+      // std::cout << "out_edge: " << the_node->name() << " --> "
+      //           << dst_node->name()
+      //           << "; has " << dst_node->in_edges().size() << " input(s); "
+      //           << "all_inputs_ready = " << all_inputs_ready
+      //           << "; Pushing node " << dst_node->name()
+      //           << " to ready_queue" << std::endl;  // DEBUG
       ready_queue->push_back(dst_node->name());
     } else {
-      std::cout << "out_edge: " << the_node->name() << " --> "
-                << dst_node->name()
-                << "; has " << dst_node->in_edges().size() << " input(s); "
-                << "all_inputs_ready = " << all_inputs_ready 
-                << "; Node not ready yet." << std::endl;  // DEBUG
+      // std::cout << "out_edge: " << the_node->name() << " --> "
+      //           << dst_node->name()
+      //           << "; has " << dst_node->in_edges().size() << " input(s); "
+      //           << "all_inputs_ready = " << all_inputs_ready 
+      //           << "; Node not ready yet." << std::endl;  // DEBUG
     }
 
     // getchar();
@@ -195,10 +196,11 @@ void DebugExecutorImpl::SimPropagateOutputs(const string& node_name,
 void DebugExecutorImpl::SimNodeDone(const string& node_name,
                                     const std::deque<string>& ready_queue,
                                     std::deque<string>* inline_ready_queue) {
-  std::cout << "In SimNodeDone: node_name = " << node_name << std::endl;  // DEBUG
+  // std::cout << "In SimNodeDone: node_name = " << node_name << std::endl;  // DEBUG
 
-  DebugPrintQueue("ready_queue", ready_queue);
-  DebugPrintQueue("inline_ready_queue", *inline_ready_queue);
+  // DEBUG
+  // DebugPrintQueue("ready_queue", ready_queue);
+  // DebugPrintQueue("inline_ready_queue", *inline_ready_queue);
 
   // getchar();
   SimScheduleReady(ready_queue, inline_ready_queue);
@@ -207,7 +209,7 @@ void DebugExecutorImpl::SimNodeDone(const string& node_name,
 void DebugExecutorImpl::SimScheduleReady(const std::deque<string>& ready_queue,
                                          std::deque<string>* inline_ready_queue) {
   if (ready_queue.empty()) {
-    std::cout << "return from SimScheduleReady()" << std::endl;  // DEBUG
+    // std::cout << "return from SimScheduleReady()" << std::endl;  // DEBUG
     return;
   }
 
@@ -221,8 +223,8 @@ void DebugExecutorImpl::SimScheduleReady(const std::deque<string>& ready_queue,
   for (const string& node_name : ready_queue) {
     bool kernel_is_expensive = NodeName2NodeKernelIsExpensive(node_name);
     // DEBUG
-    std::cout << "DEBUG SimScheduleReady: node_name = " << node_name
-              << "; kernel_is_expensive = " << kernel_is_expensive << std::endl;
+    // std::cout << "DEBUG SimScheduleReady: node_name = " << node_name
+    //           << "; kernel_is_expensive = " << kernel_is_expensive << std::endl;
 
     if (!kernel_is_expensive) { // Assume is_dead = false
       // std::cout << "SimScheduleReady: Pushing inexpensive node "
@@ -238,12 +240,12 @@ void DebugExecutorImpl::SimScheduleReady(const std::deque<string>& ready_queue,
 
   if (!curr_expensive_node.empty()) {
     if (inline_ready_queue->empty()) {
-      std::cout << "%% Tail recursion optimization: Pushing expensive node "
-                << curr_expensive_node << std::endl; // DEBUG
+      // std::cout << "%% Tail recursion optimization: Pushing expensive node "
+      //           << curr_expensive_node << std::endl; // DEBUG
       inline_ready_queue->push_back(curr_expensive_node);
     } else {
-      std::cout << "%% Calling runner_ SimProcess() C, node name = "
-                << curr_expensive_node << std::endl; // DEBUG
+      // std::cout << "%% Calling runner_ SimProcess() C, node name = "
+      //           << curr_expensive_node << std::endl; // DEBUG
       SimProcess(curr_expensive_node);
     }
   }
@@ -267,7 +269,7 @@ void DebugExecutorImpl::SimCalcNodeOrder() {
   }
 
   // DEBUG
-  std::cout << "Calling SimProcess with init_node = " << init_node << std::endl;
+  // std::cout << "Calling SimProcess with init_node = " << init_node << std::endl;
   // getchar();
 
   SimProcess(init_node);
@@ -365,8 +367,9 @@ Status DebugExecutorImpl::Initialize() {
         const string& input_node_name = edge->src()->name();
 
         if (n->name() != "_SINK" && input_node_name != "_SOURCE") {
-          std::cout << "Found control edge " << input_node_name
-                    << " --> " << n->name() << std::endl;
+          // DEBUG
+          // std::cout << "Found control edge " << input_node_name
+          //           << " --> " << n->name() << std::endl;
           found_nontrivial_control_edges = true;
         }
       }
@@ -411,17 +414,16 @@ Status DebugExecutorImpl::Initialize() {
     }
   }
 
-
   // DEBUG
-  std::cout << "found_nontrivial_control_edges = "
-            << found_nontrivial_control_edges << std::endl;
+  // std::cout << "found_nontrivial_control_edges = "
+  //           << found_nontrivial_control_edges << std::endl;
   // tfdb: Pre-calculate node order
   // TODO(cais): Unified approach to deal with control edges
-  if (found_nontrivial_control_edges) {
-    NonSimCalcNodeOrder();
-  } else {
+  // if (found_nontrivial_control_edges) {
+    // NonSimCalcNodeOrder();
+  // } else {
     SimCalcNodeOrder();
-  }
+  // }
 
 
   if (!s.ok()) return s;
