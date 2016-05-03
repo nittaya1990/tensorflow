@@ -119,6 +119,7 @@ class DebugExecutorImpl : public Executor {
   TF_DISALLOW_COPY_AND_ASSIGN(DebugExecutorImpl);
 
   std::deque<string> node_order;
+  std::unordered_set<string> done_nodes;
 
   std::shared_ptr<thread::ThreadPool> thread_pool_;
 
@@ -128,6 +129,23 @@ class DebugExecutorImpl : public Executor {
 
   // tfdb(cais)
   std::unordered_map<string, Tensor> injected_tensors;
+
+  // Simulation methods for calculating node order
+  void SimProcess(const string& node_name);
+  void SimPropagateOutputs(const string& node_name,
+                           std::deque<string>* ready);
+  void SimNodeDone(const string& node_name,
+                   const std::deque<string>& ready_queue,
+                   std::deque<string>* inline_ready_queue);
+  void SimScheduleReady(const std::deque<string>& ready_queue,
+                        std::deque<string>* inline_ready_queue);
+
+  void SimCalcNodeOrder();
+  void NonSimCalcNodeOrder();
+
+  const Node* NodeName2Node(const string& node_name);
+  bool NodeName2NodeKernelIsExpensive(const string& node_name);
+  
 };  // end class DebugExecutorImpl
 
 // The state associated with one invocation of DebugExecutorImpl::Run.

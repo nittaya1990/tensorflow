@@ -100,25 +100,182 @@ DebugExecutorImpl::~DebugExecutorImpl() {
   delete graph_;
 }
 
-Status DebugExecutorImpl::Initialize() {
-  const int num_nodes = graph_->num_node_ids();
-  delete[] nodes_;
-  nodes_ = new NodeItem[num_nodes];
+// Helper functions
+const Node* DebugExecutorImpl::NodeName2Node(const string& node_name) {
+  const Node* the_node = nullptr;
+  for (const Node* n : graph_->nodes()) {
+    if (n->name() == node_name) {
+      the_node = n;
+      break;
+    }
+  }
 
-  Status s;
-  total_input_tensors_ = 0;
-  total_output_tensors_ = 0;
+  return the_node;
+}
 
-  InitializePending(graph_, &initial_pending_counts_);
+bool DebugExecutorImpl::NodeName2NodeKernelIsExpensive(const string& node_name) {
+  const Node* the_node = NodeName2Node(node_name);
 
-  // Cache this value so we make this virtual function call once, rather
-  // that O(# steps * # nodes per step) times.
-  device_record_tensor_accesses_ =
-      params_.device->RequiresRecordingAccessedTensors();
+  return nodes_[the_node->id()].kernel_is_expensive;
+}
 
+// DEBUG helper function
+void DebugPrintQueue(const string& title, const std::deque<string>& queue) {
+  std::cout << title << ": [";
+  for (const string& item : queue) {
+    std::cout << item << ", ";
+  }
+
+  std::cout << "]" << std::endl;
+}
+
+// Simulation methods for calculating node order
+void DebugExecutorImpl::SimProcess(const string& node_name) {
+  std::deque<string> ready_queue;
+  std::deque<string> inline_ready_queue;
+
+  inline_ready_queue.push_back(node_name);
+  while (!inline_ready_queue.empty()) {
+    const string curr_node = inline_ready_queue.front();
+    inline_ready_queue.pop_front();
+    done_nodes.insert(curr_node);
+
+    SimPropagateOutputs(curr_node, &ready_queue);
+
+    node_order.push_back(curr_node);
+    // DebugPrintQueue("node_order", node_order);
+
+    SimNodeDone(curr_node, ready_queue, &inline_ready_queue);
+  }
+}
+
+void DebugExecutorImpl::SimPropagateOutputs(const string& node_name,
+                                            std::deque<string>* ready_queue) {
+  // Simulates both PropagateOutputs and ActivateNodes
+
+  // DEBUG
+  std::cout << "- In SimPropagateOutputs: node_name = " << node_name << std::endl;
+
+  ready_queue->clear();
+
+  const Node* the_node = NodeName2Node(node_name);
+
+  for (const Edge* e : the_node->out_edges()) {
+    const Node* dst_node = e->dst();
+
+    // Check if all the input nodes are satisfied
+    bool all_inputs_ready = true;
+    for (const Edge* edge : dst_node->in_edges()) {
+      const string& input_node_name = edge->src()->name();
+      // if (std::find(done_nodes.begin(), done_nodes.end(), input_node_name) ==
+      //     done_nodes.end()) {
+      if (done_nodes.count(input_node_name) == 0) {
+        all_inputs_ready = false;
+        break;
+      }
+    }
+
+    if (all_inputs_ready) {
+      std::cout << "out_edge: " << the_node->name() << " --> "
+                << dst_node->name()
+                << "; has " << dst_node->in_edges().size() << " input(s); "
+                << "all_inputs_ready = " << all_inputs_ready
+                << "; Pushing node " << dst_node->name() << " to ready_queue" << std::endl;  // DEBUG
+      ready_queue->push_back(dst_node->name());
+    } else {
+      std::cout << "out_edge: " << the_node->name() << " --> "
+                << dst_node->name()
+                << "; has " << dst_node->in_edges().size() << " input(s); "
+                << "all_inputs_ready = " << all_inputs_ready 
+                << "; Node not ready yet." << std::endl;  // DEBUG
+    }
+
+    // getchar();
+  }
+}
+
+void DebugExecutorImpl::SimNodeDone(const string& node_name,
+                                    const std::deque<string>& ready_queue,
+                                    std::deque<string>* inline_ready_queue) {
+  std::cout << "In SimNodeDone: node_name = " << node_name << std::endl;  // DEBUG
+
+  DebugPrintQueue("ready_queue", ready_queue);
+  DebugPrintQueue("inline_ready_queue", *inline_ready_queue);
+
+  // getchar();
+  SimScheduleReady(ready_queue, inline_ready_queue);
+}
+
+void DebugExecutorImpl::SimScheduleReady(const std::deque<string>& ready_queue,
+                                         std::deque<string>* inline_ready_queue) {
+  if (ready_queue.empty()) {
+    std::cout << "return from SimScheduleReady()" << std::endl;  // DEBUG
+    return;
+  }
+
+  if (inline_ready_queue == nullptr) {
+    // TODO(cais): Simulate
+    //     runner_(std::bind(&ME::Process, this, tagged_node, scheduled_usec));
+  }
+
+  string curr_expensive_node("");
+
+  for (const string& node_name : ready_queue) {
+    bool kernel_is_expensive = NodeName2NodeKernelIsExpensive(node_name);
+    // DEBUG
+    std::cout << "DEBUG SimScheduleReady: node_name = " << node_name
+              << "; kernel_is_expensive = " << kernel_is_expensive << std::endl;
+
+    if (!kernel_is_expensive) {
+      // std::cout << "SimScheduleReady: Pushing inexpensive node "
+                // << node_name << std::endl; // DEBUG
+      inline_ready_queue->push_back(node_name);
+    } else {
+      // TODO(cais): ME:Process Case B
+      curr_expensive_node = node_name;
+    }
+  }
+
+  if (!curr_expensive_node.empty()) {
+    if (inline_ready_queue->empty()) {
+      std::cout << "%% Tail recursion optimization: Pushing expensive node "
+                << curr_expensive_node << std::endl; // DEBUG
+      inline_ready_queue->push_back(curr_expensive_node);
+    } else {
+      std::cout << "%% Calling runner_ SimProcess() C, node name = "
+                << curr_expensive_node << std::endl; // DEBUG
+      SimProcess(curr_expensive_node);
+    }
+  }
+
+
+
+}
+
+void DebugExecutorImpl::SimCalcNodeOrder() {
   // tfdb(cais): Precompute node execution order
   // DEBUG
   // std::cout << "### Precomputing node execution order ###" << std::endl;
+  node_order.clear();
+
+  // Calculate node order through simulation methods
+  string init_node;
+  for (const Node* n : graph_->nodes()) {
+    if (n->in_edges().size() == 0) {
+      // DEBUG
+      init_node = n->name();
+      break;
+    }
+  }
+
+  // DEBUG
+  std::cout << "Calling SimProcess with init_node = " << init_node << std::endl;
+  // getchar();
+
+  SimProcess(init_node);
+}
+
+void DebugExecutorImpl::NonSimCalcNodeOrder() {
   node_order.clear();
 
   std::deque<string> node_queue;
@@ -135,33 +292,33 @@ Status DebugExecutorImpl::Initialize() {
   }
 
   while (!node_queue.empty()) {
-    // Pop all the ready nodes from the queue
-    while (!node_queue.empty()) {
-      const string processed_node = node_queue.front();
+  // Pop all the ready nodes from the queue
+  while (!node_queue.empty()) {
+    const string processed_node = node_queue.front();
 
-      // DEBUG
-      // std::cout << "Popping from node_queue: " << processed_node << std::endl;
-      node_queue.pop_front();
-      node_order.push_back(processed_node);
-      visited_nodes.insert(processed_node);
-      done_nodes.insert(processed_node);
+    // DEBUG
+    // std::cout << "Popping from node_queue: " << processed_node << std::endl;
+    node_queue.pop_front();
+    node_order.push_back(processed_node);
+    visited_nodes.insert(processed_node);
+    done_nodes.insert(processed_node);
+  }
+
+  for (const Node* n : graph_->nodes()) {
+    // Skip visited nodes
+    if (visited_nodes.count(n->name()) > 0) {
+      continue;
     }
 
-    for (const Node* n : graph_->nodes()) {
-      // Skip visited nodes
-      if (visited_nodes.count(n->name()) > 0) {
-        continue;
+    // Check if all the input nodes are satisfie
+    bool all_inputs_ready = true;
+    for (const Edge* edge : n->in_edges()) {
+      const string& input_node_name = edge->src()->name();
+      if (done_nodes.count(input_node_name) == 0) {
+        all_inputs_ready = false;
+        break;
       }
-
-      // Check if all the input nodes are satisfie
-      bool all_inputs_ready = true;
-      for (const Edge* edge : n->in_edges()) {
-        const string& input_node_name = edge->src()->name();
-        if (done_nodes.count(input_node_name) == 0) {
-          all_inputs_ready = false;
-          break;
-        }
-      }
+    }
 
       if (all_inputs_ready) {
         // DEBUG
@@ -171,17 +328,26 @@ Status DebugExecutorImpl::Initialize() {
       }
     }
   }
+}
 
-  // std::cout << "Node order: [";
-  // for (size_t i = 0; i < node_order.size(); ++i) {
-  //   std::cout << node_order[i];
-  //   if (i < node_order.size() - 1) {
-  //     std::cout << ", ";
-  //   }
-  // }
-  // std::cout << "]" << std::endl;
 
-  // std::cout << "### ~ Done precomputing node execution order ###" << std::endl;
+Status DebugExecutorImpl::Initialize() {
+  const int num_nodes = graph_->num_node_ids();
+  delete[] nodes_;
+  nodes_ = new NodeItem[num_nodes];
+
+  Status s;
+  total_input_tensors_ = 0;
+  total_output_tensors_ = 0;
+
+  InitializePending(graph_, &initial_pending_counts_);
+
+  // Cache this value so we make this virtual function call once, rather
+  // that O(# steps * # nodes per step) times.
+  device_record_tensor_accesses_ =
+      params_.device->RequiresRecordingAccessedTensors();
+
+  bool found_nontrivial_control_edges = false;
 
   // Preprocess every node in the graph to create an instance of op
   // kernel for each node;
@@ -192,6 +358,20 @@ Status DebugExecutorImpl::Initialize() {
     const int num_in_edges = n->in_edges().size();
     if (num_in_edges == 0) {
       root_nodes_.push_back(n);
+    }
+
+    // Determine if control edges exist
+    for (const Edge* edge : n->in_edges()) {
+      if (edge->IsControlEdge()) {
+        //DEBUG
+        const string& input_node_name = edge->src()->name();
+
+        if (n->name() != "_SINK" && input_node_name != "_SOURCE") {
+          std::cout << "Found control edge " << input_node_name
+                    << " --> " << n->name() << std::endl;
+          found_nontrivial_control_edges = true;
+        }
+      }
     }
 
     NodeItem* item = &nodes_[id];
@@ -232,6 +412,18 @@ Status DebugExecutorImpl::Initialize() {
       ++frame_input_count_[frame_name];
     }
   }
+
+  // DEBUG
+  std::cout << "found_nontrivial_control_edges = "
+            << found_nontrivial_control_edges << std::endl;
+  // tfdb: Pre-calculate node order
+  // TODO(cais): Unified approach to deal with control edges
+  if (found_nontrivial_control_edges) {
+    NonSimCalcNodeOrder();
+  } else {
+    SimCalcNodeOrder();
+  }
+
   if (!s.ok()) return s;
   return SetAllocAttrs();
 }
@@ -642,8 +834,8 @@ void DebugExecutorState::RunAsync(Executor::DoneCallback done) {
 
   // Initialize the ready queue.
   for (const Node* n : impl_->root_nodes_) {
-    // std::cout << "Pushing root node " << n->name()
-    //           << " to ready queue" << std::endl;  // DEBUG
+    std::cout << "Pushing root node " << n->name()
+              << " to ready queue" << std::endl;  // DEBUG
     DCHECK_EQ(n->in_edges().size(), 0);
     ready.push_back(TaggedNode{n, root_frame_, 0, false});
   }
@@ -924,11 +1116,18 @@ void DebugExecutorState::Process(TaggedNode tagged_node,
       }
       // Postprocess.
       completed = NodeDone(s, item.node, ready, stats, &inline_ready);
-    }
+      if (ready.empty() && inline_ready.empty()) {
+        // DEBUG
+        std::cout << "** Process(): ready and inline_ready are both empty" << std::endl;
+      }
+    }  // if (!launched_asynchronously) {
   }  // while !inline_ready.empty()
+
+  std::cout << "** Process(): Exited the while loop" << std::endl;
 
   // This thread of computation is done if completed = true.
   if (completed) Finish();
+  std::cout << "** Process(): DONE calling Finish()" << std::endl;
 }
 
 Status DebugExecutorState::PrepareInputs(
@@ -1416,24 +1615,27 @@ bool DebugExecutorState::NodeDone(const Status& s, const Node* node,
   // Schedule the ready nodes in 'ready'.
   if (s.ok()) {
     // DEBUG
-    // std::cout << "  NodeDone() calling ScheduleReady():" << std::endl;
-    // std::cout << "    ready.size() = " << ready.size() << ": [";
-    // for (const TaggedNode& t_node : ready) {
-    //   std::cout << t_node.node->name() << ", ";
-    // }
-    // std::cout << "]" << std::endl; // DEBUG
+    std::cout << "  NodeDone() calling ScheduleReady():" << std::endl;
+    std::cout << "    ready.size() = " << ready.size() << ": [";
+    for (const TaggedNode& t_node : ready) {
+      std::cout << t_node.node->name() << ", ";
+    }
+    std::cout << "]" << std::endl; // DEBUG
 
-    // std::cout << "    inline_ready->size() = "
-    //           << inline_ready->size() << ": [";
-    // for (TaggedNode& t_node : *inline_ready) {
-    //   std::cout << t_node.node->name() << ", ";
-    // }
-    // std::cout << "]" << std::endl; // DEBUG
+    std::cout << "    inline_ready->size() = "
+              << inline_ready->size() << ": [";
+    for (TaggedNode& t_node : *inline_ready) {
+      std::cout << t_node.node->name() << ", ";
+    }
+    std::cout << "]" << std::endl; // DEBUG
 
     // tfdb(cais): Wait to proceed
     impl_->debugger_notification->WaitForNotification();
 
     ScheduleReady(ready, inline_ready);
+    if (ready.empty() && inline_ready->empty()) {
+      std::cout << "** NodeDone(): ready and inline_ready are both empty" << std::endl;  // DEBUG
+    }
   }
   return completed;
 }
@@ -1447,12 +1649,18 @@ void DebugExecutorState::ProcessInline(
   }
   for (auto& tagged_node : inline_ready) {
     Process(tagged_node, scheduled_usec);
+    // DEBUG
+    std::cout << "** ProcessInline(): DONE calling Process()" << std::endl;
   }
 }
 
 void DebugExecutorState::ScheduleReady(const TaggedNodeSeq& ready,
                                   std::deque<TaggedNode>* inline_ready) {
-  if (ready.empty()) return;
+  if (ready.empty()) {
+    //DEBUG
+    std::cout << "** return from ScheduleReady" << std::endl;
+    return;
+  }
 
   int64 scheduled_usec = 0;
   if (stats_collector_) {
@@ -1465,9 +1673,10 @@ void DebugExecutorState::ScheduleReady(const TaggedNodeSeq& ready,
     // Schedule to run all the ready ops in thread pool.
     for (auto& tagged_node : ready) {
       // std::cout
-      //     << "Calling runner_ with Process() A (inline_ready = nullptr): "
+      //     << "Calling runner_ with Process() Case A (inline_ready = nullptr): "
       //     << "node: " << tagged_node.node->name() << std::endl; // DEBUG
       runner_(std::bind(&ME::Process, this, tagged_node, scheduled_usec));
+      std::cout << "** ME:Process returned Case A" << std::endl;  // DEBUG
     }
     return;
   }
@@ -1485,10 +1694,11 @@ void DebugExecutorState::ScheduleReady(const TaggedNodeSeq& ready,
       if (curr_expensive_node) {
         // Dispatch to another thread since there is plenty of work to
         // do for this thread.
-        // std::cout << "Calling runner_ with Process() B"
+        // std::cout << "Calling runner_ with Process() Case B"
         //           << std::endl; // DEBUG
         runner_(std::bind(&ME::Process, this, *curr_expensive_node,
                           scheduled_usec));
+        std::cout << "** ME:Process returned B" << std::endl;  // DEBUG
       }
       curr_expensive_node = &tagged_node;
     }
@@ -1502,9 +1712,10 @@ void DebugExecutorState::ScheduleReady(const TaggedNodeSeq& ready,
     } else {
       // There are inline nodes to run already. We dispatch this expensive
       // node to other thread.
-      // std::cout << "Calling runner_ with Process() C" << std::endl; // DEBUG
+      // std::cout << "Calling runner_ with Process() Case C" << std::endl; // DEBUG
       runner_(
           std::bind(&ME::Process, this, *curr_expensive_node, scheduled_usec));
+      std::cout << "** ME:Process returned B" << std::endl;  // DEBUG
     }
   }
 }

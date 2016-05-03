@@ -367,6 +367,7 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       debug_round = debugger.DebugRound(debug_sess, mt)
 
       node_order = debug_round.query_node_order()
+      print("node_order =", node_order)
       self.assertEquals(1, node_order.count("bfnbp_Mt"))
 
       # Insert a breakpoint before bfnbp_Mt
