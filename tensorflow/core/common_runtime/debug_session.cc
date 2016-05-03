@@ -226,12 +226,15 @@ void DebugExecutorImpl::SimScheduleReady(const std::deque<string>& ready_queue,
     std::cout << "DEBUG SimScheduleReady: node_name = " << node_name
               << "; kernel_is_expensive = " << kernel_is_expensive << std::endl;
 
-    if (!kernel_is_expensive) {
+    if (!kernel_is_expensive) { // Assume is_dead == false
       // std::cout << "SimScheduleReady: Pushing inexpensive node "
                 // << node_name << std::endl; // DEBUG
       inline_ready_queue->push_back(node_name);
     } else {
       // TODO(cais): ME:Process Case B
+      if (!curr_expensive_node.empty()) {
+        SimProcess(curr_expensive_node);
+      }
       curr_expensive_node = node_name;
     }
   }
@@ -1694,8 +1697,9 @@ void DebugExecutorState::ScheduleReady(const TaggedNodeSeq& ready,
       if (curr_expensive_node) {
         // Dispatch to another thread since there is plenty of work to
         // do for this thread.
-        // std::cout << "Calling runner_ with Process() Case B"
-        //           << std::endl; // DEBUG
+        std::cout << "** Calling runner_ with Process() Case B: "
+                  << "tagged_node.is_dead = " << tagged_node.is_dead
+                  << std::endl; // DEBUG
         runner_(std::bind(&ME::Process, this, *curr_expensive_node,
                           scheduled_usec));
         std::cout << "** ME:Process returned B" << std::endl;  // DEBUG
