@@ -283,10 +283,10 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       a0 = np.array([[10.0]]).astype(np.float32)
       b0 = np.array([[20.0]]).astype(np.float32)
 
-      a = variables.Variable(a0, name="vwi_A")
-      b = variables.Variable(b0, name="vwi_B")
+      a = variables.Variable(a0, name="vwi_a")
+      b = variables.Variable(b0, name="vwi_b")
 
-      aa = a.assign_add(b0)
+      aa = a.assign_add(b)
 
       # Initialize variables
       init_a = a.initializer
@@ -314,7 +314,7 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
         # value.
         def inject_a(_):
           return a0
-        injection = {"vwi_A": inject_a}
+        injection = {"vwi_a": inject_a}
 
         debug_round = debugger.DebugRound(debug_sess, aa)
         result = self._auto_step(debug_round, val_replace=injection)
@@ -489,6 +489,82 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
       # Finish the rest of the execution (if any)
       self._auto_step(debug_round)
+
+  def testMultipleNumTimes(self):
+    with session.Session("debug") as debug_sess:
+      a0 = np.array([[10.0]]).astype(np.float32)
+      b0 = np.array([[20.0]]).astype(np.float32)
+
+      a = variables.Variable(a0, name="mnt_a")
+      b = variables.Variable(b0, name="mnt_b")
+
+      aa = a.assign_add(b)
+
+      # Initialize variables
+      init_a = a.initializer
+      debug_round = debugger.DebugRound(debug_sess, init_a)
+      self._auto_step(debug_round, do_inspect=False)
+
+      init_b = b.initializer
+      debug_round = debugger.DebugRound(debug_sess, init_b)
+      self._auto_step(debug_round, do_inspect=False)
+
+      # Perform calculation
+      num_times = 2
+      debug_round = debugger.DebugRound(debug_sess, aa, num_times=num_times)
+
+      # Verify that the node_order consists of repetition prefixes
+      node_order = debug_round.query_node_order()
+      print(node_order)  # DEBUG
+      curr_rep_idx = 0
+      for node_name in node_order:
+        rep_idx = int(node_name.split("_")[0])
+        self.assertTrue(rep_idx >= 0 and rep_idx < num_times)
+
+        if rep_idx > curr_rep_idx:
+          self.assertEquals(1 + curr_rep_idx, rep_idx)
+          curr_rep_idx += 1
+        else:
+          self.assertEquals(curr_rep_idx, rep_idx)
+
+      self.assertEquals("0__SOURCE", node_order[0])
+      self.assertEquals("%d__SINK" % (num_times - 1), node_order[-1])
+
+      # Continuing to an indexed node (e.g., 0_mnt_b) should
+      # First make sure that the ordering is what we think it is
+      self.assertTrue(node_order.index("0_mnt_a") <
+                      node_order.index("0_mnt_b"))
+
+      debug_round.cont("0_mnt_a")
+      self.assertEquals("0_mnt_a", node_order[debug_round.where()])
+
+      # Continuing to a non-indexed node should work
+      debug_round.cont("mnt_b")
+      self.assertEquals("0_mnt_b", node_order[debug_round.where()])
+
+      # Attempt to continue to a node without rep prefix should lead to an
+      # exception
+      with self.assertRaisesRegexp(ValueError,
+                                   "has already finished executing"):
+        debug_round.cont("mnt_a")
+
+      # Continuing to prefixed node with a rep index different from the
+      # current one should work
+      debug_round.cont("1_mnt_b")
+      self.assertEquals("1_mnt_b", node_order[debug_round.where()])
+
+      # Continuing to a nonexistent repetition number should lead to an
+      # exception
+      with self.assertRaisesRegexp(ValueError,
+                                   "does not exist in the node order"):
+        debug_round.cont("123_mnt_a")
+
+      self._auto_step(debug_round)
+
+      # Examine the value after two runs
+      debug_round = debugger.DebugRound(debug_sess, a)
+      a_result = self._auto_step(debug_round)
+      self.assertAllClose(a0 + num_times * b0, a_result)
 
 
 if __name__ == "__main__":

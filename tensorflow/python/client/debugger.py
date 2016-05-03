@@ -23,6 +23,8 @@ import threading
 import time
 import uuid
 
+from six.moves import xrange  # pylint: disable=redefined-builtin
+
 
 class DebugRound(object):
   """Debug round class.
@@ -59,17 +61,33 @@ class DebugRound(object):
           "Failed attempt to create a DebugRound from a non-debug session "
           "object")
 
-    if num_times != 1:
-      raise ValueError("num_times > 1 has not been implemented yet")
+    if not num_times >= 1:
+      raise ValueError("Invalid value of num_times: %s" % repr(num_times))
+    self._num_times = int(num_times)
 
     self._sess = debug_sess
+    self._executed_node = node
+    self._feed = feed
 
     # Start the debugger main thread
-    self._main_thr = self._start_debug_main_thread(node, feed=feed)
+    self._main_thr = self._start_debug_main_thread(self._executed_node,
+                                                   feed=self._feed)
 
+    # Population _node_order
     where_output = self._sess.debug("where")
-    self._node_order = (where_output["completed_nodes"] +
-                        where_output["remaining_nodes"])
+    if self._num_times == 1:
+      self._node_order = (where_output["completed_nodes"] +
+                          where_output["remaining_nodes"])
+    else:
+      # Note that this works for deterministic orderigng only
+      node_order_norep = (where_output["completed_nodes"] +
+                          where_output["remaining_nodes"])
+      self._node_order = []
+      for rep in xrange(self._num_times):
+        self._node_order.extend(
+            ["%d_%s" % (rep, node_name) for node_name in node_order_norep])
+
+      self._rep_idx = 0  # Repetition index
 
     self._curr_node = self._node_order[0]
     # TODO(cais): Remove this
@@ -110,6 +128,10 @@ class DebugRound(object):
   def query_node_order(self):
     """Queries node order.
 
+    If num_times is 1, the node names are the same as in the graph. However,
+    if num_times > 1, the node names will be prefixed with a 0-based index,
+    such as "0__SOURCE", "1_transpose" and "3__SINK".
+
     Returns:
       A list containing the names of all nodes in the executed subgraph.
     """
@@ -138,6 +160,20 @@ class DebugRound(object):
 
     # Determine just completed node (i.e., current node)
     self._curr_node = self._node_order[self.where()]
+
+    # In case there are >1 repetitions, check if we have reached the
+    # end and if so, kick of a new debug Session run
+
+    if self._num_times > 1 and output["is_completed"]:
+      if self._rep_idx + 1 < self._num_times:
+        self._main_thr = self._start_debug_main_thread(self._executed_node,
+                                                       feed=self._feed)
+
+        print("Repetition %d/%d has completed! Starting repetition %d/%d" %
+              (self._rep_idx, self._num_times,
+               self._rep_idx + 1, self._num_times))
+        self._rep_idx += 1
+
     # TODO(cais): Remove this?
     if not isinstance(self._curr_node, bytes):
       self._curr_node = self._curr_node.encode("utf-8")
@@ -151,6 +187,12 @@ class DebugRound(object):
       node_name: Name of the node to try to reach (in the absence of
         breakpoints). If no node name is provided, will try to continue to the
         end.
+        In the case of multiple-repetition (num_times > 1) executions, the
+        node_name can start with a 0-based repetition prefix, e.g., "0_".
+        The repetition prefix may be omitted, in which case the debugger will
+        automatically append the prefix for the current repetition to the node
+        name. This can cause an exception if the node for the current
+        repetition has already finished executing.
 
     Returns:
       debugger output after the stepping
@@ -166,10 +208,25 @@ class DebugRound(object):
       # If no node name is specified, try to continue to the end.
       node_name = self._node_order[-1]
 
+    # If this is a multi-repetition run, check the repetition prefix in the
+    # node name.
+    if self._num_times > 1:
+      valid_prefix = True
+      try:
+        node_rep_idx = int(node_name.split("_")[0])
+        if node_rep_idx < 0 or node_rep_idx >= self._num_times:
+          valid_prefix = False
+      except ValueError:
+        valid_prefix = False
+
+      if not valid_prefix:
+        rep_prefix = "%d_" % self._rep_idx
+        node_name = rep_prefix + node_name
+
     # Verify that node_name is in the node order list
     if self._node_order.count(node_name) == 0:
-      raise ValueError("Node named '%s' does not exist in the node order list "
-                       "of this debug round" % node_name)
+      raise ValueError("Node named '%s' does not exist in the node order "
+                       "list of this debug round" % node_name)
 
     # Verify that the node has not completd yet
     node_idx = self._node_order.index(node_name)
@@ -222,6 +279,9 @@ class DebugRound(object):
         just finished executing.
     """
     curr_node = str(self._sess.debug("where")["completed_nodes"][-1])
+    if self._num_times > 1:
+      curr_node = "%d_%s" % (self._rep_idx, curr_node)
+
     return self._node_order.index(curr_node)
 
   def is_complete(self):
@@ -246,6 +306,12 @@ class DebugRound(object):
         executing.
     None if the node doesn't exist or has not finished executing.
     """
+
+    if self._num_times > 1:
+      prefix = "%d_" % self._rep_idx
+      if node_name.startswith(prefix):
+        node_name = node_name[len(prefix):]
+
     output = self._sess.debug("print %s" % node_name)
     node_value = output["node_value"]
 
