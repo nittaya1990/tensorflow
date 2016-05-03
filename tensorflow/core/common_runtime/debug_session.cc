@@ -224,12 +224,14 @@ void DebugExecutorImpl::SimScheduleReady(const std::deque<string>& ready_queue,
     std::cout << "DEBUG SimScheduleReady: node_name = " << node_name
               << "; kernel_is_expensive = " << kernel_is_expensive << std::endl;
 
-    if (!kernel_is_expensive) {
+    if (!kernel_is_expensive) { // Assume is_dead = false
       // std::cout << "SimScheduleReady: Pushing inexpensive node "
                 // << node_name << std::endl; // DEBUG
       inline_ready_queue->push_back(node_name);
     } else {
-      // TODO(cais): ME:Process Case B
+      if (!curr_expensive_node.empty()) {
+        SimProcess(curr_expensive_node);
+      }
       curr_expensive_node = node_name;
     }
   }
@@ -342,74 +344,7 @@ Status DebugExecutorImpl::Initialize() {
   // that O(# steps * # nodes per step) times.
   device_record_tensor_accesses_ =
       params_.device->RequiresRecordingAccessedTensors();
-
-  // tfdb(cais): Precompute node execution order
-  // DEBUG
-  // std::cout << "### Precomputing node execution order ###" << std::endl;
-  node_order.clear();
-
-  std::deque<string> node_queue;
-  std::unordered_set<string> visited_nodes;
-  std::unordered_set<string> done_nodes;
-
-  for (const Node* n : graph_->nodes()) {
-    if (n->in_edges().size() == 0) {
-      // DEBUG
-      // std::cout << "Pushing to node_queue: " << n->name() << std::endl;
-      node_queue.push_back(n->name());
-      visited_nodes.insert(n->name());
-    }
-  }
-
-  while (!node_queue.empty()) {
-    // Pop all the ready nodes from the queue
-    while (!node_queue.empty()) {
-      const string processed_node = node_queue.front();
-
-      // DEBUG
-      // std::cout << "Popping from node_queue: " << processed_node << std::endl;
-      node_queue.pop_front();
-      node_order.push_back(processed_node);
-      visited_nodes.insert(processed_node);
-      done_nodes.insert(processed_node);
-    }
-
-    for (const Node* n : graph_->nodes()) {
-      // Skip visited nodes
-      if (visited_nodes.count(n->name()) > 0) {
-        continue;
-      }
-
-      // Check if all the input nodes are satisfie
-      bool all_inputs_ready = true;
-      for (const Edge* edge : n->in_edges()) {
-        const string& input_node_name = edge->src()->name();
-        if (done_nodes.count(input_node_name) == 0) {
-          all_inputs_ready = false;
-          break;
-        }
-      }
-
-      if (all_inputs_ready) {
-        // DEBUG
-        // std::cout << "Pushing to node_queue: " << n->name() << std::endl;
-        node_queue.push_back(n->name());
-        visited_nodes.insert(n->name());
-      }
-    }
-  }
-
-  // std::cout << "Node order: [";
-  // for (size_t i = 0; i < node_order.size(); ++i) {
-  //   std::cout << node_order[i];
-  //   if (i < node_order.size() - 1) {
-  //     std::cout << ", ";
-  //   }
-  // }
-  // std::cout << "]" << std::endl;
-
-  // std::cout << "### ~ Done precomputing node execution order ###" << std::endl;
-
+  
   bool found_nontrivial_control_edges = false;
 
   // Preprocess every node in the graph to create an instance of op
@@ -480,6 +415,13 @@ Status DebugExecutorImpl::Initialize() {
   // DEBUG
   std::cout << "found_nontrivial_control_edges = "
             << found_nontrivial_control_edges << std::endl;
+  // tfdb: Pre-calculate node order
+  // TODO(cais): Unified approach to deal with control edges
+  if (found_nontrivial_control_edges) {
+    NonSimCalcNodeOrder();
+  } else {
+    SimCalcNodeOrder();
+  }
 
 
   if (!s.ok()) return s;
