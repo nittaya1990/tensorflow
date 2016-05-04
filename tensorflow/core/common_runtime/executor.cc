@@ -65,10 +65,7 @@ static const Tensor* const kEmptyTensor = new Tensor;
 class ExecutorImpl : public Executor {
  public:
   ExecutorImpl(const LocalExecutorParams& p, const Graph* g)
-      : params_(p), graph_(g), initial_pending_counts_(graph_->num_node_ids()) {
-    CHECK(p.create_kernel != nullptr);
-    CHECK(p.delete_kernel != nullptr);
-  }
+      : Executor(p, g) {}
 
   ~ExecutorImpl() override {
     for (int i = 0; i < graph_->num_node_ids(); i++) {
@@ -101,26 +98,7 @@ class ExecutorImpl : public Executor {
 
   static void InitializePending(const Graph* graph, PendingCounts* counts);
 
-  // Owned.
-  LocalExecutorParams params_;
-  const Graph* graph_;
-  NodeItem* nodes_ = nullptr;     // array of size "graph_.num_node_ids()"
-  int total_input_tensors_ = 0;   // == sum(nodes_[*].num_inputs())
-  int total_output_tensors_ = 0;  // == sum(nodes_[*].num_outputs())
-
-  // A cached value of params_
-  bool device_record_tensor_accesses_ = false;
-
-  // Root nodes (with no in edges) that should form the initial ready queue
-  std::vector<const Node*> root_nodes_;
-
-  PendingCounts initial_pending_counts_;
-
-  // The number of inputs for each frame in this graph. This is static
-  // information of the graph.
-  std::unordered_map<string, int> frame_input_count_;
-
-  std::vector<AllocatorAttributes> output_attrs_;
+  // TODO(cais): Remove line
 
   TF_DISALLOW_COPY_AND_ASSIGN(ExecutorImpl);
 };

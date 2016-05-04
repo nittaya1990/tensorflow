@@ -17,6 +17,7 @@ limitations under the License.
 #define TENSORFLOW_COMMON_RUNTIME_EXECUTOR_H_
 
 #include "tensorflow/core/common_runtime/device.h"
+#include "tensorflow/core/common_runtime/pending_counts.h"
 #include "tensorflow/core/framework/rendezvous.h"
 #include "tensorflow/core/framework/session_state.h"
 #include "tensorflow/core/framework/tensor.h"
@@ -149,6 +150,64 @@ void SetReferencedTensors(NodeExecStats* nt,
 
 class StepStatsCollector;
 
+// Creates an Executor that computes the given "graph".
+//
+// If successful, returns the constructed executor in "*executor". The
+// caller keeps the ownership of "device". The returned executor takes
+// the ownership of "graph". Otherwise, returns an error status.
+//
+// "params" provides a set of context for the executor. We expect that
+// different context would provide different implementations.
+struct LocalExecutorParams {
+  Device* device;
+
+  // The library runtime support.
+  FunctionLibraryRuntime* function_library;
+
+  // create_kernel returns an instance of op kernel based on NodeDef.
+  // delete_kernel is called for every kernel used by the executor
+  // when the executor is deleted.
+  std::function<Status(const NodeDef&, OpKernel**)> create_kernel;
+  std::function<void(OpKernel*)> delete_kernel;
+};
+
+struct NodeItem {
+  // A graph node.
+  const Node* node = nullptr;
+
+  // The kernel for this node.
+  OpKernel* kernel = nullptr;
+
+  bool kernel_is_expensive = false;  // True iff kernel->IsExpensive()
+  bool kernel_is_async = false;      // True iff kernel->AsAsync() != nullptr
+  bool is_merge = false;             // True iff IsMerge(node)
+
+  // Cached values of node->num_inputs() and node->num_outputs(), to
+  // avoid levels of indirection.
+  int num_inputs;
+  int num_outputs;
+
+  // ExecutorImpl::tensors_[input_start] is the 1st positional input
+  // for this node.
+  int input_start = 0;
+
+  // ExecutorImpl::output_attrs_[output_attr_start] is the 1st
+  // positional attribute for the 0th output of this node.
+  int output_attr_start = 0;
+
+  DataType input_type(int i) const {
+    DCHECK_LT(i, num_inputs);
+    return (i < 4) ? inlined_input_type[i] : node->input_type(i);
+  }
+  DataType output_type(int i) const {
+    DCHECK_LT(i, num_outputs);
+    return (i < 4) ? inlined_output_type[i] : node->output_type(i);
+  }
+  // Cache first 4 input and output types to reduce levels of indirection
+  DataType inlined_input_type[4];
+  DataType inlined_output_type[4];
+};
+
 // Executor runs a graph computation.
 // Example:
 //   Graph* graph = ...;
@@ -226,28 +285,38 @@ class Executor {
     n.WaitForNotification();
     return ret;
   }
+
+  // Owned
+  const Graph* graph_;  // TODO(cais): Make protected or private
+
+ protected:
+  Executor(const LocalExecutorParams& p, const Graph* g)
+      : graph_(g), params_(p), initial_pending_counts_(graph_->num_node_ids())  {
+    CHECK(p.create_kernel != nullptr);
+    CHECK(p.delete_kernel != nullptr);
+  }
+
+  // Owned.
+  LocalExecutorParams params_;
+  NodeItem* nodes_ = nullptr;     // array of size "graph_.num_node_ids()"
+  int total_input_tensors_ = 0;   // == sum(nodes_[*].num_inputs())
+  int total_output_tensors_ = 0;  // == sum(nodes_[*].num_outputs())
+
+  // A cached value of params_
+  bool device_record_tensor_accesses_ = false;
+
+  // Root nodes (with no in edges) that should form the initial ready queue
+  std::vector<const Node*> root_nodes_;
+
+  PendingCounts initial_pending_counts_;
+
+  // The number of inputs for each frame in this graph. This is static
+  // information of the graph.
+  std::unordered_map<string, int> frame_input_count_;
+
+  std::vector<AllocatorAttributes> output_attrs_;
 };
 
-// Creates an Executor that computes the given "graph".
-//
-// If successful, returns the constructed executor in "*executor". The
-// caller keeps the ownership of "device". The returned executor takes
-// the ownership of "graph". Otherwise, returns an error status.
-//
-// "params" provides a set of context for the executor. We expect that
-// different context would provide different implementations.
-struct LocalExecutorParams {
-  Device* device;
-
-  // The library runtime support.
-  FunctionLibraryRuntime* function_library;
-
-  // create_kernel returns an instance of op kernel based on NodeDef.
-  // delete_kernel is called for every kernel used by the executor
-  // when the executor is deleted.
-  std::function<Status(const NodeDef&, OpKernel**)> create_kernel;
-  std::function<void(OpKernel*)> delete_kernel;
-};
 ::tensorflow::Status NewLocalExecutor(const LocalExecutorParams& params,
                                       const Graph* graph, Executor** executor);
 
@@ -339,43 +408,6 @@ Status CreateNonCachedKernel(Device* device, FunctionLibraryRuntime* flib,
 
 // Deletes "kernel" returned by CreateKernel.
 void DeleteNonCachedKernel(OpKernel* kernel);
-
-struct NodeItem {
-  // A graph node.
-  const Node* node = nullptr;
-
-  // The kernel for this node.
-  OpKernel* kernel = nullptr;
-
-  bool kernel_is_expensive = false;  // True iff kernel->IsExpensive()
-  bool kernel_is_async = false;      // True iff kernel->AsAsync() != nullptr
-  bool is_merge = false;             // True iff IsMerge(node)
-
-  // Cached values of node->num_inputs() and node->num_outputs(), to
-  // avoid levels of indirection.
-  int num_inputs;
-  int num_outputs;
-
-  // ExecutorImpl::tensors_[input_start] is the 1st positional input
-  // for this node.
-  int input_start = 0;
-
-  // ExecutorImpl::output_attrs_[output_attr_start] is the 1st
-  // positional attribute for the 0th output of this node.
-  int output_attr_start = 0;
-
-  DataType input_type(int i) const {
-    DCHECK_LT(i, num_inputs);
-    return (i < 4) ? inlined_input_type[i] : node->input_type(i);
-  }
-  DataType output_type(int i) const {
-    DCHECK_LT(i, num_outputs);
-    return (i < 4) ? inlined_output_type[i] : node->output_type(i);
-  }
-  // Cache first 4 input and output types to reduce levels of indirection
-  DataType inlined_input_type[4];
-  DataType inlined_output_type[4];
-};
 
 typedef gtl::InlinedVector<TensorValue, 4> TensorValueVec;
 typedef gtl::InlinedVector<DeviceContext*, 4> DeviceContextVec;

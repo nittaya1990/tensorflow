@@ -82,12 +82,9 @@ namespace tensorflow {
 
 DebugExecutorImpl::DebugExecutorImpl(const LocalExecutorParams& p,
                                      const Graph* g)
-    : debugger_notification(), node_value_store(), node_ref_store(),
-      params_(p), graph_(g), initial_pending_counts_(graph_->num_node_ids()),
+    : Executor(p, g),
+      debugger_notification(), node_value_store(), node_ref_store(),
       thread_pool_(), break_at_node(), injected_tensors() {
-  CHECK(p.create_kernel != nullptr);
-  CHECK(p.delete_kernel != nullptr);
-
   debugger_notification.reset(new MultiUseNotification());
   thread_pool_.reset(new thread::ThreadPool(Env::Default(), "Debugger", 1));
 }
@@ -816,7 +813,7 @@ std::vector<string> DebugExecutorImpl::GetNotCompletedNodes() {
   return not_completed_nodes;
 }
 
-void DebugExecutorState::RunAsync(Executor::DoneCallback done) {
+void DebugExecutorState::RunAsync(DebugExecutorImpl::DoneCallback done) {
   // tfdb(cais): Create new thread for debugging control: Keyboard for now
   const Graph* graph = impl_->graph_;
   // std::cout << "In RunAsync: graph->num_nodes() = "
@@ -2269,7 +2266,7 @@ Status DebugSession::Run(const RunOptions& run_options,
 
   // std::cout << "Calling GetOrCreateExecutors()" << std::endl; // DEBUG
   // Check if we already have an executor for these arguments.
-  DebugExecutorsAndKeys* executors_and_keys;
+  ExecutorsAndKeys* executors_and_keys;
   RunStateArgs run_state_args;
   TF_RETURN_IF_ERROR(GetOrCreateExecutors(input_tensor_names, output_names,
                                           target_nodes, &executors_and_keys,
@@ -2357,7 +2354,7 @@ Status DebugSession::PRunSetup(const std::vector<string>& input_names,
   }
 
   // Check if we already have an executor for these arguments.
-  DebugExecutorsAndKeys* executors_and_keys;
+  ExecutorsAndKeys* executors_and_keys;
   RunStateArgs run_state_args;
   run_state_args.is_partial_run = true;
   Status s = GetOrCreateExecutors(input_names, output_names, target_nodes,
@@ -2413,7 +2410,7 @@ Status DebugSession::PRunSetup(const std::vector<string>& input_names,
     //           << executor_idx++ << " / "
     //           << num_executors << std::endl;  // DEBUG
 
-    DebugExecutorImpl* exec = item.executor;
+    Executor* exec = item.executor;
     debug_executor = exec;
 
     exec->RunAsync(args, barrier->Get());
@@ -2429,7 +2426,7 @@ Status DebugSession::PRun(const string& handle, const NamedTensorList& inputs,
   std::vector<string> parts = str_util::Split(handle, ';');
   const string& key = parts[0];
   // Get the executors for this partial run.
-  DebugExecutorsAndKeys* executors_and_keys;
+  ExecutorsAndKeys* executors_and_keys;
   RunState* run_state;
   {
     mutex_lock l(executor_lock_);  // could use reader lock
@@ -2510,7 +2507,7 @@ Status DebugSession::PRun(const string& handle, const NamedTensorList& inputs,
 
 Status DebugSession::SendInputs(
     const NamedTensorList& inputs,
-    const DebugExecutorsAndKeys* executors_and_keys,
+    const ExecutorsAndKeys* executors_and_keys,
     IntraProcessRendezvous* rendez) {
   Status s;
   // Insert the input tensors into the local rendezvous by their
@@ -2533,7 +2530,7 @@ Status DebugSession::SendInputs(
 
 Status DebugSession::RecvOutputs(
     const std::vector<string>& output_names,
-    const DebugExecutorsAndKeys* executors_and_keys,
+    const ExecutorsAndKeys* executors_and_keys,
     RunState* run_state,
     std::vector<Tensor>* outputs) {
   Status s;
@@ -2577,7 +2574,7 @@ Status DebugSession::RecvOutputs(
 Status DebugSession::CheckFetch(
     const NamedTensorList& feeds,
     const std::vector<string>& fetches,
-    const DebugExecutorsAndKeys* executors_and_keys,
+    const ExecutorsAndKeys* executors_and_keys,
     const RunState* run_state) {
   const Graph* graph = executors_and_keys->graph;
   const NameNodeMap* name_to_node = executors_and_keys->name_to_node;
@@ -2638,7 +2635,7 @@ Status DebugSession::GetOrCreateExecutors(
     gtl::ArraySlice<string> inputs,
     gtl::ArraySlice<string> outputs,
     gtl::ArraySlice<string> target_nodes,
-    DebugExecutorsAndKeys** executors_and_keys,
+    ExecutorsAndKeys** executors_and_keys,
     RunStateArgs* run_state_args) {
   // Sort the inputs and outputs, so we don't create separate
   // executors when a user passes in the same inputs/outputs in
@@ -2684,7 +2681,7 @@ Status DebugSession::GetOrCreateExecutors(
   TF_RETURN_IF_ERROR(s);
   // std::cout << "~ Done calling CreateGraphs()" << std::endl;
 
-  std::unique_ptr<DebugExecutorsAndKeys> ek(new DebugExecutorsAndKeys);
+  std::unique_ptr<ExecutorsAndKeys> ek(new ExecutorsAndKeys);
   ek->func_defs = fdefs;
   if (run_state_args->is_partial_run) {
     ek->graph = run_state_args->graph;
@@ -2785,6 +2782,7 @@ Status DebugSession::GetOrCreateExecutors(
     //                              Executor** executor) {
     DebugExecutorImpl* impl = new DebugExecutorImpl(params, partition_graph);
     s = impl->Initialize();
+
     if (s.ok()) {
       *(&item->executor) = impl;
     } else {
@@ -2992,7 +2990,9 @@ Status DebugSession::CreateGraphs(gtl::ArraySlice<string> feeds,
     mutex_lock l(debug_lock_);
 
     if (debug_executor != nullptr) {
-      return debug_executor->HandleDebuggerMessage(request);
+      DebugExecutorImpl* debug_exec_impl
+          = reinterpret_cast<DebugExecutorImpl*>(debug_executor);
+      return debug_exec_impl->HandleDebuggerMessage(request);
     } else {
       return DebuggerResponse();    // TODO(cais): Throw proper exception.
     }

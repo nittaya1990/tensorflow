@@ -95,26 +95,7 @@ class DebugExecutorImpl : public Executor {
   std::vector<string> GetCompletedNodes();
   std::vector<string> GetNotCompletedNodes();
 
-  // Owned.
-  LocalExecutorParams params_;
-  const Graph* graph_;
-  NodeItem* nodes_ = nullptr;     // array of size "graph_.num_node_ids()"
-  int total_input_tensors_ = 0;   // == sum(nodes_[*].num_inputs())
-  int total_output_tensors_ = 0;  // == sum(nodes_[*].num_outputs())
-
-  // A cached value of params_
-  bool device_record_tensor_accesses_ = false;
-
-  // Root nodes (with no in edges) that should form the initial ready queue
-  std::vector<const Node*> root_nodes_;
-
-  PendingCounts initial_pending_counts_;
-
-  // The number of inputs for each frame in this graph. This is static
-  // information of the graph.
-  std::unordered_map<string, int> frame_input_count_;
-
-  std::vector<AllocatorAttributes> output_attrs_;
+  // TODO(cais): Remove line
 
   TF_DISALLOW_COPY_AND_ASSIGN(DebugExecutorImpl);
 
@@ -151,10 +132,10 @@ class DebugExecutorImpl : public Executor {
 // track of how many predecessors of a node have not done (pending_).
 class DebugExecutorState {
  public:
-  DebugExecutorState(const Executor::Args& args, DebugExecutorImpl* impl);
+  DebugExecutorState(const DebugExecutorImpl::Args& args, DebugExecutorImpl* impl);
   ~DebugExecutorState();
 
-  void RunAsync(Executor::DoneCallback done);
+  void RunAsync(DebugExecutorImpl::DoneCallback done);
 
   // tfdb(cais)
   void InjectNodeValue(Tensor value);
@@ -358,7 +339,7 @@ class DebugExecutorState {
   FunctionCallFrame* call_frame_;
   DebugExecutorImpl* impl_;
   CancellationManager* cancellation_manager_;
-  Executor::Args::Runner runner_;
+  DebugExecutorImpl::Args::Runner runner_;
 
   // Owned.
 
@@ -373,7 +354,7 @@ class DebugExecutorState {
   FrameState* root_frame_;
 
   // Invoked when the execution finishes.
-  Executor::DoneCallback done_cb_;
+  DebugExecutorImpl::DoneCallback done_cb_;
 
   std::atomic_int_fast32_t num_outstanding_ops_;
 
@@ -563,16 +544,16 @@ class DebugSession : public Session {
   typedef DebugSession ME;
 
   // tfdb(cais)
-  DebugExecutorImpl* debug_executor;
+  Executor* debug_executor;
 
   // We create one executor and its dependent library runtime for
   // every partition.
-  struct PerPartitionDebugExecutorsAndLib {
-    DebugExecutorImpl* executor = nullptr;
+  struct PerPartitionExecutorsAndLib {
+    Executor* executor = nullptr;
     FunctionLibraryRuntime* flib = nullptr;
   };
 
-  // An DebugExecutorsAndKeys is created for a given set of feeds/fetches.
+  // An ExecutorsAndKeys is created for a given set of feeds/fetches.
   // 'func_defs' are the function definition used by all the
   // underlying executors. 'graph' is the entire graph being
   // executed. 'name_to_node' maps node name to node. We keep 'graph'
@@ -580,15 +561,15 @@ class DebugSession : public Session {
   // 'items' is the executor for a partition of the graph bundled with
   // its dependent library runtime. 'input_keys' are the rendezvous keys
   // for the feeds and 'output_keys' are rendezvous keys for the fetches.
-  struct DebugExecutorsAndKeys {
+  struct ExecutorsAndKeys {
     FunctionLibraryDefinition* func_defs = nullptr;
     Graph* graph = nullptr;
     NameNodeMap* name_to_node = nullptr;
-    std::vector<PerPartitionDebugExecutorsAndLib> items;
+    std::vector<PerPartitionExecutorsAndLib> items;
     std::unordered_map<string, string> input_keys;
     std::unordered_map<string, string> output_keys;
 
-    ~DebugExecutorsAndKeys() {
+    ~ExecutorsAndKeys() {
       for (auto item : items) {
         delete item.executor;
         delete item.flib;
@@ -636,7 +617,7 @@ class DebugSession : public Session {
   ::tensorflow::Status GetOrCreateExecutors(
       gtl::ArraySlice<string> inputs, gtl::ArraySlice<string> outputs,
       gtl::ArraySlice<string> target_nodes,
-      DebugExecutorsAndKeys** executors_and_keys, RunStateArgs* run_state_args);
+      ExecutorsAndKeys** executors_and_keys, RunStateArgs* run_state_args);
 
   // Creates several graphs given the existing graph_def_ and the
   // input feeds and fetches, given 'devices'.
@@ -653,14 +634,14 @@ class DebugSession : public Session {
   // Feeds more inputs to the executors, triggering further execution.
   ::tensorflow::Status SendInputs(
       const std::vector<std::pair<string, Tensor>>& inputs,
-      const DebugExecutorsAndKeys* executors_and_keys,
+      const ExecutorsAndKeys* executors_and_keys,
       IntraProcessRendezvous* rendez);
 
   // Fetches more outputs from the executors. It waits until the output
   // tensors are computed.
   ::tensorflow::Status RecvOutputs(
       const std::vector<string>& output_names,
-      const DebugExecutorsAndKeys* executors_and_keys,
+      const ExecutorsAndKeys* executors_and_keys,
       RunState* run_state,
       std::vector<Tensor>* outputs);
 
@@ -669,7 +650,7 @@ class DebugSession : public Session {
   ::tensorflow::Status CheckFetch(
       const std::vector<std::pair<string, Tensor>>& feeds,
       const std::vector<string>& fetches,
-      const DebugExecutorsAndKeys* executors_and_keys,
+      const ExecutorsAndKeys* executors_and_keys,
       const RunState* run_state);
 
   // Use the appropriate WaitForNotification function based on whether
@@ -696,7 +677,7 @@ class DebugSession : public Session {
   // Holds mappings from signature to the executors that process
   // it. The reason for a level of indirection around mapped_type is
   // to guarantee address stability.
-  std::unordered_map<string, DebugExecutorsAndKeys*> executors_
+  std::unordered_map<string, ExecutorsAndKeys*> executors_
       GUARDED_BY(executor_lock_);
 
   // Holds mappings from handle to partial run state.
