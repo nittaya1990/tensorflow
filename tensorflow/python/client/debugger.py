@@ -87,7 +87,7 @@ class DebugRound(object):
         self._node_order.extend(
             ["%d_%s" % (rep, node_name) for node_name in node_order_norep])
 
-      self._rep_idx = 0  # Repetition index
+    self._rep_idx = 0  # Repetition index
 
     self._curr_node = self._node_order[0]
     # TODO(cais): Remove this
@@ -455,7 +455,24 @@ class DebugRound(object):
     """
     return self._node_breakpoints, self._pred_breakpoints
 
+  def get_num_times(self):
+    """Get number of times this debug round is to evaluate the node.
+
+    Returns:
+      Number of times (num_times) the node is to be evaluated for.
+    """
+    return self._num_times
+
+  def get_repetition_index(self):
+    """Get the current repetition index (0-based).
+
+    Returns:
+      The 0-based repetition index.
+    """
+    return self._rep_idx
+
   def join(self):
     """Join the main debug thread."""
     if self._main_thr:
       self._main_thr.join()
+

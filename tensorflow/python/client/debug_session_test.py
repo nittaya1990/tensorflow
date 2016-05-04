@@ -512,6 +512,7 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       # Perform calculation
       num_times = 2
       debug_round = debugger.DebugRound(debug_sess, aa, num_times=num_times)
+      self.assertEquals(num_times, debug_round.get_num_times())
 
       # Verify that the node_order consists of repetition prefixes
       node_order = debug_round.query_node_order()
@@ -537,10 +538,12 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
       debug_round.cont("0_mnt_a")
       self.assertEquals("0_mnt_a", node_order[debug_round.where()])
+      self.assertEquals(0, debug_round.get_repetition_index())
 
       # Continuing to a non-indexed node should work
       debug_round.cont("mnt_b")
       self.assertEquals("0_mnt_b", node_order[debug_round.where()])
+      self.assertEquals(0, debug_round.get_repetition_index())
 
       # Attempt to continue to a node without rep prefix should lead to an
       # exception
@@ -552,12 +555,14 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       # current one should work
       debug_round.cont("1_mnt_b")
       self.assertEquals("1_mnt_b", node_order[debug_round.where()])
+      self.assertEquals(1, debug_round.get_repetition_index())
 
       # Continuing to a nonexistent repetition number should lead to an
       # exception
       with self.assertRaisesRegexp(ValueError,
                                    "does not exist in the node order"):
         debug_round.cont("123_mnt_a")
+      self.assertEquals(1, debug_round.get_repetition_index())
 
       self._auto_step(debug_round)
 
