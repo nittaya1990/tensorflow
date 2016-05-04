@@ -55,31 +55,13 @@ static const Tensor* const kEmptyTensor = new Tensor;
 
 class DebugExecutorState;  // tfdb(cais)
 
-class DebugExecutorImpl : public Executor {
+class DebugExecutorImpl : public ExecutorImpl {
  public:
   // Constructor
   DebugExecutorImpl(const LocalExecutorParams& p, const Graph* g);
 
-  ~DebugExecutorImpl() override;
-
   // tfdb(cais)
   DebuggerResponse HandleDebuggerMessage(const DebuggerRequest& request);
-
-  Status Initialize();
-
-  // Infer memory allocation attributes of a node n's output,
-  // based on its use node dst.  Note that dst might not be directly
-  // connected to n by a single edge, but might be a downstream
-  // consumer of n's output by reference.  *attr is updated with any
-  // necessary attributes.
-  Status InferAllocAttr(const Node* n, const Node* dst,
-                        const DeviceNameUtils::ParsedName& local_dev_name,
-                        AllocatorAttributes* attr);
-
-  // Process all Nodes in the current graph, attempting to infer the
-  // memory allocation attributes to be used wherever they may allocate
-  // a tensor buffer.
-  Status SetAllocAttrs();
 
   void RunAsync(const Args& args, DoneCallback done) override;
 
@@ -87,27 +69,10 @@ class DebugExecutorImpl : public Executor {
   std::unordered_map<string, Tensor> node_value_store;
   std::unordered_map<string, Tensor*> node_ref_store;
 
+  void CalcNodeOrder();
+
  private:
   friend class DebugExecutorState;
-
-  static void InitializePending(const Graph* graph, PendingCounts* counts);
-
-  std::vector<string> GetCompletedNodes();
-  std::vector<string> GetNotCompletedNodes();
-
-  TF_DISALLOW_COPY_AND_ASSIGN(DebugExecutorImpl);
-
-  std::deque<string> node_order;
-  std::unordered_set<string> done_nodes;
-
-  std::shared_ptr<thread::ThreadPool> thread_pool_;
-
-  string break_at_node;
-
-  DebugExecutorState* executor_state;
-
-  // tfdb(cais)
-  std::unordered_map<string, Tensor> injected_tensors;
 
   // Simulation methods for calculating node order
   void SimProcess(const string& node_name);
@@ -118,11 +83,26 @@ class DebugExecutorImpl : public Executor {
                    std::deque<string>* inline_ready_queue);
   void SimScheduleReady(const std::deque<string>& ready_queue,
                         std::deque<string>* inline_ready_queue);
-  void SimCalcNodeOrder();
-  void NonSimCalcNodeOrder();
 
   const Node* NodeName2Node(const string& node_name) const;
   bool NodeName2NodeKernelIsExpensive(const string& node_name) const;
+
+  std::vector<string> GetCompletedNodes();
+  std::vector<string> GetNotCompletedNodes();
+
+  std::deque<string> node_order;
+  std::unordered_set<string> done_nodes;
+
+  std::shared_ptr<thread::ThreadPool> thread_pool_;
+
+  string break_at_node;  // TODO(cais): Remove unused
+
+  DebugExecutorState* executor_state;
+
+  // tfdb(cais)
+  std::unordered_map<string, Tensor> injected_tensors;
+
+  TF_DISALLOW_COPY_AND_ASSIGN(DebugExecutorImpl);
 };  // end class DebugExecutorImpl
 
 // The state associated with one invocation of DebugExecutorImpl::Run.

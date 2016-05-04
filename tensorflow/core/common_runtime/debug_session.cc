@@ -78,23 +78,13 @@ limitations under the License.
 
 namespace tensorflow {
 
-// namespace {
-
 DebugExecutorImpl::DebugExecutorImpl(const LocalExecutorParams& p,
                                      const Graph* g)
-    : Executor(p, g),
+    : ExecutorImpl(p, g),
       debugger_notification(), node_value_store(), node_ref_store(),
       thread_pool_(), break_at_node(), injected_tensors() {
   debugger_notification.reset(new MultiUseNotification());
   thread_pool_.reset(new thread::ThreadPool(Env::Default(), "Debugger", 1));
-}
-
-DebugExecutorImpl::~DebugExecutorImpl() {
-  for (int i = 0; i < graph_->num_node_ids(); i++) {
-    params_.delete_kernel(nodes_[i].kernel);
-  }
-  delete[] nodes_;
-  delete graph_;
 }
 
 // Helper functions
@@ -249,7 +239,7 @@ void DebugExecutorImpl::SimScheduleReady(const std::deque<string>& ready_queue,
 
 }
 
-void DebugExecutorImpl::SimCalcNodeOrder() {
+void DebugExecutorImpl::CalcNodeOrder() {
   // tfdb(cais): Precompute node execution order
   // DEBUG
   // std::cout << "### Precomputing node execution order ###" << std::endl;
@@ -270,78 +260,6 @@ void DebugExecutorImpl::SimCalcNodeOrder() {
   // getchar();
 
   SimProcess(init_node);
-}
-
-Status DebugExecutorImpl::Initialize() {
-  const int num_nodes = graph_->num_node_ids();
-  delete[] nodes_;
-  nodes_ = new NodeItem[num_nodes];
-
-  Status s;
-  total_input_tensors_ = 0;
-  total_output_tensors_ = 0;
-
-  InitializePending(graph_, &initial_pending_counts_);
-
-  // Cache this value so we make this virtual function call once, rather
-  // that O(# steps * # nodes per step) times.
-  device_record_tensor_accesses_ =
-      params_.device->RequiresRecordingAccessedTensors();
-
-  // Preprocess every node in the graph to create an instance of op
-  // kernel for each node;
-  for (const Node* n : graph_->nodes()) {
-    const int id = n->id();
-
-    // See if this node is a root node, and if so, add to root_nodes_
-    const int num_in_edges = n->in_edges().size();
-    if (num_in_edges == 0) {
-      root_nodes_.push_back(n);
-    }
-
-    NodeItem* item = &nodes_[id];
-    item->node = n;
-    item->num_inputs = n->num_inputs();
-    item->num_outputs = n->num_outputs();
-
-    for (int i = 0; i < std::min(4, item->num_inputs); i++) {
-      item->inlined_input_type[i] = n->input_type(i);
-    }
-    for (int i = 0; i < std::min(4, item->num_outputs); i++) {
-      item->inlined_output_type[i] = n->output_type(i);
-    }
-
-    item->input_start = total_input_tensors_;
-    total_input_tensors_ += n->num_inputs();
-
-    item->output_attr_start = total_output_tensors_;
-    total_output_tensors_ += n->num_outputs();
-
-    s = params_.create_kernel(n->def(), &item->kernel);
-    if (!s.ok()) {
-      item->kernel = nullptr;
-      s = AttachDef(s, n->def());
-      LOG(ERROR) << "Executor failed to create kernel. " << s;
-      break;
-    }
-    CHECK(item->kernel);
-    item->kernel_is_expensive = item->kernel->IsExpensive();
-    item->kernel_is_async = (item->kernel->AsAsync() != nullptr);
-    item->is_merge = IsMerge(n);
-
-    // Initialize static information about the frames in the graph.
-    if (IsEnter(n)) {
-      string frame_name;
-      s = GetNodeAttr(n->def(), "frame_name", &frame_name);
-      if (!s.ok()) return s;
-      ++frame_input_count_[frame_name];
-    }
-  }
-
-  SimCalcNodeOrder();
-
-  if (!s.ok()) return s;
-  return SetAllocAttrs();
 }
 
 // tfdb(cais)
@@ -518,102 +436,6 @@ void DebugExecutorImpl::RunAsync(const Args& args, DoneCallback done) {
   debugger_notification->MarkAsCompleted();
 }
 
-Status DebugExecutorImpl::SetAllocAttrs() {
-  Status s;
-  Device* device = params_.device;
-  DeviceNameUtils::ParsedName local_dev_name = device->parsed_name();
-
-  output_attrs_.resize(total_output_tensors_);
-  for (const Node* n : graph_->nodes()) {
-    NodeItem* item = &nodes_[n->id()];
-    const int base_index = item->output_attr_start;
-    // Examine the out edges of each node looking for special use
-    // cases that may affect memory allocation attributes.
-    for (auto e : n->out_edges()) {
-      const int index = e->src_output();
-      AllocatorAttributes attr;
-      s = InferAllocAttr(n, e->dst(), local_dev_name, &attr);
-      if (!s.ok()) return s;
-      if (attr.value != 0) {
-        if (!e->IsControlEdge()) {
-          output_attrs_[base_index + index].Merge(attr);
-        }
-      }
-    }
-
-    for (int out = 0; out < n->num_outputs(); out++) {
-      OpKernel* op_kernel = item->kernel;
-      DCHECK_LT(out, op_kernel->output_memory_types().size());
-      bool on_host = op_kernel->output_memory_types()[out] == HOST_MEMORY;
-      AllocatorAttributes h;
-      h.set_on_host(on_host);
-      output_attrs_[base_index + out].Merge(h);
-    }
-  }
-  return s;
-}
-
-Status DebugExecutorImpl::InferAllocAttr(
-    const Node* n, const Node* dst,
-    const DeviceNameUtils::ParsedName& local_dev_name,
-    AllocatorAttributes* attr) {
-  Status s;
-  // Note that it's possible for *n to be a Recv and *dst to be a Send,
-  // so these two cases are not mutually exclusive.
-  if (IsRecv(n)) {
-    string src_name;
-    s = GetNodeAttr(n->def(), "send_device", &src_name);
-    if (!s.ok()) return s;
-    DeviceNameUtils::ParsedName parsed_src_name;
-    if (!DeviceNameUtils::ParseFullName(src_name, &parsed_src_name)) {
-      s = errors::Internal("Bad send_device attr '", src_name, "' in node ",
-                           n->name());
-      return s;
-    }
-    if (!DeviceNameUtils::IsSameAddressSpace(parsed_src_name, local_dev_name)) {
-      // Value is going to be the sink of an RPC.
-      attr->set_nic_compatible(true);
-      VLOG(2) << "node " << n->name() << " is the sink of an RPC in";
-    } else if (local_dev_name.type == "CPU" && parsed_src_name.type == "GPU") {
-      // Value is going to be the sink of a local DMA from GPU to CPU.
-      attr->set_gpu_compatible(true);
-      VLOG(2) << "node " << n->name() << " is the sink of a gpu->cpu copy";
-    } else {
-      VLOG(2) << "default alloc case local type " << local_dev_name.type
-              << " remote type " << parsed_src_name.type;
-    }
-  }
-  if (IsSend(dst)) {
-    string dst_name;
-    s = GetNodeAttr(dst->def(), "recv_device", &dst_name);
-    if (!s.ok()) return s;
-    DeviceNameUtils::ParsedName parsed_dst_name;
-    if (!DeviceNameUtils::ParseFullName(dst_name, &parsed_dst_name)) {
-      s = errors::Internal("Bad recv_device attr '", dst_name, "' in node ",
-                           n->name());
-      return s;
-    }
-    if (!DeviceNameUtils::IsSameAddressSpace(parsed_dst_name, local_dev_name)) {
-      // Value is going to be the source of an RPC.
-      attr->set_nic_compatible(true);
-      VLOG(2) << "node " << n->name() << " is the source of an RPC out";
-    } else if (local_dev_name.type == "CPU" && parsed_dst_name.type == "GPU") {
-      // Value is going to be the source of a local DMA from CPU to GPU.
-      attr->set_gpu_compatible(true);
-      VLOG(2) << "node " << n->name() << " is the source of a cpu->gpu copy";
-    } else {
-      VLOG(2) << "default alloc case local type " << local_dev_name.type
-              << " remote type " << parsed_dst_name.type;
-    }
-  } else if (dst->type_string() == "ToFloat") {
-    for (auto e : dst->out_edges()) {
-      s = InferAllocAttr(n, e->dst(), local_dev_name, attr);
-      if (!s.ok()) return s;
-    }
-  }
-  return s;
-}
-
 DebugExecutorState::DebugExecutorState(const Executor::Args& args,
                                        DebugExecutorImpl* impl)
     : step_id_(args.step_id),
@@ -658,34 +480,6 @@ DebugExecutorState::~DebugExecutorState() {
   }
 
   delete slice_reader_cache_;
-}
-
-void DebugExecutorImpl::InitializePending(const Graph* graph,
-                                     PendingCounts* counts) {
-  for (int id = 0; id < graph->num_node_ids(); id++) {
-    // Make sure everything is initialized
-    counts->set_initial_count(id, 0, 0);
-  }
-  for (const Node* n : graph->nodes()) {
-    const int id = n->id();
-    const int num_in_edges = n->in_edges().size();
-    int initial_count;
-    if (IsMerge(n)) {
-      // merge waits all control inputs so we initialize the pending
-      // count to be the number of control edges.
-      int32 num_control_edges = 0;
-      for (const Edge* edge : n->in_edges()) {
-        if (edge->IsControlEdge()) {
-          num_control_edges++;
-        }
-      }
-      // Use bit 0 to indicate if we are waiting for a ready live data input.
-      initial_count = 1 + (num_control_edges << 1);
-    } else {
-      initial_count = num_in_edges;
-    }
-    counts->set_initial_count(id, initial_count, num_in_edges);
-  }
 }
 
 // tfdb(cais)
@@ -2273,6 +2067,9 @@ Status DebugSession::GetOrCreateExecutors(
     //                              Executor** executor) {
     DebugExecutorImpl* impl = new DebugExecutorImpl(params, partition_graph);
     s = impl->Initialize();
+
+    // Pre-calculate node execution order
+    impl->CalcNodeOrder();
 
     if (s.ok()) {
       *(&item->executor) = impl;

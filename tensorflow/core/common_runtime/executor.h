@@ -401,7 +401,7 @@ class ExecutorImpl : public Executor {
   ExecutorImpl(const LocalExecutorParams& p, const Graph* g)
       : Executor(p, g) {}
 
-  ~ExecutorImpl() override {
+  virtual ~ExecutorImpl() override {
     for (int i = 0; i < graph_->num_node_ids(); i++) {
       params_.delete_kernel(nodes_[i].kernel);
     }
@@ -427,12 +427,10 @@ class ExecutorImpl : public Executor {
 
   void RunAsync(const Args& args, DoneCallback done) override;
 
- private:
-  // friend class ExecutorState; // TODO: Remove this
+ protected:
+  // friend class ExecutorState; // TODO(cais): Remove this
 
   static void InitializePending(const Graph* graph, PendingCounts* counts);
-
-  // TODO(cais): Remove line
 
   TF_DISALLOW_COPY_AND_ASSIGN(ExecutorImpl);
 };
