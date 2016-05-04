@@ -140,28 +140,7 @@ DirectSession::DirectSession(const SessionOptions& options,
   // handle, because DirectSession owns its devices. This may change
   // in future versions.
   session_handle_ = "direct";
-  int devices_added = 0;
-  if (options.config.log_device_placement()) {
-    const string mapping_str = device_mgr_->DeviceMappingString();
-    if (mapping_str.empty()) {
-      printf("Device mapping: no known devices.\n");
-    } else {
-      printf("Device mapping:\n%s", mapping_str.c_str());
-    }
-    LOG(INFO) << "Device mapping:\n" << mapping_str;
-  }
-  for (auto d : device_mgr_->ListDevices()) {
-    devices_.push_back(d);
-    device_set_.AddDevice(d);
-    d->op_segment()->AddHold(session_handle_);
-
-    // The first device added is special: it is the 'client device' (a
-    // CPU device) from which we feed and fetch Tensors.
-    if (devices_added == 0) {
-      device_set_.set_client_device(d);
-    }
-    ++devices_added;
-  }
+  InitializeDeviceManager();
 }
 
 DirectSession::~DirectSession() {
@@ -644,6 +623,31 @@ Status DirectSession::CheckFetch(const NamedTensorList& feeds,
   return Status::OK();
 }
 
+void DirectSession::InitializeDeviceManager() {
+  int devices_added = 0;
+  if (options_.config.log_device_placement()) {
+    const string mapping_str = device_mgr_->DeviceMappingString();
+    if (mapping_str.empty()) {
+      printf("Device mapping: no known devices.\n");
+    } else {
+      printf("Device mapping:\n%s", mapping_str.c_str());
+    }
+    LOG(INFO) << "Device mapping:\n" << mapping_str;
+  }
+  for (auto d : device_mgr_->ListDevices()) {
+    devices_.push_back(d);
+    device_set_.AddDevice(d);
+    d->op_segment()->AddHold(session_handle_);
+
+    // The first device added is special: it is the 'client device' (a
+    // CPU device) from which we feed and fetch Tensors.
+    if (devices_added == 0) {
+      device_set_.set_client_device(d);
+    }
+    ++devices_added;
+  }
+}
+
 Status DirectSession::GetOrCreateExecutors(
     gtl::ArraySlice<string> inputs, gtl::ArraySlice<string> outputs,
     gtl::ArraySlice<string> target_nodes, ExecutorsAndKeys** executors_and_keys,
@@ -746,6 +750,7 @@ Status DirectSession::GetOrCreateExecutors(
       // Kernels created for subgraph nodes need to be cached.  On
       // cache miss, create_fn() is invoked to create a kernel based
       // on the function library here + global op registry.
+      std::cout << "Call FindOrCreate(): session_handle_ = " << session_handle_ << std::endl;  // DEBUG
       return opseg->FindOrCreate(session_handle_, ndef.name(), kernel,
                                  create_fn);
     };

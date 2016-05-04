@@ -49,7 +49,7 @@ class DirectSession : public Session {
  public:
   // Takes ownership of 'device_mgr'.
   DirectSession(const SessionOptions& options, const DeviceMgr* device_mgr);
-  ~DirectSession() override;
+  virtual ~DirectSession() override;
 
   typedef std::vector<std::pair<string, Tensor>> NamedTensorList;
   typedef std::unordered_map<StringPiece, Node*, StringPiece::Hasher>
@@ -88,7 +88,7 @@ class DirectSession : public Session {
     return cost_models_;
   }
 
- private:
+ protected:
   typedef DirectSession ME;
 
   // We create one executor and its dependent library runtime for
@@ -159,9 +159,11 @@ class DirectSession : public Session {
     Graph* graph = nullptr;
   };
 
+  void InitializeDeviceManager();
+
   // Retrieves an already existing set of executors to run 'inputs' and
   // 'outputs', or creates and caches them for future use.
-  ::tensorflow::Status GetOrCreateExecutors(
+  virtual ::tensorflow::Status GetOrCreateExecutors(
       gtl::ArraySlice<string> inputs, gtl::ArraySlice<string> outputs,
       gtl::ArraySlice<string> target_nodes,
       ExecutorsAndKeys** executors_and_keys, RunStateArgs* run_state_args);
@@ -219,7 +221,7 @@ class DirectSession : public Session {
   thread::ThreadPool* thread_pool_ = nullptr;
 
   // Schedules 'c' for execution.
-  void SchedClosure(std::function<void()> c);
+  virtual void SchedClosure(std::function<void()> c);
 
   mutex executor_lock_;  // protects executors_
   // Holds mappings from signature to the executors that process

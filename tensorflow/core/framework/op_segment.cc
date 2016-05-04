@@ -41,7 +41,7 @@ Status OpSegment::FindOrCreate(const string& session_handle,
     mutex_lock l(mu_);
     auto item = gtl::FindPtrOrNull(sessions_, session_handle);
     if (item == nullptr) {
-      return errors::NotFound("Session ", session_handle, " is not found.");
+      return errors::NotFound("(debug) Session ", session_handle, " is not found.");  // DEBUG
     }
     *kernel = gtl::FindPtrOrNull(item->name_kernel, node_name);
     if (*kernel != nullptr) {
