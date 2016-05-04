@@ -286,23 +286,15 @@ class Executor {
     return ret;
   }
 
+  // TODO(cais): Make the following protected or private
   // Owned
-  const Graph* graph_;  // TODO(cais): Make protected or private
-
- protected:
-  Executor(const LocalExecutorParams& p, const Graph* g)
-      : graph_(g), params_(p), initial_pending_counts_(graph_->num_node_ids())  {
-    CHECK(p.create_kernel != nullptr);
-    CHECK(p.delete_kernel != nullptr);
-  }
-
-  // Owned.
+  // A cached value of params_
   LocalExecutorParams params_;
+  const Graph* graph_;
   NodeItem* nodes_ = nullptr;     // array of size "graph_.num_node_ids()"
   int total_input_tensors_ = 0;   // == sum(nodes_[*].num_inputs())
   int total_output_tensors_ = 0;  // == sum(nodes_[*].num_outputs())
 
-  // A cached value of params_
   bool device_record_tensor_accesses_ = false;
 
   // Root nodes (with no in edges) that should form the initial ready queue
@@ -315,6 +307,13 @@ class Executor {
   std::unordered_map<string, int> frame_input_count_;
 
   std::vector<AllocatorAttributes> output_attrs_;
+
+ protected:
+  Executor(const LocalExecutorParams& p, const Graph* g)
+      : graph_(g), params_(p), initial_pending_counts_(graph_->num_node_ids())  {
+    CHECK(p.create_kernel != nullptr);
+    CHECK(p.delete_kernel != nullptr);
+  }
 };
 
 ::tensorflow::Status NewLocalExecutor(const LocalExecutorParams& params,
@@ -395,6 +394,47 @@ class ExecutorBarrier {
   }
 
   TF_DISALLOW_COPY_AND_ASSIGN(ExecutorBarrier);
+};
+
+class ExecutorImpl : public Executor {
+ public:
+  ExecutorImpl(const LocalExecutorParams& p, const Graph* g)
+      : Executor(p, g) {}
+
+  ~ExecutorImpl() override {
+    for (int i = 0; i < graph_->num_node_ids(); i++) {
+      params_.delete_kernel(nodes_[i].kernel);
+    }
+    delete[] nodes_;
+    delete graph_;
+  }
+
+  Status Initialize();
+
+  // Infer memory allocation attributes of a node n's output,
+  // based on its use node dst.  Note that dst might not be directly
+  // connected to n by a single edge, but might be a downstream
+  // consumer of n's output by reference.  *attr is updated with any
+  // necessary attributes.
+  Status InferAllocAttr(const Node* n, const Node* dst,
+                        const DeviceNameUtils::ParsedName& local_dev_name,
+                        AllocatorAttributes* attr);
+
+  // Process all Nodes in the current graph, attempting to infer the
+  // memory allocation attributes to be used wherever they may allocate
+  // a tensor buffer.
+  Status SetAllocAttrs();
+
+  void RunAsync(const Args& args, DoneCallback done) override;
+
+ private:
+  // friend class ExecutorState; // TODO: Remove this
+
+  static void InitializePending(const Graph* graph, PendingCounts* counts);
+
+  // TODO(cais): Remove line
+
+  TF_DISALLOW_COPY_AND_ASSIGN(ExecutorImpl);
 };
 
 // A few helpers to facilitate create/delete kernels.

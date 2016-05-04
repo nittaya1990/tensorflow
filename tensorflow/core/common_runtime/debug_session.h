@@ -50,7 +50,6 @@ limitations under the License.
 
 namespace tensorflow {
 
-// namespace {
 // 1-D, 0 element tensor.
 static const Tensor* const kEmptyTensor = new Tensor;
 

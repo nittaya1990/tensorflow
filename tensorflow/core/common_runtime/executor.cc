@@ -57,51 +57,6 @@ limitations under the License.
 #include "tensorflow/core/util/tensor_slice_reader_cache.h"
 
 namespace tensorflow {
-namespace {
-
-// 1-D, 0 element tensor.
-static const Tensor* const kEmptyTensor = new Tensor;
-
-class ExecutorImpl : public Executor {
- public:
-  ExecutorImpl(const LocalExecutorParams& p, const Graph* g)
-      : Executor(p, g) {}
-
-  ~ExecutorImpl() override {
-    for (int i = 0; i < graph_->num_node_ids(); i++) {
-      params_.delete_kernel(nodes_[i].kernel);
-    }
-    delete[] nodes_;
-    delete graph_;
-  }
-
-  Status Initialize();
-
-  // Infer memory allocation attributes of a node n's output,
-  // based on its use node dst.  Note that dst might not be directly
-  // connected to n by a single edge, but might be a downstream
-  // consumer of n's output by reference.  *attr is updated with any
-  // necessary attributes.
-  Status InferAllocAttr(const Node* n, const Node* dst,
-                        const DeviceNameUtils::ParsedName& local_dev_name,
-                        AllocatorAttributes* attr);
-
-  // Process all Nodes in the current graph, attempting to infer the
-  // memory allocation attributes to be used wherever they may allocate
-  // a tensor buffer.
-  Status SetAllocAttrs();
-
-  void RunAsync(const Args& args, DoneCallback done) override;
-
- private:
-  friend class ExecutorState;
-
-  static void InitializePending(const Graph* graph, PendingCounts* counts);
-
-  // TODO(cais): Remove line
-
-  TF_DISALLOW_COPY_AND_ASSIGN(ExecutorImpl);
-};
 
 Status ExecutorImpl::Initialize() {
   const int num_nodes = graph_->num_node_ids();
@@ -267,6 +222,11 @@ Status ExecutorImpl::InferAllocAttr(
   }
   return s;
 }
+
+namespace {
+
+// 1-D, 0 element tensor.
+static const Tensor* const kEmptyTensor = new Tensor;
 
 // The state associated with one invocation of ExecutorImpl::Run.
 // ExecutorState dispatches nodes when they become ready and keeps
@@ -615,7 +575,7 @@ class ExecutorState {
                          int64 input_iter) const NO_THREAD_SAFETY_ANALYSIS {
     return input_frame->GetIteration(input_iter)->input_tensors;
   }
-};
+};  // end class ExecutorState
 
 ExecutorState::ExecutorState(const Executor::Args& args, ExecutorImpl* impl)
     : vlog_(VLOG_IS_ON(1)),
@@ -650,6 +610,8 @@ ExecutorState::ExecutorState(const Executor::Args& args, ExecutorImpl* impl)
   // Initialize the executor state.
   outstanding_frames_.insert({root_frame_->frame_name, root_frame_});
 }
+
+}  // end namespace
 
 ExecutorState::~ExecutorState() {
   for (auto name_frame : outstanding_frames_) {
@@ -689,6 +651,8 @@ void ExecutorImpl::InitializePending(const Graph* graph,
     counts->set_initial_count(id, initial_count, num_in_edges);
   }
 }
+
+namespace {
 
 void ExecutorState::RunAsync(Executor::DoneCallback done) {
   const Graph* graph = impl_->graph_;
@@ -749,7 +713,7 @@ void DeleteParams(OpKernelContext::Params* p) {
   delete p;
 }
 
-}  // namespace
+}  // end namespace
 
 void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
   const NodeItem* nodes = impl_->nodes_;
@@ -1752,11 +1716,11 @@ void ExecutorState::CleanupFramesIterations(FrameState* frame, int64 iter,
   }
 }
 
+}  // end namespace
+
 void ExecutorImpl::RunAsync(const Args& args, DoneCallback done) {
   (new ExecutorState(args, this))->RunAsync(done);
 }
-
-}  // end namespace
 
 Status NewLocalExecutor(const LocalExecutorParams& params, const Graph* graph,
                         Executor** executor) {
