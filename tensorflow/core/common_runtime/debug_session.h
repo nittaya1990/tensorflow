@@ -1,4 +1,4 @@
-/* Copyright 2016 Google Inc. All Rights Reserved.
+  /* Copyright 2016 Google Inc. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -122,8 +122,8 @@ class DebugExecutorImpl : public Executor {
   void SimCalcNodeOrder();
   void NonSimCalcNodeOrder();
 
-  const Node* NodeName2Node(const string& node_name);
-  bool NodeName2NodeKernelIsExpensive(const string& node_name);
+  const Node* NodeName2Node(const string& node_name) const;
+  bool NodeName2NodeKernelIsExpensive(const string& node_name) const;
 };  // end class DebugExecutorImpl
 
 // The state associated with one invocation of DebugExecutorImpl::Run.

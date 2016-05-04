@@ -98,7 +98,7 @@ DebugExecutorImpl::~DebugExecutorImpl() {
 }
 
 // Helper functions
-const Node* DebugExecutorImpl::NodeName2Node(const string& node_name) {
+const Node* DebugExecutorImpl::NodeName2Node(const string& node_name) const {
   const Node* the_node = nullptr;
   for (const Node* n : graph_->nodes()) {
     if (n->name() == node_name) {
@@ -110,7 +110,7 @@ const Node* DebugExecutorImpl::NodeName2Node(const string& node_name) {
   return the_node;
 }
 
-bool DebugExecutorImpl::NodeName2NodeKernelIsExpensive(const string& node_name) {
+bool DebugExecutorImpl::NodeName2NodeKernelIsExpensive(const string& node_name) const {
   const Node* the_node = NodeName2Node(node_name);
   return nodes_[the_node->id()].kernel_is_expensive;
 }
@@ -272,62 +272,6 @@ void DebugExecutorImpl::SimCalcNodeOrder() {
   SimProcess(init_node);
 }
 
-void DebugExecutorImpl::NonSimCalcNodeOrder() {
-  node_order.clear();
-
-  std::deque<string> node_queue;
-  std::unordered_set<string> visited_nodes;
-  std::unordered_set<string> done_nodes;
-
-  for (const Node* n : graph_->nodes()) {
-    if (n->in_edges().size() == 0) {
-      // DEBUG
-      // std::cout << "Pushing to node_queue: " << n->name() << std::endl;
-      node_queue.push_back(n->name());
-      visited_nodes.insert(n->name());
-    }
-  }
-
-  while (!node_queue.empty()) {
-  // Pop all the ready nodes from the queue
-  while (!node_queue.empty()) {
-    const string processed_node = node_queue.front();
-
-    // DEBUG
-    // std::cout << "Popping from node_queue: " << processed_node << std::endl;
-    node_queue.pop_front();
-    node_order.push_back(processed_node);
-    visited_nodes.insert(processed_node);
-    done_nodes.insert(processed_node);
-  }
-
-  for (const Node* n : graph_->nodes()) {
-    // Skip visited nodes
-    if (visited_nodes.count(n->name()) > 0) {
-      continue;
-    }
-
-    // Check if all the input nodes are satisfie
-    bool all_inputs_ready = true;
-    for (const Edge* edge : n->in_edges()) {
-      const string& input_node_name = edge->src()->name();
-      if (done_nodes.count(input_node_name) == 0) {
-        all_inputs_ready = false;
-        break;
-      }
-    }
-
-      if (all_inputs_ready) {
-        // DEBUG
-        // std::cout << "Pushing to node_queue: " << n->name() << std::endl;
-        node_queue.push_back(n->name());
-        visited_nodes.insert(n->name());
-      }
-    }
-  }
-}
-
-
 Status DebugExecutorImpl::Initialize() {
   const int num_nodes = graph_->num_node_ids();
   delete[] nodes_;
@@ -343,8 +287,6 @@ Status DebugExecutorImpl::Initialize() {
   // that O(# steps * # nodes per step) times.
   device_record_tensor_accesses_ =
       params_.device->RequiresRecordingAccessedTensors();
-  
-  bool found_nontrivial_control_edges = false;
 
   // Preprocess every node in the graph to create an instance of op
   // kernel for each node;
@@ -355,21 +297,6 @@ Status DebugExecutorImpl::Initialize() {
     const int num_in_edges = n->in_edges().size();
     if (num_in_edges == 0) {
       root_nodes_.push_back(n);
-    }
-
-    // Determine if control edges exist
-    for (const Edge* edge : n->in_edges()) {
-      if (edge->IsControlEdge()) {
-        //DEBUG
-        const string& input_node_name = edge->src()->name();
-
-        if (n->name() != "_SINK" && input_node_name != "_SOURCE") {
-          // DEBUG
-          // std::cout << "Found control edge " << input_node_name
-          //           << " --> " << n->name() << std::endl;
-          found_nontrivial_control_edges = true;
-        }
-      }
     }
 
     NodeItem* item = &nodes_[id];
@@ -411,17 +338,7 @@ Status DebugExecutorImpl::Initialize() {
     }
   }
 
-  // DEBUG
-  // std::cout << "found_nontrivial_control_edges = "
-  //           << found_nontrivial_control_edges << std::endl;
-  // tfdb: Pre-calculate node order
-  // TODO(cais): Unified approach to deal with control edges
-  // if (found_nontrivial_control_edges) {
-    // NonSimCalcNodeOrder();
-  // } else {
-    SimCalcNodeOrder();
-  // }
-
+  SimCalcNodeOrder();
 
   if (!s.ok()) return s;
   return SetAllocAttrs();
