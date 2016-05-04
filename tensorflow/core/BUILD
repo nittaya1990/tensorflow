@@ -1040,7 +1040,8 @@ tf_cuda_library(
 tf_cuda_library(
     name = "debug_session_internal",
     srcs = ["common_runtime/debug_session.cc"],
-    hdrs = ["common_runtime/debug_session.h"],
+    hdrs = ["common_runtime/debug_session.h",
+            "common_runtime/direct_session.h"],
     copts = tf_copts(),
     linkstatic = 1,
     deps = [

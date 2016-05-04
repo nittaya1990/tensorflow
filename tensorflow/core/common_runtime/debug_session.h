@@ -592,6 +592,7 @@ class DebugSession : public Session {
     Notification executors_done;
     std::unordered_set<string> pending_inputs;
     std::unordered_set<string> pending_outputs;
+    TensorStore tensor_store;
 
     RunState(const std::vector<string>& input_names,
              const std::vector<string>& output_names) {
@@ -683,6 +684,8 @@ class DebugSession : public Session {
   // Holds mappings from handle to partial run state.
   std::unordered_map<string, RunState*> partial_runs_
       GUARDED_BY(executor_lock_);
+
+  SessionState session_state_;
 
   CancellationManager* cancellation_manager_;
 
