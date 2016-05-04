@@ -73,19 +73,18 @@ class DebugRound(object):
     self._main_thr = self._start_debug_main_thread(self._executed_node,
                                                    feed=self._feed)
 
-    # Population _node_order
+    # Populate _node_order
     where_output = self._sess.debug("where")
+    self._unprefixed_nodes = (where_output["completed_nodes"] +
+                              where_output["remaining_nodes"])
     if self._num_times == 1:
-      self._node_order = (where_output["completed_nodes"] +
-                          where_output["remaining_nodes"])
+      self._node_order = self._unprefixed_nodes
     else:
       # Note that this works for deterministic orderigng only
-      node_order_norep = (where_output["completed_nodes"] +
-                          where_output["remaining_nodes"])
       self._node_order = []
-      for rep in xrange(self._num_times):
+      for i in xrange(self._num_times):
         self._node_order.extend(
-            ["%d_%s" % (rep, node_name) for node_name in node_order_norep])
+            ["%d_%s" % (i, node) for node in self._unprefixed_nodes])
 
     self._rep_idx = 0  # Repetition index
 
@@ -96,7 +95,10 @@ class DebugRound(object):
 
     # Breakpoint states
     # Node name breakpoints. Elements are strings.
-    self._node_breakpoints = []
+    # This is a dict. The keys are the user-specified breakpoints, which can
+    # be non-prefixed in a multi-repetition round. The values are lists of
+    # actual node names, prefixed if multi-repetition.
+    self._node_breakpoints = {}
 
     # Conditional (perdicate) breakpoints. Elements are callables of the form
     # break_or_not = should_i_break(node_name, node_value)
@@ -239,9 +241,16 @@ class DebugRound(object):
       pos = self.where()
       node_just_completed = self._node_order[pos]
 
+      # Determine if we have hit a breakpoint
+      breakpoint_hit = False
+      for bp_name in self._node_breakpoints:
+        node_list = self._node_breakpoints[bp_name]
+        if node_just_completed in node_list:
+          breakpoint_hit = True
+          break
+
       # Break if this is a node breakpoint
-      if (node_just_completed in self._node_breakpoints and
-          node_just_completed != starting_node):
+      if (breakpoint_hit and node_just_completed != starting_node):
         # If this cont() call starts from this breakpoint node, we will not
         # break here again.
         break
@@ -337,6 +346,11 @@ class DebugRound(object):
     Args:
       node_name: Name of the node. This has to point to a node that exists in
         the executed subgraph, or an exception will be raised.
+        In the case of a multi-repetition run (num_times > 1), the node name
+        can be prefixed with the repetition index (e.g., 2_node_A), in which
+        case the debug round will break after the node in the specific run.
+        Or it can be non-prefixed, in which case the debug round will break
+        after every time the node is just completed in each repetition.
 
     Returns:
       A handle for the breakpoint. The handle can later be used with methods
@@ -346,16 +360,27 @@ class DebugRound(object):
       ValueError: If the input node_name is not present in the executed
         subgraph.
     """
-    # Verify that node_name is in the node order
-    if node_name not in self._node_order:
-      raise ValueError("Node named '%s' does not exist in the subgraph being "
-                       "executed" % node_name)
-
     # If the node breakpoint already exists, return right away
     if node_name in self._node_breakpoints:
       return node_name
 
-    self._node_breakpoints.append(node_name)
+    # Verify that node_name is in the node order
+    if self._num_times == 1:
+      if node_name in self._node_order:
+        self._node_breakpoints[node_name] = [node_name]
+      else:
+        raise ValueError("Node named '%s' does not exist in the subgraph being "
+                         "executed" % node_name)
+    else:
+      # Multi-repetition run. Check if the node name is non-prefixed but valid
+      if node_name in self._node_order:
+        self._node_breakpoints[node_name] = [node_name]
+      elif node_name in self._unprefixed_nodes:
+        self._node_breakpoints[node_name] = \
+            ["%d_%s" % (i, node_name) for i in xrange(self._num_times)]
+      else:
+        raise ValueError("Node named '%s' does not exist in the subgraph being "
+                         "executed" % node_name)
 
     bp_handle = node_name  # A handle for the breakpoint
     return bp_handle
@@ -439,7 +464,7 @@ class DebugRound(object):
     """
 
     if handle in self._node_breakpoints:
-      self._node_breakpoints.remove(handle)
+      self._node_breakpoints.pop(handle)
     elif handle in self._pred_breakpoints:
       self._pred_breakpoints.pop(handle)
     else:

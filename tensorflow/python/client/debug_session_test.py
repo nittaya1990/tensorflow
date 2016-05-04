@@ -344,7 +344,8 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
       # Verify breakpoint getter
       node_bps, pred_bps = debug_round.get_breakpoints()
-      self.assertEquals([bp_handle], node_bps)
+      self.assertTrue("nbp_M" in node_bps)
+      self.assertEquals(["nbp_M"], node_bps["nbp_M"])
       self.assertEquals({}, pred_bps)
 
       # cont() without arg (toward the end) should break at nbp_M
@@ -374,7 +375,8 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
       # Verify breakpoint getter
       node_bps, pred_bps = debug_round.get_breakpoints()
-      self.assertEquals([bp_handle], node_bps)
+      self.assertTrue(bp_handle in node_bps)
+      self.assertEquals([bp_handle], node_bps[bp_handle])
       self.assertEquals({}, pred_bps)
 
       debug_round.cont()
@@ -400,7 +402,7 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
       # Verify breakpoint getter
       node_bps, pred_bps = debug_round.get_breakpoints()
-      self.assertEquals([], node_bps)
+      self.assertEquals({}, node_bps)
       self.assertEquals({}, pred_bps)
 
       # There is no valid breakpoint, so cont() should go till the end
@@ -434,7 +436,7 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
       # Verify breakpoint getter
       node_bps, pred_bps = debug_round.get_breakpoints()
-      self.assertEquals([], node_bps)
+      self.assertEquals({}, node_bps)
       self.assertEquals(2, len(pred_bps))
       self.assertTrue(bp_handle_1 in pred_bps)
       self.assertTrue(bp_handle_2 in pred_bps)
@@ -479,7 +481,7 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
       # Verify breakpoint getter
       node_bps, pred_bps = debug_round.get_breakpoints()
-      self.assertEquals([], node_bps)
+      self.assertEquals({}, node_bps)
       self.assertEquals(1, len(pred_bps))
       self.assertTrue(bp_handle_1 in pred_bps)
       self.assertFalse(bp_handle_2 in pred_bps)
@@ -516,7 +518,6 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
       # Verify that the node_order consists of repetition prefixes
       node_order = debug_round.query_node_order()
-      print(node_order)  # DEBUG
       curr_rep_idx = 0
       for node_name in node_order:
         rep_idx = int(node_name.split("_")[0])
@@ -564,6 +565,135 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
         debug_round.cont("123_mnt_a")
       self.assertEquals(1, debug_round.get_repetition_index())
 
+      self._auto_step(debug_round)
+
+      # Examine the value after two runs
+      debug_round = debugger.DebugRound(debug_sess, a)
+      a_result = self._auto_step(debug_round)
+      self.assertAllClose(a0 + num_times * b0, a_result)
+
+  def testMultipleNumTimesBreakpoints(self):
+    with session.Session("debug") as debug_sess:
+      print("In testMultipleNumTimesBreakpoints")  # DEBUG
+
+      a0 = np.array([[10.0]]).astype(np.float32)
+      b0 = np.array([[20.0]]).astype(np.float32)
+
+      a = variables.Variable(a0, name="mntbp_a")
+      b = variables.Variable(b0, name="mntbp_b")
+
+      aa = a.assign_add(b)
+
+      # Initialize variables
+      init_a = a.initializer
+      debug_round = debugger.DebugRound(debug_sess, init_a)
+      self._auto_step(debug_round, do_inspect=False)
+
+      init_b = b.initializer
+      debug_round = debugger.DebugRound(debug_sess, init_b)
+      self._auto_step(debug_round, do_inspect=False)
+
+      # Perform calculation
+      num_times = 2
+      debug_round = debugger.DebugRound(debug_sess, aa, num_times=num_times)
+      self.assertEquals(num_times, debug_round.get_num_times())
+
+      node_order = debug_round.query_node_order()
+
+      # Invalid non-prefixed node name for breakpoint
+      with self.assertRaisesRegexp(ValueError, "does not exist in the subgraph"):
+        debug_round.break_after("mnt_c")
+
+      # Invalid prefixed node name for breakpoint
+      with self.assertRaisesRegexp(ValueError, "does not exist in the subgraph"):
+        debug_round.break_after("%d_mnt_a" % num_times)
+
+      node_bps, pred_bps = debug_round.get_breakpoints()
+      self.assertEquals({}, node_bps)
+      self.assertEquals({}, pred_bps)
+
+      # Valid non-prefixed node name
+      debug_round.break_after("mntbp_a")
+
+      # Valid prefixed node name
+      debug_round.break_after("0_mntbp_b")
+
+      node_bps, pred_bps = debug_round.get_breakpoints()
+      self.assertEquals(2, len(node_bps))
+      self.assertTrue("mntbp_a" in node_bps)
+      self.assertEquals(["0_mntbp_a", "1_mntbp_a"], node_bps["mntbp_a"])
+      self.assertTrue("0_mntbp_b" in node_bps)
+      self.assertEquals(["0_mntbp_b"], node_bps["0_mntbp_b"])
+
+      # First continue should hit mntbp_a in the 1st repetition
+      debug_round.cont()
+      self.assertEquals("0_mntbp_a", node_order[debug_round.where()])
+
+      # Then we should hit mntbp_b in the 1st repeition
+      debug_round.cont()
+      self.assertEquals("0_mntbp_b", node_order[debug_round.where()])
+
+      # Remove the non-prefixed breakpoint
+      debug_round.remove_breakpoint("mntbp_a")
+
+      node_bps, pred_bps = debug_round.get_breakpoints()
+      self.assertEquals(1, len(node_bps))
+      self.assertTrue("0_mntbp_b" in node_bps)
+      self.assertEquals(["0_mntbp_b"], node_bps["0_mntbp_b"])
+
+      # Since the breakpoint is now removed, we should be able to continue to
+      # the end without breaking
+      debug_round.cont()
+      self.assertEquals(len(node_order) - 1, debug_round.where())
+
+  #     # curr_rep_idx = 0
+  #     # for node_name in node_order:
+  #     #   rep_idx = int(node_name.split("_")[0])
+  #     #   self.assertTrue(rep_idx >= 0 and rep_idx < num_times)
+
+  #     #   if rep_idx > curr_rep_idx:
+  #     #     self.assertEquals(1 + curr_rep_idx, rep_idx)
+  #     #     curr_rep_idx += 1
+  #     #   else:
+  #     #     self.assertEquals(curr_rep_idx, rep_idx)
+
+  #     # self.assertEquals("0__SOURCE", node_order[0])
+  #     # self.assertEquals("%d__SINK" % (num_times - 1), node_order[-1])
+
+  #     # # Continuing to an indexed node (e.g., 0_mnt_b) should
+  #     # # First make sure that the ordering is what we think it is
+  #     # self.assertTrue(node_order.index("0_mnt_a") <
+  #     #                 node_order.index("0_mnt_b"))
+
+  #     # debug_round.cont("0_mnt_a")
+  #     # self.assertEquals("0_mnt_a", node_order[debug_round.where()])
+  #     # self.assertEquals(0, debug_round.get_repetition_index())
+
+  #     # # Continuing to a non-indexed node should work
+  #     # debug_round.cont("mnt_b")
+  #     # self.assertEquals("0_mnt_b", node_order[debug_round.where()])
+  #     # self.assertEquals(0, debug_round.get_repetition_index())
+
+  #     # # Attempt to continue to a node without rep prefix should lead to an
+  #     # # exception
+  #     # with self.assertRaisesRegexp(ValueError,
+  #     #                              "has already finished executing"):
+  #     #   debug_round.cont("mnt_a")
+
+  #     # # Continuing to prefixed node with a rep index different from the
+  #     # # current one should work
+  #     # debug_round.cont("1_mnt_b")
+  #     # self.assertEquals("1_mnt_b", node_order[debug_round.where()])
+  #     # self.assertEquals(1, debug_round.get_repetition_index())
+
+  #     # # Continuing to a nonexistent repetition number should lead to an
+  #     # # exception
+  #     # with self.assertRaisesRegexp(ValueError,
+  #     #                              "does not exist in the node order"):
+  #     #   debug_round.cont("123_mnt_a")
+  #     # self.assertEquals(1, debug_round.get_repetition_index())
+
+      print("auto stepping...")  # DEBUG
       self._auto_step(debug_round)
 
       # Examine the value after two runs
