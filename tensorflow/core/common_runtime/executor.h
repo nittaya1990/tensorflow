@@ -460,11 +460,11 @@ typedef gtl::InlinedVector<AllocatorAttributes, 4> AllocatorAttributeVec;
 class ExecutorState {
  public:
   ExecutorState(const Executor::Args& args, ExecutorImpl* impl);
-  ~ExecutorState();
+  virtual ~ExecutorState();
 
-  void RunAsync(Executor::DoneCallback done);
+  virtual void RunAsync(Executor::DoneCallback done);
 
- private:
+ protected:
   typedef ExecutorState ME;
 
   // 1-D, 0 element tensor.
@@ -746,12 +746,13 @@ class ExecutorState {
                   TaggedNodeSeq* ready) EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   // Activate the successors of a node.
-  void ActivateNode(const Node* node, const bool is_dead, FrameState* frame,
+  virtual void ActivateNode(const Node* node,
+                    const bool is_dead, FrameState* frame,
                     int64 iter, const EntryVector& outputs,
                     TaggedNodeSeq* ready) EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   // Process a ready node in current thread.
-  void Process(TaggedNode node, int64 scheduled_usec);
+  virtual void Process(TaggedNode node, int64 scheduled_usec);
 
   // Before invoking item->kernel, fills in its "inputs".
   Status PrepareInputs(const NodeItem& item, Entry* first_input,
@@ -765,13 +766,14 @@ class ExecutorState {
                         EntryVector* outputs, NodeExecStats* stats);
 
   // After processing the outputs, propagates the outputs to their dsts.
-  void PropagateOutputs(const TaggedNode& tagged_node,
+  virtual void PropagateOutputs(const TaggedNode& tagged_node,
                         const EntryVector& outputs, TaggedNodeSeq* ready);
 
   // "node" just finishes. Takes ownership of "stats". Returns true if
   // execution has completed.
-  bool NodeDone(const Status& s, const Node* node, const TaggedNodeSeq& ready,
-                NodeExecStats* stats, std::deque<TaggedNode>* inline_ready);
+  virtual bool NodeDone(const Status& s,
+      const Node* node, const TaggedNodeSeq& ready,
+      NodeExecStats* stats, std::deque<TaggedNode>* inline_ready);
 
   // Call Process() on all nodes in 'inline_ready'.
   void ProcessInline(const std::deque<TaggedNode>& inline_ready);

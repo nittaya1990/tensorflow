@@ -223,8 +223,6 @@ Status ExecutorImpl::InferAllocAttr(
   return s;
 }
 
-// namespace {  // TODO(cais): Remove namespace
-
 ExecutorState::ExecutorState(const Executor::Args& args, ExecutorImpl* impl)
     : vlog_(VLOG_IS_ON(1)),
       step_id_(args.step_id),
@@ -299,8 +297,6 @@ void ExecutorImpl::InitializePending(const Graph* graph,
     counts->set_initial_count(id, initial_count, num_in_edges);
   }
 }
-
-// namespace {  // TODO(cais): Remove namespace
 
 void ExecutorState::RunAsync(Executor::DoneCallback done) {
   const Graph* graph = impl_->graph_;
