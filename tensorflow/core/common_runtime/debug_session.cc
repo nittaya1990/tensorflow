@@ -81,10 +81,9 @@ namespace tensorflow {
 DebugExecutorImpl::DebugExecutorImpl(const LocalExecutorParams& p,
                                      const Graph* g)
     : ExecutorImpl(p, g),
-      debugger_notification(), node_value_store(), node_ref_store(),
+      debug_notification(), exec_notification(), 
+      node_value_store(), node_ref_store(),
       thread_pool_(), break_at_node(), injected_tensors() {
-  // TODO(cais): Remove moved
-  // debugger_notification.reset(new MultiUseNotification());
   thread_pool_.reset(new thread::ThreadPool(Env::Default(), "Debugger", 1));
 }
 
@@ -270,10 +269,14 @@ void DebugExecutorImpl::CalcNodeOrder() {
 // tfdb: Handle debugger message
 DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
   const DebuggerRequest& debugger_request) {
+  // std::cout << "*** debug_notification = " << debug_notification << std::endl;  // DEBUG
+  // debug_notification->WaitForNotification(); // TODO(cais): activate
+
+  // TODO(cais): Replace with string constants in debugger.h
   static const string STEP("step");
   static const string STEP_PREFIX("step ");
   static const string PRINT_PREFIX("print ");
-  static const string CONTINUE_PREFIX("continue ");
+  // static const string CONTINUE_PREFIX("continue ");  // TODO(cais): Remove
   static const string WHERE("where");
   static const string INJECT_VALUE_PREFIX("inject_value ");
 
@@ -302,7 +305,7 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
     if (debugger_request.command == STEP) {
       // Step once
 
-      debugger_notification->NotifyOnce();
+      exec_notification->NotifyOnce();
     } else if (debugger_request.command.find(STEP_PREFIX) == 0) {
       // Step multiple times
 
@@ -312,11 +315,14 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
                                           &n_steps);
 
       if (convert_okay && n_steps > 0) {
-        debugger_notification->Notify(n_steps);
+        exec_notification->Notify(n_steps);
       } else {
         std::cerr << "Syntax error in step command: \""
                   << debugger_request.command << "\"" << std::endl;  // DEBUG
       }
+
+      // Wait for the stepping to actually finish before proceeding
+      debug_notification->WaitForNotification();
     } else {
       std::cerr << "Syntax error in step command: \""
                 << debugger_request.command << "\"" << std::endl;  // DEBUG
@@ -358,46 +364,47 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
       }
     }
 
-  } else if (debugger_request.command.find(CONTINUE_PREFIX) == 0) {
-    // Continue execution
+  // TODO(cais): Remove branch
+  // } else if (debugger_request.command.find(CONTINUE_PREFIX) == 0) {
+  //   // Continue execution
 
-    const string& node_name =
-        debugger_request.command.substr(CONTINUE_PREFIX.size());
+  //   const string& node_name =
+  //       debugger_request.command.substr(CONTINUE_PREFIX.size());
 
-    // See if the node is already completed
-    bool already_completed = false;
-    for (const string& completed_node : completed_nodes) {
-      if (completed_node == node_name) {
-        already_completed = true;
-        break;
-      }
-    }
+  //   // See if the node is already completed
+  //   bool already_completed = false;
+  //   for (const string& completed_node : completed_nodes) {
+  //     if (completed_node == node_name) {
+  //       already_completed = true;
+  //       break;
+  //     }
+  //   }
 
-    if (already_completed) {
-      // DEBUG
-      // std::cerr << "ERROR: Node \"" << node_name
-      //           << "\" is already completed" << std::endl;
-    } else {
-      size_t steps_to_go = 0;
-      bool found_node = false;
+  //   if (already_completed) {
+  //     // DEBUG
+  //     // std::cerr << "ERROR: Node \"" << node_name
+  //     //           << "\" is already completed" << std::endl;
+  //   } else {
+  //     size_t steps_to_go = 0;
+  //     bool found_node = false;
 
-      for (const string& remaining_node : not_completed_nodes) {
-        steps_to_go++;
-        if (remaining_node == node_name) {
-          found_node = true;
-          break;
-        }
-      }
+  //     for (const string& remaining_node : not_completed_nodes) {
+  //       steps_to_go++;
+  //       if (remaining_node == node_name) {
+  //         found_node = true;
+  //         break;
+  //       }
+  //     }
 
-      if (!found_node) {
-        // DEBUG
-        // std::cerr << "ERROR: Node \"" << node_name
-        //           << "\" cannot be found" << std::endl;  // DEBUG
-      } else {
-        // std::cout << "Steps to go: " << steps_to_go << std::endl;
-        debugger_notification->Notify(steps_to_go);
-      }
-    }
+  //     if (!found_node) {
+  //       // DEBUG
+  //       // std::cerr << "ERROR: Node \"" << node_name
+  //       //           << "\" cannot be found" << std::endl;  // DEBUG
+  //     } else {
+  //       // std::cout << "Steps to go: " << steps_to_go << std::endl;
+  //       exec_notification->Notify(steps_to_go);
+  //     }
+  //   }
 
   } else if (debugger_request.command == WHERE) {
     // Get current debugger location: No special action required here
@@ -431,18 +438,19 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
 }
 
 void DebugExecutorImpl::RunAsync(const Args& args, DoneCallback done) {
-  // Create a new notification object for this debugging round
-  std::cout << "*** Creating new MultiUseNotification instance ***" << std::endl;  // DEBUG
-  debugger_notification.reset(new MultiUseNotification());
+  // Create new notification objects for the execution and the debugger,
+  // respectively.
+  exec_notification.reset(new MultiUseNotification());
+  debug_notification.reset(new MultiUseNotification());
 
   executor_state = new DebugExecutorState(args, this);
 
   executor_state->RunAsync(done);
 
   // std::cout
-  //     << "Exiting RunAsync: marking debugger_notification as completed"
+  //     << "Exiting RunAsync: marking exec_notification as completed"
   //     << std::endl;
-  debugger_notification->MarkAsCompleted();
+  exec_notification->MarkAsCompleted();
 }
 
 DebugExecutorState::DebugExecutorState(const Executor::Args& args,
@@ -535,6 +543,7 @@ void DebugExecutorState::RunAsync(DebugExecutorImpl::DoneCallback done) {
 
 // namespace {
 
+// TODO(cais): Remove unused local function
 // Helpers to make a copy of 'p' and makes a copy of the input type
 // vector and the device context vector.
 //
@@ -554,56 +563,7 @@ OpKernelContext::Params* CopyParams(const OpKernelContext::Params& p) {
   return ret;
 }
 
-void DebugExecutorState::PropagateOutputs(const TaggedNode& tagged_node,
-                                          const EntryVector& outputs,
-                                          TaggedNodeSeq* ready) {
-  FrameState* input_frame = tagged_node.input_frame;
-  int64 input_iter = tagged_node.input_iter;
-
-  // Propagates outputs along out edges, and puts newly ready nodes
-  // into the ready queue.
-  ready->clear();
-  {
-    FrameState* output_frame = input_frame;
-    int64 output_iter = input_iter;
-
-    mutex_lock l(mu_);
-    // Sets the output_frame and output_iter of node.
-    bool maybe_completed = SetOutputFrameIter(
-        tagged_node, outputs, &output_frame, &output_iter, ready);
-    if (output_frame != nullptr) {
-      // Continue to process the out nodes:
-
-      // Store output_frame, output_iter and outputs
-      stored_node = tagged_node.node;
-      stored_output_frame = output_frame;
-      stored_output_iter = output_iter;
-      stored_outputs = outputs;
-
-      // std::cout << "--- Calling ActivateNode() with stored_output_frame: "
-      //           << stored_output_frame->frame_name
-      //           << "; output_iter = " << stored_output_iter
-      //           << "; outputs.size() = " << stored_outputs.size()
-      //           << std::endl;  // DEBUG
-      ActivateNode(tagged_node.node, tagged_node.is_dead, output_frame,
-                   output_iter, outputs, ready);
-    }
-
-    // At this point, this node is completely done.
-    input_frame->GetIteration(input_iter)->outstanding_ops--;
-    CleanupFramesIterations(input_frame, input_iter, ready);
-
-    // The execution of a node such as Enter may cause the completion of
-    // output_frame:output_iter, so perform cleanup if
-    // output_frame:output_iter
-    // is indeed completed.
-    if (maybe_completed) {
-      CleanupFramesIterations(output_frame, output_iter, ready);
-    }
-  }
-}
-
-// tfdb(cais)
+// tfdb: Inject a new Tensor value into the current node.
 void DebugExecutorState::InjectNodeValue(Tensor value) {
   // std::cout << "=== In InjectNodeValue()" << std::endl
   //           << "      Tensor address = " << &value << std::endl
@@ -667,6 +627,12 @@ void DebugExecutorState::ActivateNode(const Node* node, const bool is_dead,
                                  FrameState* output_frame, int64 output_iter,
                                  const EntryVector& outputs,
                                  TaggedNodeSeq* ready) {
+  // Store output_frame, output_iter and outputs
+  stored_node = node;
+  stored_output_frame = output_frame;
+  stored_output_iter = output_iter;
+  stored_outputs = outputs;
+
   const NodeItem* nodes = impl_->nodes_;
   IterationState* output_iter_state = output_frame->GetIteration(output_iter);
   for (const Edge* e : node->out_edges()) {
@@ -783,11 +749,14 @@ void DebugExecutorState::ActivateNode(const Node* node, const bool is_dead,
 void DebugExecutorState::NodeDoneEarlyHook(const Node* node) {
   // Supply information about at which node the debugger is at.
   debug_exec_impl_->break_at_node = node->name();
+
+  // Notify the debugger thread that a node has just finished executing.
+  debug_exec_impl_->debug_notification->NotifyOnce();
 }
 
 void DebugExecutorState::NodeDoneLateHook(const Node* node) {
   // std::cout << "hook: WaitForNotification" << std::endl;  // DEBUG
-  debug_exec_impl_->debugger_notification->WaitForNotification();
+  debug_exec_impl_->exec_notification->WaitForNotification();
   // std::cout << "hook: Proceed" << std::endl;  // DEBUG
 }
 
@@ -822,7 +791,8 @@ void DebugSession::SchedClosure(std::function<void()> c) {
 
 DebugSession::DebugSession(const SessionOptions& options,
                            const DeviceMgr* device_mgr)
-    : DirectSession(options, device_mgr), debug_executor(nullptr) {
+    : DirectSession(options, device_mgr),
+      debug_executor(nullptr), debug_init_notif(nullptr) {
   // TODO(cais): Remove inherited thread_pool_ if it will not ever be used.
 
   // Debug sessions will not optimize graphs
@@ -838,110 +808,21 @@ void DebugSession::WaitForNotification(RunState* run_state,
   // TODO(cais): Wait for GetOrCreateExecutors() maybe
 }
 
-Status DebugSession::Run(const RunOptions& run_options,
-                         const NamedTensorList& inputs,
-                         const std::vector<string>& output_names,
-                         const std::vector<string>& target_nodes,
-                         std::vector<Tensor>* outputs,
-                         RunMetadata* run_metadata) {
-  std::cout << "*** Entered DebugSession::Run() ***" << std::endl;  // DEBUG
-  {
-    mutex_lock l(graph_def_lock_);
-    if (!graph_created_) {
-      return errors::InvalidArgument(
-          "Session was not created with a graph before Run()!");
-    }
+Status DebugSession::GetOrCreateExecutors(
+    gtl::ArraySlice<string> inputs, gtl::ArraySlice<string> outputs,
+    gtl::ArraySlice<string> target_nodes,
+    ExecutorsAndKeys** executors_and_keys, RunStateArgs* run_state_args) {
+  // Invoke the parent version of the method
+  Status s = DirectSession::GetOrCreateExecutors(
+      inputs, outputs, target_nodes,
+      executors_and_keys, run_state_args);
+
+  if (s.ok()) {
+    // tfdb: Register the DebugExecutorImpl instance
+    debug_executor = (*executors_and_keys)->items[0].executor;
   }
 
-  // Extract the inputs names for this run of the session.
-  std::vector<string> input_tensor_names;
-  input_tensor_names.reserve(inputs.size());
-  for (const auto& it : inputs) {
-    input_tensor_names.push_back(it.first);
-  }
-
-  // Check if we already have an executor for these arguments.
-  ExecutorsAndKeys* executors_and_keys;
-  RunStateArgs run_state_args;
-  TF_RETURN_IF_ERROR(GetOrCreateExecutors(input_tensor_names, output_names,
-                                          target_nodes, &executors_and_keys,
-                                          &run_state_args));
-
-  // Create a run state and start execution.
-  RunState run_state(input_tensor_names, output_names);
-  run_state.rendez = new IntraProcessRendezvous(device_mgr_.get());
-
-  // Send inputs.
-  TF_RETURN_IF_ERROR(SendInputs(inputs, executors_and_keys, run_state.rendez));
-
-  // Start parallel Executors.
-  const int num_executors = executors_and_keys->items.size();
-  ExecutorBarrier* barrier = new ExecutorBarrier(
-      num_executors, run_state.rendez, [&run_state](const Status& ret) {
-        {
-          mutex_lock l(run_state.mu_);
-          run_state.status.Update(ret);
-        }
-        run_state.executors_done.Notify();
-      });
-
-  Executor::Args args;
-  args.step_id = step_id_counter_.fetch_add(1);
-  args.rendezvous = run_state.rendez;
-  args.cancellation_manager = cancellation_manager_;
-  args.runner = [this](Executor::Args::Closure c) { SchedClosure(c); };
-  args.session_state = &session_state_;
-  args.tensor_store = &run_state.tensor_store;
-
-  if (LogMemory::IsEnabled()) {
-    LogMemory::RecordStep(args.step_id, run_state_args.handle);
-  }
-
-  // std::unique_ptr<GPUTracer> tracer;
-  if (run_options.trace_level() == RunOptions::FULL_TRACE ||
-      options_.config.graph_options().build_cost_model()) {
-    args.stats_collector = new StepStatsCollector(
-        run_metadata->mutable_step_stats(), &cost_models_);
-    run_state.collector = args.stats_collector;
-    // if (tracer && run_options.trace_level() == RunOptions::FULL_TRACE) {
-    //   tracer.reset(CreateGPUTracer());
-    //   tracer->Start();
-    // }
-  }
-
-  for (const auto& item : executors_and_keys->items) {
-    // TODO(cais): Refactor and dedupe
-    debug_executor = item.executor;  // tfdb
-    
-    // std::cout << "L debug_executor = " << debug_executor << std::endl;  // DEBUG
-    item.executor->RunAsync(args, barrier->Get());
-  }
-
-  WaitForNotification(&run_state, run_options.timeout_in_ms() > 0
-                                      ? run_options.timeout_in_ms()
-                                      : operation_timeout_in_ms_);
-  // if (tracer) {
-  //   tracer->Stop();
-  //   tracer->Collect(args.stats_collector);
-  // }
-
-  {
-    mutex_lock l(run_state.mu_);
-    TF_RETURN_IF_ERROR(run_state.status);
-  }
-
-  // Receive outputs.
-  TF_RETURN_IF_ERROR(
-      RecvOutputs(output_names, executors_and_keys, &run_state, outputs));
-
-  // Save the output tensors of this run we choose to keep.
-  TF_RETURN_IF_ERROR(
-      run_state.tensor_store.SaveTensors(output_names, &session_state_));
-
-  // TODO(cais): Wait for notification that the debugger has paused before
-  // returning.
-
-  return Status::OK();
+  return s;
 }
 
 Status DebugSession::CreateLocalExecutor(
@@ -950,10 +831,10 @@ Status DebugSession::CreateLocalExecutor(
   DebugExecutorImpl* impl = new DebugExecutorImpl(params, graph);
   Status s = impl->Initialize();
 
-  // Pre-calculate node execution order
-  impl->CalcNodeOrder();
-
   if (s.ok()) {
+    // Pre-calculate node execution order
+    impl->CalcNodeOrder();
+
     *executor = impl;
     debug_executor = impl;
   } else {
@@ -962,6 +843,20 @@ Status DebugSession::CreateLocalExecutor(
 
   return s;
 }
+
+Status DebugSession::Run(const NamedTensorList& inputs,
+                         const std::vector<string>& output_names,
+                         const std::vector<string>& target_nodes,
+                         std::vector<Tensor>* outputs) {
+  debug_init_notif.reset(new Notification());
+  std::cout << "Created new instance of debug_init_notif" << std::endl;  // DEBUG
+
+  // Invoke the version of the method in parent class
+  Status s = DirectSession::Run(inputs, output_names, target_nodes, outputs);
+
+  return s;
+}
+
 
 ::tensorflow::DebuggerResponse DebugSession::SendDebugMessage(
     const DebuggerRequest& request) {
@@ -972,15 +867,25 @@ Status DebugSession::CreateLocalExecutor(
   {
     mutex_lock l(debug_lock_);
 
-    if (debug_executor != nullptr) {
-      DebugExecutorImpl* debug_exec_impl
-          = reinterpret_cast<DebugExecutorImpl*>(debug_executor);
-      // DEBUG
-      // std::cout << "debug_exec_impl = " << debug_exec_impl << std::endl;
-      return debug_exec_impl->HandleDebuggerMessage(request);
-    } else {
-      return DebuggerResponse();    // TODO(cais): Throw proper exception.
+    // Wait until debug_executor is not nullptr anymore
+    while (debug_executor == nullptr) {
+      Env::Default()->SleepForMicroseconds(1000);
     }
+
+    // TODO(cais): Wait for the Run launch to
+    // std::cout << "debug_init_notif->WaitForNotification()" << std::endl;  // DEBUG
+    // debug_init_notif->WaitForNotification();
+
+    // if (debug_executor != nullptr) {
+    DebugExecutorImpl* debug_exec_impl
+        = reinterpret_cast<DebugExecutorImpl*>(debug_executor);
+    // DEBUG
+    // std::cout << "debug_exec_impl = " << debug_exec_impl << std::endl;
+    return debug_exec_impl->HandleDebuggerMessage(request);
+    // } else {
+      // std::cout << "*** WARNING: debug_executor is nullptr" << std::endl;  // DEBUG
+      // return DebuggerResponse();    // TODO(cais): Throw proper exception.
+    // }
   }
 }
 

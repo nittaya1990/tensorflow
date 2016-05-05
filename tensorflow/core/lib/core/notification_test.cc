@@ -13,6 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <unistd.h>
+
 #include "tensorflow/core/platform/test.h"
 
 #include "tensorflow/core/lib/core/notification.h"
@@ -22,6 +24,8 @@ limitations under the License.
 
 namespace tensorflow {
 namespace {
+
+const int microsec_to_sleep = 10 * 1000;  // 10 ms
 
 TEST(NotificationTest, TestSingleNotification) {
   thread::ThreadPool* thread_pool =
@@ -67,7 +71,7 @@ TEST(NotificationTest, TestMultipleThreadsWaitingOnNotification) {
       ++counter;
     });
   }
-  sleep(1);
+  Env::Default()->SleepForMicroseconds(microsec_to_sleep);
 
   EXPECT_EQ(0, counter);
 
@@ -104,14 +108,16 @@ TEST(MultiUseNotificationTest, TestNotifyOnce) {
 
   // Unblock the thread for the 1st time
   proceed.NotifyOnce();
-  sleep(1);
+
+  // Sleep for a little while for the counter to update
+  Env::Default()->SleepForMicroseconds(microsec_to_sleep);
 
   // Verify the counter has been incremented
   EXPECT_EQ(1, counter);
 
   // Unblock the thread for the 2nd time
   proceed.NotifyOnce();
-  sleep(1);
+  Env::Default()->SleepForMicroseconds(microsec_to_sleep);
 
   // Verify the counter has been incremented
   EXPECT_EQ(2, counter);
@@ -152,7 +158,9 @@ TEST(MultiUseNotificationTest, TestNotifyMultipleTimes) {
 
   // Unblock the thread for the 1st time
   proceed.Notify(times_to_notify);
-  sleep(1);
+  
+  // Sleep for a little while for the counter to update
+  Env::Default()->SleepForMicroseconds(microsec_to_sleep);
 
   // Verify the counter has been incremented
   EXPECT_EQ(times_to_notify, counter);

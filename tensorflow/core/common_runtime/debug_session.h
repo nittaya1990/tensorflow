@@ -62,7 +62,12 @@ class DebugExecutorImpl : public ExecutorImpl {
 
   void RunAsync(const Args& args, DoneCallback done) override;
 
-  std::shared_ptr<MultiUseNotification> debugger_notification;
+  // Notification object for debugger thread
+  std::shared_ptr<MultiUseNotification> debug_notification;
+
+  // Notification object for graph execution thread
+  std::shared_ptr<MultiUseNotification> exec_notification;
+
   std::unordered_map<string, Tensor> node_value_store;
   std::unordered_map<string, Tensor*> node_ref_store;
 
@@ -123,11 +128,6 @@ class DebugExecutorState : public ExecutorState {
                     TaggedNodeSeq* ready) EXCLUSIVE_LOCKS_REQUIRED(mu_)
       override;
 
-  // After processing the outputs, propagates the outputs to their dsts.
-  void PropagateOutputs(const TaggedNode& tagged_node,
-                        const EntryVector& outputs,
-                        TaggedNodeSeq* ready) override;
-
   // Override the two hooks for debugging
   void NodeDoneEarlyHook(const Node* node) override;
   void NodeDoneLateHook(const Node* node) override;
@@ -149,6 +149,11 @@ class DebugSession : public DirectSession {
   // Takes ownership of 'device_mgr'.
   DebugSession(const SessionOptions& options, const DeviceMgr* device_mgr);
 
+  ::tensorflow::Status Run(const NamedTensorList& inputs,
+                           const std::vector<string>& output_names,
+                           const std::vector<string>& target_nodes,
+                           std::vector<Tensor>* outputs) override;
+
   ::tensorflow::DebuggerResponse
       SendDebugMessage(const DebuggerRequest& request) override;
 
@@ -159,13 +164,11 @@ class DebugSession : public DirectSession {
 
   void SchedClosure(std::function<void()> c) override;
 
-  // NOTE: Experimental and subject to change.
-  ::tensorflow::Status Run(const ::tensorflow::RunOptions& run_options,
-                           const NamedTensorList& inputs,
-                           const std::vector<string>& output_names,
-                           const std::vector<string>& target_nodes,
-                           std::vector<Tensor>* outputs,
-                           RunMetadata* run_metadata) override;
+  ::tensorflow::Status GetOrCreateExecutors(
+      gtl::ArraySlice<string> inputs, gtl::ArraySlice<string> outputs,
+      gtl::ArraySlice<string> target_nodes,
+      ExecutorsAndKeys** executors_and_keys, RunStateArgs* run_state_args)
+      override;
 
   void WaitForNotification(RunState* run_state, int64 timeout_in_ms) override;
 
@@ -175,6 +178,7 @@ class DebugSession : public DirectSession {
   TF_DISALLOW_COPY_AND_ASSIGN(DebugSession);
 
   mutex debug_lock_;
+  std::shared_ptr<Notification> debug_init_notif;
 };  // end class DebugSession
 
 }  // end namespace tensorflow
