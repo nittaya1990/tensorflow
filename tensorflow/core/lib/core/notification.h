@@ -71,44 +71,27 @@ class MultiUseNotification {
 
   void NotifyOnce() {
     mutex_lock l(mu_);
-    // assert(!notified_);
     pos_++;
     cv_.notify_all();
   }
 
   void Notify(int n) {
+    assert(n > 0);
     pos_ += n;
     cv_.notify_all();
   }
 
-  // bool TimesNotified() {
-  //   mutex_lock l(mu_);
-  //   return times_notified_;
-  // }
-
   void WaitForNotification() {
     mutex_lock l(mu_);
-    // int prev_times_notified = times_notified_;
-    // std::cout << "--- Waiting for notification: prev_times_notified_ = "
-    //           << prev_times_notified << std::endl;
-    // std::cout << "--- Waiting for notification: pos_ = "
-              // << pos_ << "; target_pos_ = " << target_pos_ << std::endl;
-    while (pos_ < target_pos_) {
+    while (pos_ < target_pos_ && !completed_) {
       cv_.wait(l);
     }
-
-    // if (pos == target_pos_) {
-      // No increment will be done unless target_pos_ has caught up with pos_.
-      // For example, if pos_ is incremented with a large step through Notify()
-      // from 2 to 4, target_pos_ will not be incremented at 2 or 3, but will
-      // be incremented only when it
-
     target_pos_ += target_pos_inc_;
-    // }
   }
 
   void MarkAsCompleted() {
     mutex_lock l(mu_);
+    cv_.notify_all();
     completed_ = true;
   }
 
@@ -123,7 +106,6 @@ class MultiUseNotification {
   int pos_;
   int target_pos_;
   int target_pos_inc_;
-  // int times_notified_;
   bool completed_;
 };
 

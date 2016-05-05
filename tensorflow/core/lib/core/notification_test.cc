@@ -76,5 +76,92 @@ TEST(NotificationTest, TestMultipleThreadsWaitingOnNotification) {
   EXPECT_EQ(4, counter);
 }
 
+TEST(MultiUseNotificationTest, TestNotifyOnce) {
+  thread::ThreadPool* thread_pool =
+      new thread::ThreadPool(Env::Default(), "test", 1);
+
+  int counter = 0;
+  Notification start;
+  MultiUseNotification proceed;
+  thread_pool->Schedule([&start, &proceed, &counter] {
+    start.Notify();
+
+    // Wait for notifications until the object as marked as completed
+    while (!proceed.IsCompleted()) {
+      proceed.WaitForNotification();
+      if (!proceed.IsCompleted()) {
+        ++counter;
+      }
+    }
+
+  });
+
+  // Wait for the thread to start
+  start.WaitForNotification();
+
+  // The thread should be waiting for the 'proceed' notification.
+  EXPECT_EQ(0, counter);
+
+  // Unblock the thread for the 1st time
+  proceed.NotifyOnce();
+  sleep(1);
+
+  // Verify the counter has been incremented
+  EXPECT_EQ(1, counter);
+
+  // Unblock the thread for the 2nd time
+  proceed.NotifyOnce();
+  sleep(1);
+
+  // Verify the counter has been incremented
+  EXPECT_EQ(2, counter);
+
+  proceed.MarkAsCompleted();
+
+  delete thread_pool;  // Wait for closure to finish.
+  EXPECT_EQ(2, counter);
+}
+
+TEST(MultiUseNotificationTest, TestNotifyMultipleTimes) {
+  thread::ThreadPool* thread_pool =
+      new thread::ThreadPool(Env::Default(), "test", 1);
+
+  int counter = 0;
+  Notification start;
+  MultiUseNotification proceed;
+  thread_pool->Schedule([&start, &proceed, &counter] {
+    start.Notify();
+
+    // Wait for notifications until the object as marked as completed
+    while (!proceed.IsCompleted()) {
+      proceed.WaitForNotification();
+      if (!proceed.IsCompleted()) {
+        ++counter;
+      }
+    }
+
+  });
+
+  // Wait for the thread to start
+  start.WaitForNotification();
+
+  // The thread should be waiting for the 'proceed' notification.
+  EXPECT_EQ(0, counter);
+
+  const int times_to_notify = 42;
+
+  // Unblock the thread for the 1st time
+  proceed.Notify(times_to_notify);
+  sleep(1);
+
+  // Verify the counter has been incremented
+  EXPECT_EQ(times_to_notify, counter);
+
+  proceed.MarkAsCompleted();
+
+  delete thread_pool;  // Wait for closure to finish.
+  EXPECT_EQ(times_to_notify, counter);
+}
+
 }  // namespace
 }  // namespace tensorflow

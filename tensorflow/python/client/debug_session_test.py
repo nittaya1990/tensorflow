@@ -574,8 +574,6 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
 
   def testMultipleNumTimesBreakpoints(self):
     with session.Session("debug") as debug_sess:
-      print("In testMultipleNumTimesBreakpoints")  # DEBUG
-
       a0 = np.array([[10.0]]).astype(np.float32)
       b0 = np.array([[20.0]]).astype(np.float32)
 
@@ -646,54 +644,6 @@ class DebugSessionTest(test_util.TensorFlowTestCase):
       debug_round.cont()
       self.assertEquals(len(node_order) - 1, debug_round.where())
 
-  #     # curr_rep_idx = 0
-  #     # for node_name in node_order:
-  #     #   rep_idx = int(node_name.split("_")[0])
-  #     #   self.assertTrue(rep_idx >= 0 and rep_idx < num_times)
-
-  #     #   if rep_idx > curr_rep_idx:
-  #     #     self.assertEquals(1 + curr_rep_idx, rep_idx)
-  #     #     curr_rep_idx += 1
-  #     #   else:
-  #     #     self.assertEquals(curr_rep_idx, rep_idx)
-
-  #     # self.assertEquals("0__SOURCE", node_order[0])
-  #     # self.assertEquals("%d__SINK" % (num_times - 1), node_order[-1])
-
-  #     # # Continuing to an indexed node (e.g., 0_mnt_b) should
-  #     # # First make sure that the ordering is what we think it is
-  #     # self.assertTrue(node_order.index("0_mnt_a") <
-  #     #                 node_order.index("0_mnt_b"))
-
-  #     # debug_round.cont("0_mnt_a")
-  #     # self.assertEquals("0_mnt_a", node_order[debug_round.where()])
-  #     # self.assertEquals(0, debug_round.get_repetition_index())
-
-  #     # # Continuing to a non-indexed node should work
-  #     # debug_round.cont("mnt_b")
-  #     # self.assertEquals("0_mnt_b", node_order[debug_round.where()])
-  #     # self.assertEquals(0, debug_round.get_repetition_index())
-
-  #     # # Attempt to continue to a node without rep prefix should lead to an
-  #     # # exception
-  #     # with self.assertRaisesRegexp(ValueError,
-  #     #                              "has already finished executing"):
-  #     #   debug_round.cont("mnt_a")
-
-  #     # # Continuing to prefixed node with a rep index different from the
-  #     # # current one should work
-  #     # debug_round.cont("1_mnt_b")
-  #     # self.assertEquals("1_mnt_b", node_order[debug_round.where()])
-  #     # self.assertEquals(1, debug_round.get_repetition_index())
-
-  #     # # Continuing to a nonexistent repetition number should lead to an
-  #     # # exception
-  #     # with self.assertRaisesRegexp(ValueError,
-  #     #                              "does not exist in the node order"):
-  #     #   debug_round.cont("123_mnt_a")
-  #     # self.assertEquals(1, debug_round.get_repetition_index())
-
-      print("auto stepping...")  # DEBUG
       self._auto_step(debug_round)
 
       # Examine the value after two runs

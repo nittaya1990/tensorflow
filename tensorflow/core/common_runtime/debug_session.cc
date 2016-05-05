@@ -83,7 +83,8 @@ DebugExecutorImpl::DebugExecutorImpl(const LocalExecutorParams& p,
     : ExecutorImpl(p, g),
       debugger_notification(), node_value_store(), node_ref_store(),
       thread_pool_(), break_at_node(), injected_tensors() {
-  debugger_notification.reset(new MultiUseNotification());
+  // TODO(cais): Remove moved
+  // debugger_notification.reset(new MultiUseNotification());
   thread_pool_.reset(new thread::ThreadPool(Env::Default(), "Debugger", 1));
 }
 
@@ -430,6 +431,10 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
 }
 
 void DebugExecutorImpl::RunAsync(const Args& args, DoneCallback done) {
+  // Create a new notification object for this debugging round
+  std::cout << "*** Creating new MultiUseNotification instance ***" << std::endl;  // DEBUG
+  debugger_notification.reset(new MultiUseNotification());
+
   executor_state = new DebugExecutorState(args, this);
 
   executor_state->RunAsync(done);
@@ -781,7 +786,9 @@ void DebugExecutorState::NodeDoneEarlyHook(const Node* node) {
 }
 
 void DebugExecutorState::NodeDoneLateHook(const Node* node) {
+  // std::cout << "hook: WaitForNotification" << std::endl;  // DEBUG
   debug_exec_impl_->debugger_notification->WaitForNotification();
+  // std::cout << "hook: Proceed" << std::endl;  // DEBUG
 }
 
 // TODO(cais): Dedupe with direct_session.cc
@@ -827,7 +834,7 @@ DebugSession::DebugSession(const SessionOptions& options,
 
 void DebugSession::WaitForNotification(RunState* run_state,
                                        int64 timeout_in_ms) {
-  // tfdb: Do nothing for now.
+  // tfdb: Do nothing here.
   // TODO(cais): Wait for GetOrCreateExecutors() maybe
 }
 
@@ -837,6 +844,7 @@ Status DebugSession::Run(const RunOptions& run_options,
                          const std::vector<string>& target_nodes,
                          std::vector<Tensor>* outputs,
                          RunMetadata* run_metadata) {
+  std::cout << "*** Entered DebugSession::Run() ***" << std::endl;  // DEBUG
   {
     mutex_lock l(graph_def_lock_);
     if (!graph_created_) {
@@ -902,8 +910,10 @@ Status DebugSession::Run(const RunOptions& run_options,
   }
 
   for (const auto& item : executors_and_keys->items) {
+    // TODO(cais): Refactor and dedupe
     debug_executor = item.executor;  // tfdb
-    std::cout << "L debug_executor = " << debug_executor << std::endl;  // DEBUG
+    
+    // std::cout << "L debug_executor = " << debug_executor << std::endl;  // DEBUG
     item.executor->RunAsync(args, barrier->Get());
   }
 
@@ -927,6 +937,9 @@ Status DebugSession::Run(const RunOptions& run_options,
   // Save the output tensors of this run we choose to keep.
   TF_RETURN_IF_ERROR(
       run_state.tensor_store.SaveTensors(output_names, &session_state_));
+
+  // TODO(cais): Wait for notification that the debugger has paused before
+  // returning.
 
   return Status::OK();
 }
@@ -962,6 +975,8 @@ Status DebugSession::CreateLocalExecutor(
     if (debug_executor != nullptr) {
       DebugExecutorImpl* debug_exec_impl
           = reinterpret_cast<DebugExecutorImpl*>(debug_executor);
+      // DEBUG
+      // std::cout << "debug_exec_impl = " << debug_exec_impl << std::endl;
       return debug_exec_impl->HandleDebuggerMessage(request);
     } else {
       return DebuggerResponse();    // TODO(cais): Throw proper exception.
