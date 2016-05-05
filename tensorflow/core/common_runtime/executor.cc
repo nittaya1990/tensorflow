@@ -422,8 +422,8 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     if (stats_collector_) {
       stats = new NodeExecStats;
       stats->set_node_name(node->name());
-      nodestats::SetScheduled(stats, scheduled_usec);
-      nodestats::SetAllStart(stats);
+      SetScheduled(stats, scheduled_usec);
+      SetAllStart(stats);
     }
 
     if (vlog_) {
@@ -487,10 +487,10 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
             VLOG(2) << this << " Async kernel done: "
                     << SummarizeNodeDef(item.node->def());
           }
-          if (stats_collector_) nodestats::SetOpEnd(stats);
+          if (stats_collector_) SetOpEnd(stats);
           EntryVector outputs;
           Status s = ProcessOutputs(item, ctx, &outputs, stats);
-          if (stats_collector_) nodestats::SetMemory(stats, ctx);
+          if (stats_collector_) SetMemory(stats, ctx);
           // Clears inputs.
           int num_inputs = item.num_inputs;
           for (int i = 0; i < num_inputs; ++i) {
@@ -513,7 +513,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
             TensorReferenceVector accessed;
             ctx->retrieve_accessed_tensors(&accessed);
             if (stats_collector_)
-              nodestats::SetReferencedTensors(stats, accessed);
+              SetReferencedTensors(stats, accessed);
             // callee takes ownership of the vector
             device->ConsumeListOfAccessedTensors(ctx->op_device_context(),
                                                  accessed);
@@ -523,12 +523,12 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
           DeleteParams(pcopy);
           if (completed) Finish();
         };
-        if (stats_collector_) nodestats::SetOpStart(stats);
+        if (stats_collector_) SetOpStart(stats);
         device->ComputeAsync(async, ctx, done);
       } else {
         // Synchronous computes.
         OpKernelContext ctx(&params, item.num_outputs);
-        if (stats_collector_) nodestats::SetOpStart(stats);
+        if (stats_collector_) SetOpStart(stats);
         device->Compute(CHECK_NOTNULL(op_kernel), &ctx);
         // The final node in the step is always a Sink node. Block
         // this Op from completing until the device has finished all
@@ -539,7 +539,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
         if (node->IsSink() && ctx.status().ok()) {
           ctx.SetStatus(device->Sync());
         }
-        if (stats_collector_) nodestats::SetOpEnd(stats);
+        if (stats_collector_) SetOpEnd(stats);
 
         s = ProcessOutputs(item, &ctx, &outputs, stats);
         if (s.ok() && impl_->device_record_tensor_accesses_) {
@@ -547,7 +547,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
           ctx.retrieve_accessed_tensors(&accessed_tensors);
           device_context = ctx.op_device_context();
         }
-        if (stats_collector_) nodestats::SetMemory(stats, &ctx);
+        if (stats_collector_) SetMemory(stats, &ctx);
       }
     }
 
@@ -571,12 +571,12 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
       outputs.clear();
       if (!accessed_tensors.empty()) {
         if (stats_collector_)
-          nodestats::SetReferencedTensors(stats, accessed_tensors);
+          SetReferencedTensors(stats, accessed_tensors);
         // device_context is set above in synchronous computes
         device->ConsumeListOfAccessedTensors(device_context, accessed_tensors);
       }
       if (stats_collector_) {
-        scheduled_usec = nodestats::NowInUsec();
+        scheduled_usec = NowInUsec();
       }
       // Postprocess.
       completed = NodeDone(s, item.node, ready, stats, &inline_ready);
@@ -721,7 +721,7 @@ Status ExecutorState::ProcessOutputs(const NodeItem& item, OpKernelContext* ctx,
           }
         }
         if (stats_collector_ && val.tensor->IsInitialized()) {
-          nodestats::SetOutput(stats, i, val.tensor);
+          SetOutput(stats, i, val.tensor);
         }
       } else {
         s.Update(errors::Internal("Output ", i, " of type ",
@@ -899,7 +899,7 @@ bool ExecutorState::NodeDone(const Status& s, const Node* node,
                              const TaggedNodeSeq& ready, NodeExecStats* stats,
                              std::deque<TaggedNode>* inline_ready) {
   if (stats_collector_) {
-    nodestats::SetAllEnd(stats);
+    SetAllEnd(stats);
     stats_collector_->UpdateCostModel(stats, impl_->graph_, node);
     if (!SetTimelineLabel(node, stats)) {
       // Only record non-transfer nodes.
@@ -946,7 +946,7 @@ void ExecutorState::ProcessInline(const std::deque<TaggedNode>& inline_ready) {
   if (inline_ready.empty()) return;
   int64 scheduled_usec = 0;
   if (stats_collector_) {
-    scheduled_usec = nodestats::NowInUsec();
+    scheduled_usec = NowInUsec();
   }
   for (auto& tagged_node : inline_ready) {
     Process(tagged_node, scheduled_usec);
@@ -959,7 +959,7 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq& ready,
 
   int64 scheduled_usec = 0;
   if (stats_collector_) {
-    scheduled_usec = nodestats::NowInUsec();
+    scheduled_usec = NowInUsec();
   }
   if (inline_ready == nullptr) {
     // Schedule to run all the ready ops in thread pool.
@@ -1362,7 +1362,53 @@ void ExecutorState::CleanupFramesIterations(FrameState* frame, int64 iter,
   }
 }
 
-// }  // end namespace
+bool ExecutorState::SetTimelineLabel(const Node* node, NodeExecStats* node_stats) {
+    bool is_transfer_node = false;
+    string memory;
+    for (auto& all : node_stats->memory()) {
+      int64 tot = all.total_bytes();
+      if (tot >= 0.1 * 1048576.0) {
+        int64 peak = all.peak_bytes();
+        if (peak > 0) {
+          memory =
+              strings::StrCat(memory, "[", all.allocator_name(),
+                              strings::Printf(" %.1fMB %.1fMB] ", tot / 1048576.0,
+                                              peak / 1048576.0));
+        } else {
+          memory = strings::StrCat(memory, "[", all.allocator_name(),
+                                   strings::Printf(" %.1fMB] ", tot / 1048576.0));
+        }
+      }
+    }
+    const NodeDef& def = node->def();
+    string text = "";
+    if (IsSend(node)) {
+      string tensor_name;
+      TF_CHECK_OK(GetNodeAttr(def, "tensor_name", &tensor_name));
+      string recv_device;
+      TF_CHECK_OK(GetNodeAttr(def, "recv_device", &recv_device));
+      text = strings::StrCat(memory, def.name(), " = ", def.op(), "(",
+                             tensor_name, " @", recv_device);
+      is_transfer_node = true;
+    } else if (IsRecv(node)) {
+      string tensor_name;
+      TF_CHECK_OK(GetNodeAttr(def, "tensor_name", &tensor_name));
+      string send_device;
+      TF_CHECK_OK(GetNodeAttr(def, "send_device", &send_device));
+      text = strings::StrCat(memory, def.name(), " = ", def.op(), "(",
+                             tensor_name, " @", send_device);
+      is_transfer_node = true;
+    } else {
+      text = strings::StrCat(
+          memory, def.name(), " = ", def.op(), "(",
+          str_util::Join(
+              std::vector<StringPiece>(def.input().begin(), def.input().end()),
+              ", "),
+          ")");
+    }
+    node_stats->set_timeline_label(text);
+    return is_transfer_node;
+  }
 
 void ExecutorImpl::RunAsync(const Args& args, DoneCallback done) {
   (new ExecutorState(args, this))->RunAsync(done);

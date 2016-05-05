@@ -125,9 +125,6 @@ class DebugExecutorState : public ExecutorState {
                     TaggedNodeSeq* ready) EXCLUSIVE_LOCKS_REQUIRED(mu_)
       override;
 
-  // Process a ready node in current thread.
-  void Process(TaggedNode node, int64 scheduled_usec) override;
-
   // After processing the outputs, propagates the outputs to their dsts.
   void PropagateOutputs(const TaggedNode& tagged_node,
                         const EntryVector& outputs,

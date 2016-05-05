@@ -105,6 +105,8 @@ bool DebugExecutorImpl::NodeName2NodeKernelIsExpensive(const string& node_name) 
   return nodes_[the_node->id()].kernel_is_expensive;
 }
 
+namespace {
+
 // DEBUG helper function
 void DebugPrintQueue(const string& title, const std::deque<string>& queue) {
   std::cout << title << ": [";
@@ -113,6 +115,8 @@ void DebugPrintQueue(const string& title, const std::deque<string>& queue) {
   }
  std::cout << "]" << std::endl;
 }
+
+}  // end namespace
 
 // Simulation methods for calculating node order
 void DebugExecutorImpl::SimProcess(const string& node_name) {
@@ -545,254 +549,6 @@ OpKernelContext::Params* CopyParams(const OpKernelContext::Params& p) {
   return ret;
 }
 
-// Helpers to delete 'p' and copies made by CopyParams.
-void DeleteParams(OpKernelContext::Params* p) {
-  // No need to delete p->eigen_gpu_device since that is deleted in
-  // p's destructor
-  delete p->inputs;
-  delete p->input_device_contexts;
-  delete p->input_alloc_attrs;
-  delete p;
-}
-
-// }  // end namespace
-
-void DebugExecutorState::Process(TaggedNode tagged_node,
-                                 int64 scheduled_usec) {
-  // std::cout << "In Process: tagged_node = "
-  //           << tagged_node.node->name() << std::endl;
-
-  const NodeItem* nodes = impl_->nodes_;
-  TaggedNodeSeq ready;
-  std::deque<TaggedNode> inline_ready;
-
-  // Parameters passed to OpKernel::Compute.
-  TensorValueVec inputs;
-  DeviceContextVec input_device_contexts;
-  AllocatorAttributeVec input_alloc_attrs;
-
-  OpKernelContext::Params params;
-  params.step_id = step_id_;
-  Device* device = impl_->params_.device;
-  params.device = device;
-  // track allocations if and only if we are collecting statistics
-  params.track_allocations = (stats_collector_ != nullptr);
-  params.rendezvous = rendezvous_;
-  params.session_state = session_state_;
-  params.tensor_store = tensor_store_;
-  params.cancellation_manager = cancellation_manager_;
-  params.call_frame = call_frame_;
-  params.function_library = impl_->params_.function_library;
-  params.resource_manager = device->resource_manager();
-  params.step_resource_manager = &step_resource_manager_;
-  params.slice_reader_cache = slice_reader_cache_;
-  params.inputs = &inputs;
-  params.input_device_contexts = &input_device_contexts;
-  params.input_alloc_attrs = &input_alloc_attrs;
-
-  Status s;
-  NodeExecStats* stats = nullptr;
-  EntryVector outputs;
-  bool completed = false;
-  inline_ready.push_back(tagged_node);
-  while (!inline_ready.empty()) {
-    tagged_node = inline_ready.front();
-    inline_ready.pop_front();
-    const Node* node = tagged_node.node;
-    FrameState* input_frame = tagged_node.input_frame;
-    int64 input_iter = tagged_node.input_iter;
-    const int id = node->id();
-    const NodeItem& item = nodes[id];
-
-    // TODO(misard) Replace with a finer-grain enabling flag once we
-    // add better optional debugging support.
-    if (VLOG_IS_ON(1)) {
-      mutex_lock l(mu_);
-
-      IterationState* iter_state = input_frame->GetIteration(input_iter);
-      iter_state->mark_started(id);
-    }
-
-    // Set the device_context for this node id, if it exists.
-    auto dc_it = device_context_map_.find(id);
-    if (dc_it != device_context_map_.end()) {
-      params.op_device_context = dc_it->second;
-    }
-
-    if (stats_collector_) {
-      stats = new NodeExecStats;
-      stats->set_node_name(node->name());
-      nodestats::SetScheduled(stats, scheduled_usec);
-      nodestats::SetAllStart(stats);
-    }
-
-    VLOG(1) << "Process node: " << id << " step " << params.step_id << " "
-            << SummarizeNodeDef(node->def());
-
-    Entry* input_tensors = GetInputTensors(input_frame, input_iter);
-    Entry* first_input = input_tensors + item.input_start;
-    outputs.clear();
-    outputs.resize(item.num_outputs);
-
-    TensorReferenceVector accessed_tensors;
-    DeviceContext* device_context = nullptr;
-    // Only execute this node if it is not dead or it is a send/recv
-    // transfer node. For transfer nodes, we need to propagate the "dead"
-    // bit even when the node is dead.
-    bool launched_asynchronously = false;
-    if (!tagged_node.is_dead || IsTransferNode(node)) {
-      // Prepares inputs.
-      bool is_input_dead = false;
-      s = PrepareInputs(item, first_input, &inputs, &input_device_contexts,
-                        &input_alloc_attrs, &is_input_dead);
-      if (!s.ok()) {
-        // Clear the inputs to maintain the invariant that completed
-        // nodes have no valid input tensors.
-        int num_inputs = item.num_inputs;
-        for (int i = 0; i < num_inputs; ++i) {
-          (first_input + i)->val = *kEmptyTensor;
-        }
-        // TODO(misard) Replace with a finer-grain enabling flag once we
-        // add better optional debugging support.
-        if (VLOG_IS_ON(1)) {
-          mutex_lock l(mu_);
-          IterationState* iter_state = input_frame->GetIteration(input_iter);
-          iter_state->mark_completed(id);
-        }
-        // Continue to process the nodes in 'inline_ready'.
-        completed = NodeDone(s, item.node, ready, stats, &inline_ready);
-        continue;
-      }
-
-      // Set up compute params.
-      OpKernel* op_kernel = item.kernel;
-      params.op_kernel = op_kernel;
-      params.frame_iter = FrameAndIter(input_frame->frame_id, input_iter);
-      params.is_input_dead = is_input_dead;
-      params.output_attr_array =
-          gtl::vector_as_array(&impl_->output_attrs_) + item.output_attr_start;
-
-      if (item.kernel_is_async) {
-        // std::cout << "  kernel is async" << std::endl; // DEBUG
-        // Asynchronous computes.
-        AsyncOpKernel* async = item.kernel->AsAsync();
-        DCHECK(async != nullptr);
-        launched_asynchronously = true;
-        auto pcopy = CopyParams(params);
-        auto ctx = new OpKernelContext(pcopy, item.num_outputs);
-        auto done = [this, tagged_node, item, first_input, ctx, stats, pcopy,
-                     device]() {
-          VLOG(2) << this << " Async kernel done: "
-                  << SummarizeNodeDef(item.node->def());
-          if (stats_collector_) nodestats::SetOpEnd(stats);
-          EntryVector outputs;
-          Status s = ProcessOutputs(item, ctx, &outputs, stats);
-          if (stats_collector_) nodestats::SetMemory(stats, ctx);
-          // Clears inputs.
-          int num_inputs = item.num_inputs;
-          for (int i = 0; i < num_inputs; ++i) {
-            (first_input + i)->val = *kEmptyTensor;
-          }
-          // TODO(misard) Replace with a finer-grain enabling flag once we
-          // add better optional debugging support.
-          if (VLOG_IS_ON(1)) {
-            mutex_lock l(mu_);
-            tagged_node.input_frame->GetIteration(tagged_node.input_iter)
-                ->mark_completed(tagged_node.node->id());
-          }
-          TaggedNodeSeq ready;
-          if (s.ok()) {
-            PropagateOutputs(tagged_node, outputs, &ready);
-          }
-          outputs.clear();
-          if (s.ok() && pcopy->device->RequiresRecordingAccessedTensors()) {
-            // Get the list of all tensors accessed during the execution
-            TensorReferenceVector accessed;
-            ctx->retrieve_accessed_tensors(&accessed);
-            if (stats_collector_)
-              nodestats::SetReferencedTensors(stats, accessed);
-            // callee takes ownership of the vector
-            device->ConsumeListOfAccessedTensors(ctx->op_device_context(),
-                                                 accessed);
-          }
-          bool completed = NodeDone(s, item.node, ready, stats, nullptr);
-          delete ctx;
-          DeleteParams(pcopy);
-          if (completed) Finish();
-        };
-        if (stats_collector_) nodestats::SetOpStart(stats);
-        device->ComputeAsync(async, ctx, done);
-      } else {
-        // std::cout << "  kernel is sync: "
-        //           << op_kernel->name() << std::endl; // DEBUG
-        // Synchronous computes.
-        OpKernelContext ctx(&params, item.num_outputs);
-        if (stats_collector_) nodestats::SetOpStart(stats);
-
-        device->Compute(CHECK_NOTNULL(op_kernel), &ctx);
-        // The final node in the step is always a Sink node. Block
-        // this Op from completing until the device has finished all
-        // queued operations. For devices like GPUs that continue to
-        // execute Ops after their Compute methods have completed,
-        // this ensures that control is not returned to the user until
-        // the step (and its side-effects) has actually completed.
-        if (node->IsSink() && ctx.status().ok()) {
-          ctx.SetStatus(device->Sync());
-        }
-        if (stats_collector_) nodestats::SetOpEnd(stats);
-
-        s = ProcessOutputs(item, &ctx, &outputs, stats);
-        if (s.ok() && impl_->device_record_tensor_accesses_) {
-          // Get the list of all tensors accessed during the execution
-          ctx.retrieve_accessed_tensors(&accessed_tensors);
-          device_context = ctx.op_device_context();
-        }
-        if (stats_collector_) nodestats::SetMemory(stats, &ctx);
-      }
-    }
-
-    if (!launched_asynchronously) {
-      // std::cout << "  Process: Launched synchronously" << std::endl; // DEBUG
-      // Clears inputs.
-      const int num_inputs = item.num_inputs;
-      for (int i = 0; i < num_inputs; ++i) {
-        (first_input + i)->val = *kEmptyTensor;
-      }
-      // TODO(misard) Replace with a finer-grain enabling flag once we
-      // add better optional debugging support.
-      if (VLOG_IS_ON(1)) {
-        mutex_lock l(mu_);
-        IterationState* iter_state = input_frame->GetIteration(input_iter);
-        iter_state->mark_completed(id);
-      }
-      // Propagates outputs.
-      if (s.ok()) {
-        // std::cout << "  Process: Calling PropagateOutputs(): "
-        //           << "ready.size() = " << ready.size() << std::endl;
-        PropagateOutputs(tagged_node, outputs, &ready);
-        // std::cout << "  Process: DONE calling PropagateOutputs(): "
-        //           << "ready.size() = " << ready.size() << std::endl;
-      }
-      outputs.clear();
-      if (!accessed_tensors.empty()) {
-        if (stats_collector_)
-          nodestats::SetReferencedTensors(stats, accessed_tensors);
-        // device_context is set above in synchronous computes
-        device->ConsumeListOfAccessedTensors(device_context,
-                                             accessed_tensors);
-      }
-      if (stats_collector_) {
-        scheduled_usec = nodestats::NowInUsec();
-      }
-      // Postprocess.
-      completed = NodeDone(s, item.node, ready, stats, &inline_ready);
-    }
-  }  // while !inline_ready.empty()
-
-  // This thread of computation is done if completed = true.
-  if (completed) Finish();
-}
-
 void DebugExecutorState::PropagateOutputs(const TaggedNode& tagged_node,
                                           const EntryVector& outputs,
                                           TaggedNodeSeq* ready) {
@@ -1044,7 +800,7 @@ bool DebugExecutorState::NodeDone(const Status& s, const Node* node,
   // std::cout << " / " << impl_->node_order.size() << ")" << std::endl;
 
   if (stats_collector_) {
-    nodestats::SetAllEnd(stats);
+    SetAllEnd(stats);
     stats_collector_->UpdateCostModel(stats, impl_->graph_, node);
     if (!SetTimelineLabel(node, stats)) {
       // Only record non-transfer nodes.
@@ -1105,6 +861,7 @@ bool DebugExecutorState::NodeDone(const Status& s, const Node* node,
   return completed;
 }
 
+// TODO(cais): Dedupe with direct_session.cc
 // TODO(vrv): Figure out how to unify the many different functions
 // that generate RendezvousKey, since many of them have to be
 // consistent with each other.
