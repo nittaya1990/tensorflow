@@ -898,6 +898,9 @@ void ExecutorState::AddLoopInv(FrameState* frame, const Node* node,
 bool ExecutorState::NodeDone(const Status& s, const Node* node,
                              const TaggedNodeSeq& ready, NodeExecStats* stats,
                              std::deque<TaggedNode>* inline_ready) {
+  // First thing: call the 1st hook function
+  NodeDoneEarlyHook(node);
+
   if (stats_collector_) {
     SetAllEnd(stats);
     stats_collector_->UpdateCostModel(stats, impl_->graph_, node);
@@ -934,6 +937,10 @@ bool ExecutorState::NodeDone(const Status& s, const Node* node,
   } else if (ready_size > 1) {
     num_outstanding_ops_.fetch_add(ready_size - 1, std::memory_order_relaxed);
   }
+
+  // The last thing before scheduling more nodes to execute: call the 2nd hook
+  // function.
+  NodeDoneLateHook(node);
 
   // Schedule the ready nodes in 'ready'.
   if (s.ok()) {

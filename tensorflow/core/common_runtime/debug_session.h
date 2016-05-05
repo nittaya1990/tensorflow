@@ -50,9 +50,6 @@ limitations under the License.
 
 namespace tensorflow {
 
-// 1-D, 0 element tensor.
-static const Tensor* const kEmptyTensor = new Tensor;
-
 class DebugExecutorState;  // tfdb(cais)
 
 class DebugExecutorImpl : public ExecutorImpl {
@@ -69,6 +66,7 @@ class DebugExecutorImpl : public ExecutorImpl {
   std::unordered_map<string, Tensor> node_value_store;
   std::unordered_map<string, Tensor*> node_ref_store;
 
+  // Pre-calculates order of nodes during execution for debugging
   void CalcNodeOrder();
 
  private:
@@ -130,11 +128,9 @@ class DebugExecutorState : public ExecutorState {
                         const EntryVector& outputs,
                         TaggedNodeSeq* ready) override;
 
-  // "node" just finishes. Takes ownership of "stats". Returns true if
-  // execution has completed.
-  bool NodeDone(const Status& s, const Node* node, const TaggedNodeSeq& ready,
-                NodeExecStats* stats, std::deque<TaggedNode>* inline_ready)
-      override;
+  // Override the two hooks for debugging
+  void NodeDoneEarlyHook(const Node* node) override;
+  void NodeDoneLateHook(const Node* node) override;
 
   DebugExecutorImpl* debug_exec_impl_;
 
@@ -153,14 +149,6 @@ class DebugSession : public DirectSession {
   // Takes ownership of 'device_mgr'.
   DebugSession(const SessionOptions& options, const DeviceMgr* device_mgr);
 
-  // NOTE: Experimental and subject to change.
-  ::tensorflow::Status Run(const ::tensorflow::RunOptions& run_options,
-                           const NamedTensorList& inputs,
-                           const std::vector<string>& output_names,
-                           const std::vector<string>& target_nodes,
-                           std::vector<Tensor>* outputs,
-                           RunMetadata* run_metadata) override;
-
   ::tensorflow::DebuggerResponse
       SendDebugMessage(const DebuggerRequest& request) override;
 
@@ -170,6 +158,16 @@ class DebugSession : public DirectSession {
       Executor** executor) override;
 
   void SchedClosure(std::function<void()> c) override;
+
+  // NOTE: Experimental and subject to change.
+  ::tensorflow::Status Run(const ::tensorflow::RunOptions& run_options,
+                           const NamedTensorList& inputs,
+                           const std::vector<string>& output_names,
+                           const std::vector<string>& target_nodes,
+                           std::vector<Tensor>* outputs,
+                           RunMetadata* run_metadata) override;
+
+  void WaitForNotification(RunState* run_state, int64 timeout_in_ms) override;
 
   // tfdb: Special executor for debugging
   Executor* debug_executor;

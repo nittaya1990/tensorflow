@@ -208,7 +208,7 @@ class DirectSession : public Session {
 
   // Use the appropriate WaitForNotification function based on whether
   // operation_timeout_in_ms is greater than 0.
-  void WaitForNotification(RunState* run_state, int64 timeout_in_ms);
+  virtual void WaitForNotification(RunState* run_state, int64 timeout_in_ms);
 
   const SessionOptions options_;
 

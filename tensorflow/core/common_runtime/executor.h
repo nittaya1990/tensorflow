@@ -653,9 +653,21 @@ class ExecutorState {
 
   // "node" just finishes. Takes ownership of "stats". Returns true if
   // execution has completed.
+  // TODO(cais): Remove virtual
   virtual bool NodeDone(const Status& s,
       const Node* node, const TaggedNodeSeq& ready,
       NodeExecStats* stats, std::deque<TaggedNode>* inline_ready);
+
+  // A hook to execute when NodeDone just occurred.
+  // It is invoked by NodeDone as the first call inside the funciton body.
+  // The default implementation does nothing in this hook.
+  virtual void NodeDoneEarlyHook(const Node* node) {}
+
+  // A hook to execute when NodeDone is about to return.
+  // It is invoked by NodeDone as the last call before it schedules more
+  // nodes to be executed.
+  // The default implementation does nothing in this hook.
+  virtual void NodeDoneLateHook(const Node* node) {}
 
   // Call Process() on all nodes in 'inline_ready'.
   void ProcessInline(const std::deque<TaggedNode>& inline_ready);

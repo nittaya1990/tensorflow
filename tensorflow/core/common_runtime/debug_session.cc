@@ -775,90 +775,13 @@ void DebugExecutorState::ActivateNode(const Node* node, const bool is_dead,
   }
 }
 
-bool DebugExecutorState::NodeDone(const Status& s, const Node* node,
-                             const TaggedNodeSeq& ready, NodeExecStats* stats,
-                             std::deque<TaggedNode>* inline_ready) {
-  const string& node_name = node->name();
-  // std::cout << "In NodeDone(): node = " << node_name << " (Step ";
-  debug_exec_impl_->break_at_node = node_name;
+void DebugExecutorState::NodeDoneEarlyHook(const Node* node) {
+  // Supply information about at which node the debugger is at.
+  debug_exec_impl_->break_at_node = node->name();
+}
 
-  size_t step_idx = 0;
-  while (step_idx < debug_exec_impl_->node_order.size()) {
-    if (debug_exec_impl_->node_order[step_idx] == node_name) {
-      break;
-    }
-    step_idx++;
-  }
-
-  // if (step_idx >= impl_->node_order.size()) {
-  //   std::cout << "?";
-  // } else {
-  //   std::cout << step_idx + 1;
-  // }
-
-  // DEBUG
-  // std::cout << " / " << impl_->node_order.size() << ")" << std::endl;
-
-  if (stats_collector_) {
-    SetAllEnd(stats);
-    stats_collector_->UpdateCostModel(stats, impl_->graph_, node);
-    if (!SetTimelineLabel(node, stats)) {
-      // Only record non-transfer nodes.
-      stats_collector_->Save(impl_->params_.device->name(), stats);
-    } else {
-      delete stats;
-    }
-  }
-
-  Rendezvous* captured_rendezvous = nullptr;  // Will be set on error.
-  if (!s.ok()) {
-    // Some error happened. This thread of computation is done.
-    mutex_lock l(mu_);
-    if (status_.ok()) {
-      captured_rendezvous = rendezvous_;
-      if (captured_rendezvous) captured_rendezvous->Ref();
-      status_ = s;
-    }
-  }
-  if (captured_rendezvous) {
-    // If we captured the rendezvous_ pointer, we are in an error condition.
-    // Use captured_rendezvous, in case "this" is deleted by another thread.
-    TRACEPRINTF("StartAbort: %s", s.ToString().c_str());
-    captured_rendezvous->StartAbort(s);
-    captured_rendezvous->Unref();
-  }
-
-  bool completed = false;
-  int ready_size = ready.size();
-  if (ready_size == 0 || !s.ok()) {
-    completed = (num_outstanding_ops_.fetch_sub(1) == 1);
-  } else if (ready_size > 1) {
-    num_outstanding_ops_.fetch_add(ready_size - 1, std::memory_order_relaxed);
-  }
-
-  // Schedule the ready nodes in 'ready'.
-  if (s.ok()) {
-    // DEBUG
-    // std::cout << "  NodeDone() calling ScheduleReady():" << std::endl;
-    // std::cout << "    ready.size() = " << ready.size() << ": [";
-    // for (const TaggedNode& t_node : ready) {
-    //   std::cout << t_node.node->name() << ", ";
-    // }
-    // std::cout << "]" << std::endl; // DEBUG
-
-    // std::cout << "    inline_ready->size() = "
-    //           << inline_ready->size() << ": [";
-    // for (TaggedNode& t_node : *inline_ready) {
-    //   std::cout << t_node.node->name() << ", ";
-    // }
-    // std::cout << "]" << std::endl; // DEBUG
-
-    // tfdb(cais): Wait to proceed
-    debug_exec_impl_->debugger_notification->WaitForNotification();
-
-    ScheduleReady(ready, inline_ready);
-  }
-  return completed;
+void DebugExecutorState::NodeDoneLateHook(const Node* node) {
+  debug_exec_impl_->debugger_notification->WaitForNotification();
 }
 
 // TODO(cais): Dedupe with direct_session.cc
@@ -891,7 +814,7 @@ void DebugSession::SchedClosure(std::function<void()> c) {
 }
 
 DebugSession::DebugSession(const SessionOptions& options,
-                             const DeviceMgr* device_mgr)
+                           const DeviceMgr* device_mgr)
     : DirectSession(options, device_mgr), debug_executor(nullptr) {
   // TODO(cais): Remove inherited thread_pool_ if it will not ever be used.
 
@@ -902,13 +825,18 @@ DebugSession::DebugSession(const SessionOptions& options,
   InitializeDeviceManager();
 }
 
+void DebugSession::WaitForNotification(RunState* run_state,
+                                       int64 timeout_in_ms) {
+  // tfdb: Do nothing for now.
+  // TODO(cais): Wait for GetOrCreateExecutors() maybe
+}
+
 Status DebugSession::Run(const RunOptions& run_options,
                          const NamedTensorList& inputs,
                          const std::vector<string>& output_names,
                          const std::vector<string>& target_nodes,
                          std::vector<Tensor>* outputs,
                          RunMetadata* run_metadata) {
-  // std::cout << "In Run() 6-arg" << std::endl;  // DEBUG
   {
     mutex_lock l(graph_def_lock_);
     if (!graph_created_) {
@@ -924,8 +852,6 @@ Status DebugSession::Run(const RunOptions& run_options,
     input_tensor_names.push_back(it.first);
   }
 
-
-  // std::cout << "Calling GetOrCreateExecutors()" << std::endl; // DEBUG
   // Check if we already have an executor for these arguments.
   ExecutorsAndKeys* executors_and_keys;
   RunStateArgs run_state_args;
@@ -938,15 +864,12 @@ Status DebugSession::Run(const RunOptions& run_options,
   run_state.rendez = new IntraProcessRendezvous(device_mgr_.get());
 
   // Send inputs.
-  // std::cout << "Calling SendInputs()" << std::endl; // DEBUG
   TF_RETURN_IF_ERROR(SendInputs(inputs, executors_and_keys, run_state.rendez));
 
   // Start parallel Executors.
   const int num_executors = executors_and_keys->items.size();
-  // std::cout << "num_executors = " << num_executors << std::endl;  // DEBUG
   ExecutorBarrier* barrier = new ExecutorBarrier(
       num_executors, run_state.rendez, [&run_state](const Status& ret) {
-        // std::cout << "In barrier StatusCallback" << std::endl;  // DEBUG
         {
           mutex_lock l(run_state.mu_);
           run_state.status.Update(ret);
@@ -958,9 +881,7 @@ Status DebugSession::Run(const RunOptions& run_options,
   args.step_id = step_id_counter_.fetch_add(1);
   args.rendezvous = run_state.rendez;
   args.cancellation_manager = cancellation_manager_;
-  args.runner = [this](Executor::Args::Closure c) {
-    SchedClosure(c);
-  };
+  args.runner = [this](Executor::Args::Closure c) { SchedClosure(c); };
   args.session_state = &session_state_;
   args.tensor_store = &run_state.tensor_store;
 
@@ -968,36 +889,36 @@ Status DebugSession::Run(const RunOptions& run_options,
     LogMemory::RecordStep(args.step_id, run_state_args.handle);
   }
 
+  // std::unique_ptr<GPUTracer> tracer;
   if (run_options.trace_level() == RunOptions::FULL_TRACE ||
       options_.config.graph_options().build_cost_model()) {
     args.stats_collector = new StepStatsCollector(
         run_metadata->mutable_step_stats(), &cost_models_);
     run_state.collector = args.stats_collector;
+    // if (tracer && run_options.trace_level() == RunOptions::FULL_TRACE) {
+    //   tracer.reset(CreateGPUTracer());
+    //   tracer->Start();
+    // }
   }
 
-  // int executor_idx = 0;
   for (const auto& item : executors_and_keys->items) {
-    // std::cout << "Calling RunAsync() from Run(): "
-    //           << executor_idx++ << " / "
-    //           << num_executors << std::endl; // DEBUG
-
-    debug_executor = item.executor;  // tfdb(cais)
+    debug_executor = item.executor;  // tfdb
+    std::cout << "L debug_executor = " << debug_executor << std::endl;  // DEBUG
     item.executor->RunAsync(args, barrier->Get());
-
-    // std::cout << "Calling Run()" << std::endl; // DEBUG
-    // item.executor->Run(args); // cais IDE
   }
 
-  // WaitForNotification(&run_state, run_options.timeout_in_ms() > 0
-  //                                     ? run_options.timeout_in_ms()
-  //                                     : operation_timeout_in_ms_);
+  WaitForNotification(&run_state, run_options.timeout_in_ms() > 0
+                                      ? run_options.timeout_in_ms()
+                                      : operation_timeout_in_ms_);
+  // if (tracer) {
+  //   tracer->Stop();
+  //   tracer->Collect(args.stats_collector);
+  // }
 
   {
     mutex_lock l(run_state.mu_);
     TF_RETURN_IF_ERROR(run_state.status);
   }
-
-  // std::cout << "Exiting Run()" << std::endl;  // DEBUG
 
   // Receive outputs.
   TF_RETURN_IF_ERROR(
@@ -1021,6 +942,7 @@ Status DebugSession::CreateLocalExecutor(
 
   if (s.ok()) {
     *executor = impl;
+    debug_executor = impl;
   } else {
     delete impl;
   }

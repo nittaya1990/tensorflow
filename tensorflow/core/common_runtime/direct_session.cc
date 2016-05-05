@@ -750,7 +750,6 @@ Status DirectSession::GetOrCreateExecutors(
       // Kernels created for subgraph nodes need to be cached.  On
       // cache miss, create_fn() is invoked to create a kernel based
       // on the function library here + global op registry.
-      std::cout << "Call FindOrCreate(): session_handle_ = " << session_handle_ << std::endl;  // DEBUG
       return opseg->FindOrCreate(session_handle_, ndef.name(), kernel,
                                  create_fn);
     };
