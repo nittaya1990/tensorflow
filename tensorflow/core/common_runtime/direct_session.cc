@@ -761,7 +761,10 @@ Status DirectSession::GetOrCreateExecutors(
       }
     };
 
-    optimizer.Optimize(lib, device, &partition_graph);
+    if (optimize_graphs_) {
+      optimizer.Optimize(lib, device, &partition_graph);
+    }
+
     s = EnsureMemoryTypes(DeviceType(device->device_type()), device->name(),
                           partition_graph);
     if (!s.ok()) {
@@ -770,7 +773,7 @@ Status DirectSession::GetOrCreateExecutors(
     // NewLocalExecutor takes ownership of *partition_graph.
     iter->second = nullptr;
     item->executor = nullptr;
-    s = NewLocalExecutor(params, partition_graph, &item->executor);
+    s = CreateLocalExecutor(params, partition_graph, &item->executor);
     if (!s.ok()) {
       break;
     }
@@ -806,6 +809,12 @@ Status DirectSession::GetOrCreateExecutors(
   }
 
   return Status::OK();
+}
+
+Status DirectSession::CreateLocalExecutor(
+    const LocalExecutorParams& params, const Graph* graph,
+    Executor** executor) {
+  return NewLocalExecutor(params, graph, executor);
 }
 
 void DirectSession::SaveStatefulNodes(Graph* graph) {

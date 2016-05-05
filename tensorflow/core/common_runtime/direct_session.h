@@ -163,10 +163,16 @@ class DirectSession : public Session {
 
   // Retrieves an already existing set of executors to run 'inputs' and
   // 'outputs', or creates and caches them for future use.
-  virtual ::tensorflow::Status GetOrCreateExecutors(
+  ::tensorflow::Status GetOrCreateExecutors(
       gtl::ArraySlice<string> inputs, gtl::ArraySlice<string> outputs,
       gtl::ArraySlice<string> target_nodes,
       ExecutorsAndKeys** executors_and_keys, RunStateArgs* run_state_args);
+
+  // Invoked by GetOrCreateExecutors() while creating a new local executor.
+  // Can be overridden by derived classes for alternative executors.
+  virtual ::tensorflow::Status CreateLocalExecutor(
+      const LocalExecutorParams& params, const Graph* graph,
+      Executor** executor);
 
   // Creates several graphs given the existing graph_def_ and the
   // input feeds and fetches, given 'devices'.
@@ -222,6 +228,9 @@ class DirectSession : public Session {
 
   // Schedules 'c' for execution.
   virtual void SchedClosure(std::function<void()> c);
+
+  // Whether partition graphs are to be optimized before executor creation
+  bool optimize_graphs_ = true;
 
   mutex executor_lock_;  // protects executors_
   // Holds mappings from signature to the executors that process

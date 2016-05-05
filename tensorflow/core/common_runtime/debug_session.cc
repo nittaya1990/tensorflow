@@ -266,7 +266,7 @@ void DebugExecutorImpl::CalcNodeOrder() {
   SimProcess(init_node);
 }
 
-// tfdb(cais)
+// tfdb: Handle debugger message
 DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
   const DebuggerRequest& debugger_request) {
   static const string STEP("step");
@@ -895,6 +895,9 @@ DebugSession::DebugSession(const SessionOptions& options,
     : DirectSession(options, device_mgr), debug_executor(nullptr) {
   // TODO(cais): Remove inherited thread_pool_ if it will not ever be used.
 
+  // Debug sessions will not optimize graphs
+  optimize_graphs_ = false;
+
   session_handle_ = "debug";
   InitializeDeviceManager();
 }
@@ -1007,204 +1010,22 @@ Status DebugSession::Run(const RunOptions& run_options,
   return Status::OK();
 }
 
-Status DebugSession::GetOrCreateExecutors(
-    gtl::ArraySlice<string> inputs,
-    gtl::ArraySlice<string> outputs,
-    gtl::ArraySlice<string> target_nodes,
-    ExecutorsAndKeys** executors_and_keys,
-    RunStateArgs* run_state_args) {
-  // Sort the inputs and outputs, so we don't create separate
-  // executors when a user passes in the same inputs/outputs in
-  // different orders.
-  //
-  // We could consider some other signature instead of sorting that
-  // preserves the same property to avoid the sort in the future.
-  std::vector<string> inputs_sorted(inputs.begin(), inputs.end());
-  std::vector<string> outputs_sorted(outputs.begin(), outputs.end());
-  std::vector<string> tn_sorted(target_nodes.begin(), target_nodes.end());
-  std::sort(inputs_sorted.begin(), inputs_sorted.end());
-  std::sort(outputs_sorted.begin(), outputs_sorted.end());
-  std::sort(tn_sorted.begin(), tn_sorted.end());
+Status DebugSession::CreateLocalExecutor(
+    const LocalExecutorParams& params, const Graph* graph,
+    Executor** executor) {
+  DebugExecutorImpl* impl = new DebugExecutorImpl(params, graph);
+  Status s = impl->Initialize();
 
-  const string key = strings::StrCat(str_util::Join(inputs_sorted, ","), "->",
-                                     str_util::Join(outputs_sorted, ","), "/",
-                                     str_util::Join(tn_sorted, ","));
+  // Pre-calculate node execution order
+  impl->CalcNodeOrder();
 
-  // Set the handle.
-  {
-    mutex_lock l(mu_);
-    run_state_args->handle = strings::StrCat(key, ";", name_counter_++);
-  }
-
-  // See if we already have the executors for this run.
-  {
-    mutex_lock l(executor_lock_);  // could use reader lock
-    auto it = executors_.find(key);
-    if (it != executors_.end()) {
-      *executors_and_keys = it->second;
-      return Status::OK();
-    }
-  }
-
-  // The executor_lock_ is intentionally released while executor is
-  // being created.
-
-  // std::cout << "Calling CreateGraphs()" << std::endl;
-  FunctionLibraryDefinition* fdefs;
-  std::unordered_map<string, Graph*> graphs;
-  Status s = CreateGraphs(inputs, outputs, target_nodes, &fdefs, &graphs,
-                          run_state_args);
-  TF_RETURN_IF_ERROR(s);
-  // std::cout << "~ Done calling CreateGraphs()" << std::endl;
-
-  std::unique_ptr<ExecutorsAndKeys> ek(new ExecutorsAndKeys);
-  ek->func_defs = fdefs;
-  if (run_state_args->is_partial_run) {
-    ek->graph = run_state_args->graph;
-    ek->name_to_node = new NameNodeMap;
-    std::unordered_set<StringPiece, StringPiece::Hasher> names;
-    for (const string& input : inputs) {
-      TensorId id(ParseTensorName(input));
-      names.emplace(id.first);
-    }
-    for (const string& output : outputs) {
-      TensorId id(ParseTensorName(output));
-      names.emplace(id.first);
-    }
-    for (Node* n : run_state_args->graph->nodes()) {
-      if (names.count(n->name()) > 0) {
-        ek->name_to_node->insert({n->name(), n});
-      }
-    }
-  }
-  ek->items.reserve(graphs.size());
-
-  auto runner = [this](Executor::Args::Closure c) { SchedClosure(c); };
-  const auto& optimizer_opts =
-      options_.config.graph_options().optimizer_options();
-  GraphOptimizer optimizer(optimizer_opts);
-
-  // int graph_counter = 0;  // TODO(cais): Remove
-  for (auto iter = graphs.begin(); iter != graphs.end(); ++iter) {
-    const string& partition_name = iter->first;
-    Graph* partition_graph = iter->second;
-    const int graph_def_version = partition_graph->versions().producer();
-
-    Device* device;
-    s = device_mgr_->LookupDevice(partition_name, &device);
-    if (!s.ok()) break;
-
-    ek->items.resize(ek->items.size() + 1);
-    auto* item = &(ek->items.back());
-
-    // item->flib = NewFunctionLibraryRuntime(device, runner, graph_def_version,
-    //                                        fdefs, optimizer_opts);
-    item->flib =
-        NewFunctionLibraryRuntime(device_mgr_.get(), device, runner,
-                                  graph_def_version, fdefs, optimizer_opts);
-
-    LocalExecutorParams params;
-    params.device = device;
-    params.function_library = item->flib;
-    auto lib = item->flib;
-    auto opseg = device->op_segment();
-    params.create_kernel = [this, lib, opseg](const NodeDef& ndef,
-                                              OpKernel** kernel) {
-      // Caches the kernel only if the node is stateful.
-      if (!lib->IsStateful(ndef.op())) {
-        return lib->CreateKernel(ndef, kernel);
-      }
-      auto create_fn = [lib, &ndef](OpKernel** kernel) {
-        return lib->CreateKernel(ndef, kernel);
-      };
-      // Kernels created for subgraph nodes need to be cached.  On
-      // cache miss, create_fn() is invoked to create a kernel based
-      // on the function library here + global op registry.
-      return opseg->FindOrCreate(session_handle_, ndef.name(), kernel,
-                                 create_fn);
-    };
-    params.delete_kernel = [lib](OpKernel* kernel) {
-      // If the node is stateful, opseg owns it. Otherwise, delete it.
-      if (kernel && !lib->IsStateful(kernel->type_string())) {
-        delete kernel;
-      }
-    };
-
-    // tfdb(cais): Disabled optimizer, so that RunAsync needs to run only once.
-    // DEBUG
-    // std::cout << "Calling optimzer.Optimizer() on graph "
-              // << graph_counter << " of " << graphs.size() << std::endl;
-    // optimizer.Optimize(lib, device, &partition_graph);
-    // DEBUG
-    // std::cout << "~ DONE calling optimzer.Optimizer() on graph "
-    // << graph_counter++ << " of " << graphs.size() << std::endl;
-
-    // s = ValidateMemoryTypes(DeviceType(device->device_type()),
-    //                         partition_graph);
-    s = EnsureMemoryTypes(DeviceType(device->device_type()), device->name(),
-                          partition_graph);
-
-    if (!s.ok()) {
-      break;
-    }
-    // NewLocalDebugExecutor takes ownership of *partition_graph.
-    iter->second = nullptr;
-    item->executor = nullptr;
-
-    // s = NewLocalDebugExecutor(params, partition_graph, &item->executor);
-
-    // Status NewLocalDebugExecutor(const LocalExecutorParams& params,
-    //                              const Graph* graph,
-    //                              Executor** executor) {
-    DebugExecutorImpl* impl = new DebugExecutorImpl(params, partition_graph);
-    s = impl->Initialize();
-
-    // Pre-calculate node execution order
-    impl->CalcNodeOrder();
-
-    if (s.ok()) {
-      *(&item->executor) = impl;
-    } else {
-      delete impl;
-    }
-
-    if (!s.ok()) {
-      break;
-    }
-  }
-  if (!s.ok()) {
-    gtl::STLDeleteValues(&graphs);
-    return s;
-  }
-
-  // std::cout << "Computing rendezvous keys..." << std::endl;
-  // Compute the rendezvous keys to avoid recomputing them every time.
-  //
-  // We always use the first device as the device name portion of the
-  // key, even if we're feeding another graph.
-  for (const string& input : inputs) {
-    ek->input_keys[input] = GetRendezvousKey(
-        input, device_set_.client_device()->attributes(), FrameAndIter(0, 0));
-  }
-  for (const string& output : outputs) {
-    ek->output_keys[output] = GetRendezvousKey(
-        output, device_set_.client_device()->attributes(), FrameAndIter(0, 0));
-  }
-
-  // Reacquire the lock, try to insert into the map.
-  mutex_lock l(executor_lock_);
-  const bool inserted = executors_.insert(std::make_pair(key, ek.get())).second;
-  if (!inserted) {
-    // Another thread created the entry before us, so delete the
-    // one we created and return the already created one.
-    auto it = executors_.find(key);
-    *executors_and_keys = it->second;
+  if (s.ok()) {
+    *executor = impl;
   } else {
-    *executors_and_keys = ek.release();
+    delete impl;
   }
 
-  // std::cout << "~ Exiting GetOrCreateExecutors()" << std::endl;
-  return Status::OK();
+  return s;
 }
 
 ::tensorflow::DebuggerResponse DebugSession::SendDebugMessage(
