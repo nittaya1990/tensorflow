@@ -319,7 +319,7 @@ class DebugRound(object):
       if node_name.startswith(prefix):
         node_name = node_name[len(prefix):]
 
-    output = self._sess.debug("print %s" % node_name)
+    output = self._sess.debug("inspect_value %s" % node_name)
     node_value = output["node_value"]
 
     if node_value is not None:

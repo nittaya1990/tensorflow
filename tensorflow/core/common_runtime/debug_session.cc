@@ -273,7 +273,7 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
   const DebuggerRequest& debugger_request) {
   // TODO(cais): Replace with string constants in debugger.h
   static const string STEP("step");
-  static const string PRINT_PREFIX("print ");
+  static const string PRINT_PREFIX("inspect_value ");
   static const string WHERE("where");
   static const string INJECT_VALUE_PREFIX("inject_value ");
 
@@ -296,7 +296,6 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
     // Step once
     exec_notification->NotifyOnce();
     if (!response.is_completed) {
-      std::cout << "Calling debug_notification->WaitForNotification" << std::endl;  // DEBUG
       debug_notification->WaitForNotification();
     }
   } else if (debugger_request.command.find(PRINT_PREFIX) == 0) {
@@ -372,7 +371,6 @@ void DebugExecutorImpl::RunAsync(const Args& args, DoneCallback done) {
   // respectively.
   exec_notification.reset(new MultiUseNotification());
   debug_notification.reset(new MultiUseNotification());
-  std::cout << "*** debug_notification new instance created" << std::endl;  // DEBUG
   // debug_notification->WaitForNotification();
 
   executor_state = new DebugExecutorState(args, this);
@@ -687,8 +685,6 @@ void DebugExecutorState::NodeDoneEarlyHook(const Node* node) {
   ///objects, which are for stepping only.
   if (node-> name() != "_SOURCE") {
     // Notify the debugger thread that a node has just finished executing.
-    std::cout << "Calling debug_notification->NotifyOnce(): "
-              << node-> name() << std::endl;  // DEBUG
     debug_exec_impl_->debug_notification->NotifyOnce();
   }
 }

@@ -624,7 +624,7 @@ void TF_Debug_wrapper(TF_Session* session,
     PyDict_SetItem(py_array, completed_nodes_key, completed_nodes_list);
     PyDict_SetItem(py_array, remaining_nodes_key, remaining_nodes_list);
 
-  } else if (command.find("print ") == 0) {
+  } else if (command.find("inspect_value ") == 0) {
     // DEBUG
     // std::cout << "output_tensor: " << output_tensor.DebugString()
     //           << std::endl;

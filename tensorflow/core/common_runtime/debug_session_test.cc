@@ -224,7 +224,7 @@ TEST_F(DebugSessionMinusAXTest, RunSimpleNetworkWithInspectionAndInjection) {
 
     // Inspect value request
     if (curr_node == "n/_0") {  // a
-      DebuggerRequest inspect_request("print n/_0");
+      DebuggerRequest inspect_request("inspect_value n/_0");
       DebuggerResponse inspect_response =
           session->SendDebugMessage(inspect_request);
       const Tensor& val = inspect_response.output_tensor;
@@ -243,7 +243,7 @@ TEST_F(DebugSessionMinusAXTest, RunSimpleNetworkWithInspectionAndInjection) {
       DebuggerResponse inject_response =
           session->SendDebugMessage(inject_request);
     } else if (curr_node == "n/_1") {  // x
-      DebuggerRequest inspect_request("print n/_1");
+      DebuggerRequest inspect_request("inspect_value n/_1");
       DebuggerResponse inspect_response =
           session->SendDebugMessage(inspect_request);
       const Tensor& val = inspect_response.output_tensor;
@@ -253,7 +253,7 @@ TEST_F(DebugSessionMinusAXTest, RunSimpleNetworkWithInspectionAndInjection) {
       EXPECT_FLOAT_EQ(1.0, mat(0, 0));
       EXPECT_FLOAT_EQ(1.0, mat(1, 0));
     } else if (curr_node == "n/_2") {  // MatMul: a * x
-      DebuggerRequest inspect_request("print n/_2");
+      DebuggerRequest inspect_request("inspect_value n/_2");
       DebuggerResponse inspect_response =
           session->SendDebugMessage(inspect_request);
       const Tensor& val = inspect_response.output_tensor;
