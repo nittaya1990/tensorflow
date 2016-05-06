@@ -20,6 +20,7 @@ limitations under the License.
 
 namespace tensorflow {
 
+// TensorFlow Debugger request class.
 class DebuggerRequest {
  public:
   DebuggerRequest()
@@ -28,13 +29,24 @@ class DebuggerRequest {
     : command(command_) {}
   ~DebuggerRequest() {}
 
+  // Command for the debugger
+  // The core debugger API supports the following commands:
+  //    step: For stepping to the next node in the graph execution rder
+  //    where: For querying the current status of the debugging round, i.e.,
+  //      what nodes have finished execution and what nodes remain to be
+  //      executed
+  //    inspect_value: Get the Tensor value on a completed node
+  //    inject_value: Modify the Tensor value on a completed node
+  //      (see input_tensor below)
   string command;
+
+  // For inject_value
   Tensor input_tensor;
 };
 
+// TensorFlow Debugger response class.
 class DebuggerResponse {
  public:
-  /// Create a success status.
   DebuggerResponse()
     : command(),
       is_completed(false),
@@ -44,12 +56,22 @@ class DebuggerResponse {
       has_output_tensor(false) {}
   ~DebuggerResponse() {}
 
+  // Echo of the command in request (e.g., "inspect_value node_a")
   string command;
+
+  // Is this debugger round complete
   bool is_completed;
+
+  // All nodes in the graph
   std::vector<string> all_nodes;
+
+  // List of nodes have finished executing, in the right order
   std::vector<string> completed_nodes;
+
+  // List of nodes that remaining to be executed, in the right order
   std::vector<string> remaining_nodes;
 
+  // Output from inspect_value
   bool has_output_tensor;
   Tensor output_tensor;
 };
