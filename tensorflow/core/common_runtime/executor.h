@@ -170,14 +170,26 @@ class Executor {
     return ret;
   }
 
-  // TODO(cais): Make the following protected or private
+  NodeItem* nodes = nullptr;     // array of size "graph_.num_node_ids()"
+
+ protected:
+  friend class ExecutorState;
+
+  Executor(const LocalExecutorParams& p, const Graph* g)
+      : graph_(g), params_(p),
+        initial_pending_counts_(graph_->num_node_ids()) {
+    CHECK(p.create_kernel != nullptr);
+    CHECK(p.delete_kernel != nullptr);
+  }
+
   // Owned
+  const Graph* graph_;
+
   // A cached value of params_
   LocalExecutorParams params_;
-  const Graph* graph_;
-  NodeItem* nodes_ = nullptr;     // array of size "graph_.num_node_ids()"
-  int total_input_tensors_ = 0;   // == sum(nodes_[*].num_inputs())
-  int total_output_tensors_ = 0;  // == sum(nodes_[*].num_outputs())
+
+  int total_input_tensors_ = 0;   // == sum(nodes[*].num_inputs())
+  int total_output_tensors_ = 0;  // == sum(nodes[*].num_outputs())
 
   bool device_record_tensor_accesses_ = false;
 
@@ -191,13 +203,6 @@ class Executor {
   std::unordered_map<string, int> frame_input_count_;
 
   std::vector<AllocatorAttributes> output_attrs_;
-
- protected:
-  Executor(const LocalExecutorParams& p, const Graph* g)
-      : graph_(g), params_(p), initial_pending_counts_(graph_->num_node_ids())  {
-    CHECK(p.create_kernel != nullptr);
-    CHECK(p.delete_kernel != nullptr);
-  }
 };
 
 ::tensorflow::Status NewLocalExecutor(const LocalExecutorParams& params,
@@ -286,11 +291,11 @@ class ExecutorImpl : public Executor {
   ExecutorImpl(const LocalExecutorParams& p, const Graph* g)
       : Executor(p, g) {}
 
-  virtual ~ExecutorImpl() override {
+  ~ExecutorImpl() override {
     for (int i = 0; i < graph_->num_node_ids(); i++) {
-      params_.delete_kernel(nodes_[i].kernel);
+      params_.delete_kernel(nodes[i].kernel);
     }
-    delete[] nodes_;
+    delete[] nodes;
     delete graph_;
   }
 
@@ -313,8 +318,6 @@ class ExecutorImpl : public Executor {
   void RunAsync(const Args& args, DoneCallback done) override;
 
  protected:
-  // friend class ExecutorState; // TODO(cais): Remove this
-
   static void InitializePending(const Graph* graph, PendingCounts* counts);
 
   TF_DISALLOW_COPY_AND_ASSIGN(ExecutorImpl);
@@ -354,7 +357,6 @@ class ExecutorState {
   typedef ExecutorState ME;
 
   // 1-D, 0 element tensor.
-  // static const Tensor* const kEmptyTensor = new Tensor;  // TODO(cais): Remove
   static const Tensor* const kEmptyTensor;
 
   // Either a tensor pointer (pass-by-reference) or a tensor (pass-by-value).
@@ -657,8 +659,7 @@ class ExecutorState {
 
   // "node" just finishes. Takes ownership of "stats". Returns true if
   // execution has completed.
-  // TODO(cais): Remove virtual
-  virtual bool NodeDone(const Status& s,
+  bool NodeDone(const Status& s,
       const Node* node, const TaggedNodeSeq& ready,
       NodeExecStats* stats, std::deque<TaggedNode>* inline_ready);
 

@@ -25,7 +25,7 @@ limitations under the License.
 namespace tensorflow {
 namespace {
 
-const int microsec_to_sleep = 10 * 1000;  // 10 ms
+const int microsec_to_sleep = 100 * 1000;  // 100 ms
 
 TEST(NotificationTest, TestSingleNotification) {
   thread::ThreadPool* thread_pool =
@@ -97,7 +97,6 @@ TEST(MultiUseNotificationTest, TestNotifyOnce) {
         ++counter;
       }
     }
-
   });
 
   // Wait for the thread to start
@@ -145,7 +144,6 @@ TEST(MultiUseNotificationTest, TestNotifyMultipleTimes) {
         ++counter;
       }
     }
-
   });
 
   // Wait for the thread to start
@@ -158,7 +156,7 @@ TEST(MultiUseNotificationTest, TestNotifyMultipleTimes) {
 
   // Unblock the thread for the 1st time
   proceed.Notify(times_to_notify);
-  
+
   // Sleep for a little while for the counter to update
   Env::Default()->SleepForMicroseconds(microsec_to_sleep);
 

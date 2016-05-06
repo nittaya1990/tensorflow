@@ -60,8 +60,8 @@ namespace tensorflow {
 
 Status ExecutorImpl::Initialize() {
   const int num_nodes = graph_->num_node_ids();
-  delete[] nodes_;
-  nodes_ = new NodeItem[num_nodes];
+  delete[] nodes;
+  nodes = new NodeItem[num_nodes];
 
   Status s;
   total_input_tensors_ = 0;
@@ -85,7 +85,7 @@ Status ExecutorImpl::Initialize() {
       root_nodes_.push_back(n);
     }
 
-    NodeItem* item = &nodes_[id];
+    NodeItem* item = &nodes[id];
     item->node = n;
     item->num_inputs = n->num_inputs();
     item->num_outputs = n->num_outputs();
@@ -134,7 +134,7 @@ Status ExecutorImpl::SetAllocAttrs() {
 
   output_attrs_.resize(total_output_tensors_);
   for (const Node* n : graph_->nodes()) {
-    NodeItem* item = &nodes_[n->id()];
+    NodeItem* item = &nodes[n->id()];
     const int base_index = item->output_attr_start;
     // Examine the out edges of each node looking for special use
     // cases that may affect memory allocation attributes.
@@ -257,8 +257,6 @@ ExecutorState::ExecutorState(const Executor::Args& args, ExecutorImpl* impl)
   outstanding_frames_.insert({root_frame_->frame_name, root_frame_});
 }
 
-// }  // end namespace
-
 ExecutorState::~ExecutorState() {
   for (auto name_frame : outstanding_frames_) {
     delete name_frame.second;
@@ -364,7 +362,7 @@ void DeleteParams(OpKernelContext::Params* p) {
 const Tensor* const ExecutorState::kEmptyTensor = new Tensor;
 
 void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
-  const NodeItem* nodes = impl_->nodes_;
+  const NodeItem* nodes = impl_->nodes;
   TaggedNodeSeq ready;
   std::deque<TaggedNode> inline_ready;
 
@@ -787,7 +785,7 @@ void ExecutorState::ActivateNode(const Node* node, const bool is_dead,
                                  FrameState* output_frame, int64 output_iter,
                                  const EntryVector& outputs,
                                  TaggedNodeSeq* ready) {
-  const NodeItem* nodes = impl_->nodes_;
+  const NodeItem* nodes = impl_->nodes;
   IterationState* output_iter_state = output_frame->GetIteration(output_iter);
   for (const Edge* e : node->out_edges()) {
     const Node* dst_node = e->dst();
@@ -977,7 +975,7 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq& ready,
     }
     return;
   }
-  const NodeItem* nodes = impl_->nodes_;
+  const NodeItem* nodes = impl_->nodes;
   const TaggedNode* curr_expensive_node = nullptr;
   for (auto& tagged_node : ready) {
     const NodeItem& item = nodes[tagged_node.node->id()];
@@ -1009,7 +1007,7 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq& ready,
 
 void ExecutorState::DumpCompletedNodeState(const int node_id,
                                            const Entry* input_vector) {
-  const NodeItem& node_item = impl_->nodes_[node_id];
+  const NodeItem& node_item = impl_->nodes[node_id];
   const Node& node = *node_item.node;
   LOG(WARNING) << "    Completed Node: " << node.DebugString();
   const int input_base = node_item.input_start;
@@ -1022,7 +1020,7 @@ void ExecutorState::DumpCompletedNodeState(const int node_id,
 void ExecutorState::DumpPendingNodeState(
     const int node_id, const Entry* input_vector,
     const bool show_nodes_with_no_ready_inputs) {
-  const NodeItem& node_item = impl_->nodes_[node_id];
+  const NodeItem& node_item = impl_->nodes[node_id];
   const Node& node = *node_item.node;
   const int input_base = node_item.input_start;
   if (!show_nodes_with_no_ready_inputs) {
@@ -1066,7 +1064,7 @@ void ExecutorState::DumpPendingNodeState(
 
 void ExecutorState::DumpActiveNodeState(const int node_id,
                                         const Entry* input_vector) {
-  const NodeItem& node_item = impl_->nodes_[node_id];
+  const NodeItem& node_item = impl_->nodes[node_id];
   const Node& node = *node_item.node;
   LOG(WARNING) << "    Active Node: " << node.DebugString();
   const int input_base = node_item.input_start;
@@ -1325,7 +1323,7 @@ void ExecutorState::CleanupFramesIterations(FrameState* frame, int64 iter,
       for (const Edge* e : node->out_edges()) {
         const Node* dst_node = e->dst();
         const int dst_id = dst_node->id();
-        const NodeItem* dst_item = &(impl_->nodes_[dst_id]);
+        const NodeItem* dst_item = &(impl_->nodes[dst_id]);
 
         bool dst_dead = true;
         bool dst_ready = false;
@@ -1371,7 +1369,8 @@ void ExecutorState::CleanupFramesIterations(FrameState* frame, int64 iter,
   }
 }
 
-bool ExecutorState::SetTimelineLabel(const Node* node, NodeExecStats* node_stats) {
+bool ExecutorState::SetTimelineLabel(const Node* node,
+                                     NodeExecStats* node_stats) {
     bool is_transfer_node = false;
     string memory;
     for (auto& all : node_stats->memory()) {
@@ -1380,12 +1379,14 @@ bool ExecutorState::SetTimelineLabel(const Node* node, NodeExecStats* node_stats
         int64 peak = all.peak_bytes();
         if (peak > 0) {
           memory =
-              strings::StrCat(memory, "[", all.allocator_name(),
-                              strings::Printf(" %.1fMB %.1fMB] ", tot / 1048576.0,
-                                              peak / 1048576.0));
+              strings::StrCat(
+                  memory, "[", all.allocator_name(),
+                  strings::Printf(" %.1fMB %.1fMB] ", tot / 1048576.0,
+                  peak / 1048576.0));
         } else {
-          memory = strings::StrCat(memory, "[", all.allocator_name(),
-                                   strings::Printf(" %.1fMB] ", tot / 1048576.0));
+          memory = strings::StrCat(
+              memory, "[", all.allocator_name(),
+              strings::Printf(" %.1fMB] ", tot / 1048576.0));
         }
       }
     }

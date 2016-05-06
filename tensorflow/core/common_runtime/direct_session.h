@@ -49,7 +49,7 @@ class DirectSession : public Session {
  public:
   // Takes ownership of 'device_mgr'.
   DirectSession(const SessionOptions& options, const DeviceMgr* device_mgr);
-  virtual ~DirectSession() override;
+  ~DirectSession() override;
 
   typedef std::vector<std::pair<string, Tensor>> NamedTensorList;
   typedef std::unordered_map<StringPiece, Node*, StringPiece::Hasher>

@@ -103,7 +103,7 @@ const Node* DebugExecutorImpl::NodeName2Node(const string& node_name) const {
 bool DebugExecutorImpl::NodeName2NodeKernelIsExpensive(
     const string& node_name) const {
   const Node* the_node = NodeName2Node(node_name);
-  return nodes_[the_node->id()].kernel_is_expensive;
+  return nodes[the_node->id()].kernel_is_expensive;
 }
 
 namespace {
@@ -475,7 +475,7 @@ void DebugExecutorState::InjectNodeValue(Tensor value) {
   //           << "      stored_outputs.size() = " << stored_outputs.size()
   //           << std::endl;
 
-  const NodeItem* nodes = impl_->nodes_;
+  const NodeItem* nodes = impl_->nodes;
   IterationState* output_iter_state =
       stored_output_frame->GetIteration(stored_output_iter);
 
@@ -528,7 +528,7 @@ void DebugExecutorState::ActivateNode(const Node* node, const bool is_dead,
   stored_output_iter = output_iter;
   stored_outputs = outputs;
 
-  const NodeItem* nodes = impl_->nodes_;
+  const NodeItem* nodes = impl_->nodes;
   IterationState* output_iter_state = output_frame->GetIteration(output_iter);
   for (const Edge* e : node->out_edges()) {
     const Node* dst_node = e->dst();

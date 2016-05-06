@@ -19,7 +19,6 @@ limitations under the License.
 #include <assert.h>
 #include <chrono>              // NOLINT
 #include <condition_variable>  // NOLINT
-#include <iostream>
 
 #include "tensorflow/core/platform/mutex.h"
 #include "tensorflow/core/platform/types.h"
