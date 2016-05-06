@@ -100,7 +100,8 @@ const Node* DebugExecutorImpl::NodeName2Node(const string& node_name) const {
   return the_node;
 }
 
-bool DebugExecutorImpl::NodeName2NodeKernelIsExpensive(const string& node_name) const {
+bool DebugExecutorImpl::NodeName2NodeKernelIsExpensive(
+    const string& node_name) const {
   const Node* the_node = NodeName2Node(node_name);
   return nodes_[the_node->id()].kernel_is_expensive;
 }
@@ -197,8 +198,9 @@ void DebugExecutorImpl::SimNodeDone(const string& node_name,
   SimScheduleReady(ready_queue, inline_ready_queue);
 }
 
-void DebugExecutorImpl::SimScheduleReady(const std::deque<string>& ready_queue,
-                                         std::deque<string>* inline_ready_queue) {
+void DebugExecutorImpl::SimScheduleReady(
+    const std::deque<string>& ready_queue,
+    std::deque<string>* inline_ready_queue) {
   if (ready_queue.empty()) {
     // std::cout << "return from SimScheduleReady()" << std::endl;  // DEBUG
     return;
@@ -269,14 +271,9 @@ void DebugExecutorImpl::CalcNodeOrder() {
 // tfdb: Handle debugger message
 DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
   const DebuggerRequest& debugger_request) {
-  // std::cout << "*** debug_notification = " << debug_notification << std::endl;  // DEBUG
-  // debug_notification->WaitForNotification(); // TODO(cais): activate
-
   // TODO(cais): Replace with string constants in debugger.h
   static const string STEP("step");
-  static const string STEP_PREFIX("step ");
   static const string PRINT_PREFIX("print ");
-  // static const string CONTINUE_PREFIX("continue ");  // TODO(cais): Remove
   static const string WHERE("where");
   static const string INJECT_VALUE_PREFIX("inject_value ");
 
@@ -289,43 +286,18 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
 
   response.completed_nodes = completed_nodes;
   response.remaining_nodes = not_completed_nodes;
-  // std::cout << "response.completed_nodes.size() = "
-  //           << response.completed_nodes.size() << std::endl;  // DEBUG
-  // std::cout << "response.remaining_nodes.size() = "
-  //           << response.remaining_nodes.size() << std::endl;  // DEBUG
-
+  
   // In response, provide info about whether this debug round is complete
   if (not_completed_nodes.empty()) {
     response.is_completed = true;
   }
 
-  if (debugger_request.command.find(STEP) == 0) {
-    // Step once or multiple times
-
-    if (debugger_request.command == STEP) {
-      // Step once
-
-      exec_notification->NotifyOnce();
-    } else if (debugger_request.command.find(STEP_PREFIX) == 0) {
-      // Step multiple times
-
-      int n_steps = 0;
-      bool convert_okay = strings::safe_strto32(
-          debugger_request.command.substr(STEP_PREFIX.size()).c_str(),
-                                          &n_steps);
-
-      if (convert_okay && n_steps > 0) {
-        exec_notification->Notify(n_steps);
-      } else {
-        std::cerr << "Syntax error in step command: \""
-                  << debugger_request.command << "\"" << std::endl;  // DEBUG
-      }
-
-      // Wait for the stepping to actually finish before proceeding
+  if (debugger_request.command == STEP) {
+    // Step once
+    exec_notification->NotifyOnce();
+    if (!response.is_completed) {
+      std::cout << "Calling debug_notification->WaitForNotification" << std::endl;  // DEBUG
       debug_notification->WaitForNotification();
-    } else {
-      std::cerr << "Syntax error in step command: \""
-                << debugger_request.command << "\"" << std::endl;  // DEBUG
     }
   } else if (debugger_request.command.find(PRINT_PREFIX) == 0) {
     // Print the tensor value on a node
@@ -364,48 +336,6 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
       }
     }
 
-  // TODO(cais): Remove branch
-  // } else if (debugger_request.command.find(CONTINUE_PREFIX) == 0) {
-  //   // Continue execution
-
-  //   const string& node_name =
-  //       debugger_request.command.substr(CONTINUE_PREFIX.size());
-
-  //   // See if the node is already completed
-  //   bool already_completed = false;
-  //   for (const string& completed_node : completed_nodes) {
-  //     if (completed_node == node_name) {
-  //       already_completed = true;
-  //       break;
-  //     }
-  //   }
-
-  //   if (already_completed) {
-  //     // DEBUG
-  //     // std::cerr << "ERROR: Node \"" << node_name
-  //     //           << "\" is already completed" << std::endl;
-  //   } else {
-  //     size_t steps_to_go = 0;
-  //     bool found_node = false;
-
-  //     for (const string& remaining_node : not_completed_nodes) {
-  //       steps_to_go++;
-  //       if (remaining_node == node_name) {
-  //         found_node = true;
-  //         break;
-  //       }
-  //     }
-
-  //     if (!found_node) {
-  //       // DEBUG
-  //       // std::cerr << "ERROR: Node \"" << node_name
-  //       //           << "\" cannot be found" << std::endl;  // DEBUG
-  //     } else {
-  //       // std::cout << "Steps to go: " << steps_to_go << std::endl;
-  //       exec_notification->Notify(steps_to_go);
-  //     }
-  //   }
-
   } else if (debugger_request.command == WHERE) {
     // Get current debugger location: No special action required here
 
@@ -442,6 +372,8 @@ void DebugExecutorImpl::RunAsync(const Args& args, DoneCallback done) {
   // respectively.
   exec_notification.reset(new MultiUseNotification());
   debug_notification.reset(new MultiUseNotification());
+  std::cout << "*** debug_notification new instance created" << std::endl;  // DEBUG
+  // debug_notification->WaitForNotification();
 
   executor_state = new DebugExecutorState(args, this);
 
@@ -750,8 +682,15 @@ void DebugExecutorState::NodeDoneEarlyHook(const Node* node) {
   // Supply information about at which node the debugger is at.
   debug_exec_impl_->break_at_node = node->name();
 
-  // Notify the debugger thread that a node has just finished executing.
-  debug_exec_impl_->debug_notification->NotifyOnce();
+  // The first node "_SOURCE" will be paused at automatically after the
+  // call to Run() returns, so there is no need to notify any notifications
+  ///objects, which are for stepping only.
+  if (node-> name() != "_SOURCE") {
+    // Notify the debugger thread that a node has just finished executing.
+    std::cout << "Calling debug_notification->NotifyOnce(): "
+              << node-> name() << std::endl;  // DEBUG
+    debug_exec_impl_->debug_notification->NotifyOnce();
+  }
 }
 
 void DebugExecutorState::NodeDoneLateHook(const Node* node) {
@@ -857,36 +796,28 @@ Status DebugSession::Run(const NamedTensorList& inputs,
   return s;
 }
 
-
 ::tensorflow::DebuggerResponse DebugSession::SendDebugMessage(
     const DebuggerRequest& request) {
   // std::cout << "In DebugSession::SendDebugMessage(): debug_msg = \""
   //           << debug_msg << "\"" << std::endl;  // DEBUG
 
-  // TODO(cais): mutex lock needed?
-  {
-    mutex_lock l(debug_lock_);
+  mutex_lock l(debug_lock_);
 
-    // Wait until debug_executor is not nullptr anymore
-    while (debug_executor == nullptr) {
-      Env::Default()->SleepForMicroseconds(1000);
-    }
-
-    // TODO(cais): Wait for the Run launch to
-    // std::cout << "debug_init_notif->WaitForNotification()" << std::endl;  // DEBUG
-    // debug_init_notif->WaitForNotification();
-
-    // if (debug_executor != nullptr) {
-    DebugExecutorImpl* debug_exec_impl
-        = reinterpret_cast<DebugExecutorImpl*>(debug_executor);
-    // DEBUG
-    // std::cout << "debug_exec_impl = " << debug_exec_impl << std::endl;
-    return debug_exec_impl->HandleDebuggerMessage(request);
-    // } else {
-      // std::cout << "*** WARNING: debug_executor is nullptr" << std::endl;  // DEBUG
-      // return DebuggerResponse();    // TODO(cais): Throw proper exception.
-    // }
+  // Wait until debug_executor is not nullptr anymore.
+  // This means that calling SendDebugMessage before calling Run() will hang 
+  // until Run() is finally called.
+  while (debug_executor == nullptr) {
+    // std::cout << "SleepForMicroseconds: debug_executor = " << debug_executor << std::endl; // DEBUG
+    Env::Default()->SleepForMicroseconds(1000);
   }
+  Env::Default()->SleepForMicroseconds(1000);
+
+  DebugExecutorImpl* debug_exec_impl
+      = reinterpret_cast<DebugExecutorImpl*>(debug_executor);
+  // DEBUG
+  // std::cout << "debug_exec_impl = " << debug_exec_impl << std::endl;
+
+  return debug_exec_impl->HandleDebuggerMessage(request);
 }
 
 class DebugSessionFactory : public SessionFactory {

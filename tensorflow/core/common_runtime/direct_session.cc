@@ -238,7 +238,6 @@ Status DirectSession::Run(const NamedTensorList& inputs,
                           const std::vector<string>& output_names,
                           const std::vector<string>& target_nodes,
                           std::vector<Tensor>* outputs) {
-  std::cout << "In Run 4-arg" << std::endl;
   RunMetadata run_metadata;
   return Run(RunOptions(), inputs, output_names, target_nodes, outputs,
              &run_metadata);
@@ -250,7 +249,6 @@ Status DirectSession::Run(const RunOptions& run_options,
                           const std::vector<string>& target_nodes,
                           std::vector<Tensor>* outputs,
                           RunMetadata* run_metadata) {
-  std::cout << "In Run 6-arg" << std::endl;
   {
     mutex_lock l(graph_def_lock_);
     if (!graph_created_) {

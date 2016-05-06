@@ -53,8 +53,7 @@ class DebugRound(object):
 
     """
     # TODO(cais): Proper mutex locking in C++, so that this can be made 0
-    self._init_delay_sec = 0.1
-    self._step_delay_sec = 0.02
+    self._init_delay_sec = 0.05
 
     if debug_sess.sess_str != "debug":
       raise ValueError(
@@ -123,8 +122,10 @@ class DebugRound(object):
     thr = threading.Thread(target=target_func)
     thr.start()
 
-    # TODO(cais): Proper mutex in C++
+    # Wait for the Run() call to settle
     time.sleep(self._init_delay_sec)
+
+    print("Returning...")  # DEBUG
     return thr
 
   def query_node_order(self):
@@ -151,14 +152,11 @@ class DebugRound(object):
     Raises:
       ValueError: If the number of steps is invalid.
     """
-    if num_steps == 1:
-      output = self._sess.debug("step")
-    elif num_steps > 1:
-      output = self._sess.debug("step %d" % num_steps)
+    if num_steps >= 1:
+      for _ in xrange(num_steps):
+        output = self._sess.debug("step")
     else:
       raise ValueError("Invalid number of steps for stepping: %d" % num_steps)
-
-    time.sleep(self._step_delay_sec)
 
     # Determine just completed node (i.e., current node)
     self._curr_node = self._node_order[self.where()]
