@@ -431,44 +431,9 @@ std::vector<string> DebugExecutorImpl::GetNotCompletedNodes() {
   return not_completed_nodes;
 }
 
-void DebugExecutorState::RunAsync(DebugExecutorImpl::DoneCallback done) {
-  // tfdb(cais): Create new thread for debugging control: Keyboard for now
-  const Graph* graph = impl_->graph_;
-  // std::cout << "In RunAsync: graph->num_nodes() = "
-  //           << graph->num_nodes() << std::endl;  // DEBUG
-
+void DebugExecutorState::PreRunAsync(Executor::DoneCallback done) {
+  // TODO(cais): Unique difference
   debug_exec_impl_->node_value_store.clear();
-
-  TaggedNodeSeq ready;
-
-  // Ask the device to fill in the device context map.
-  Device* device = impl_->params_.device;
-  Status fill_status = device->FillContextMap(graph, &device_context_map_);
-  if (!fill_status.ok()) {
-    done(fill_status);
-    return;
-  }
-
-  // Initialize the ready queue.
-  for (const Node* n : impl_->root_nodes_) {
-    // std::cout << "Pushing root node " << n->name()
-    //           << " to ready queue" << std::endl;  // DEBUG
-    DCHECK_EQ(n->in_edges().size(), 0);
-    ready.push_back(TaggedNode{n, root_frame_, 0, false});
-  }
-
-  if (ready.empty()) {
-    // std::cout << "Ready queue is empty()" << std::endl;  // DEBUG
-    done(Status::OK());
-  } else {
-    num_outstanding_ops_ = ready.size();
-    // std::cout << "Ready queue is NOT empty(); num_outstanding_ops_ = "
-    //           << num_outstanding_ops_ << std::endl;  // DEBUG
-    root_frame_->iterations[0]->outstanding_ops = ready.size();
-    done_cb_ = done;
-    // Schedule to run all the ready ops in thread pool.
-    ScheduleReady(ready, nullptr);
-  }
 }
 
 // namespace {

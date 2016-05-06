@@ -346,6 +346,10 @@ class ExecutorState {
 
   virtual void RunAsync(Executor::DoneCallback done);
 
+  // A hook that is called the first thing RunAsync() starts running.
+  // The base version does nothing. Used in subclasses.
+  virtual void PreRunAsync(Executor::DoneCallback done) {}
+
  protected:
   typedef ExecutorState ME;
 

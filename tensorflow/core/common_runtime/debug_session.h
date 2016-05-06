@@ -113,9 +113,10 @@ class DebugExecutorImpl : public ExecutorImpl {
 // track of how many predecessors of a node have not done (pending_).
 class DebugExecutorState : public ExecutorState {
  public:
-  DebugExecutorState(const DebugExecutorImpl::Args& args, DebugExecutorImpl* impl);
+  DebugExecutorState(const DebugExecutorImpl::Args& args, 
+                     DebugExecutorImpl* impl);
 
-  void RunAsync(DebugExecutorImpl::DoneCallback done) override;
+  void PreRunAsync(Executor::DoneCallback done) override;
 
   // tfdb(cais)
   void InjectNodeValue(Tensor value);
