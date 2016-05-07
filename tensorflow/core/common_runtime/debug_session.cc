@@ -82,7 +82,6 @@ void DebugExecutorImpl::SimProcess(const string& node_name) {
     SimPropagateOutputs(curr_node, &ready_queue);
 
     node_order.push_back(curr_node);
-    // DebugPrintQueue("node_order", node_order);
 
     SimNodeDone(curr_node, ready_queue, &inline_ready_queue);
   }
@@ -161,7 +160,6 @@ void DebugExecutorImpl::CalcNodeOrder() {
   string init_node;
   for (const Node* n : graph_->nodes()) {
     if (n->in_edges().size() == 0) {
-      // DEBUG
       init_node = n->name();
       break;
     }
@@ -241,7 +239,6 @@ DebuggerResponse DebugExecutorImpl::HandleDebuggerMessage(
     if (!node_name.empty()) {
       executor_state->InjectNodeValue(debugger_request.input_tensor);
     } else {
-      // DEBUG
       std::cerr << "Invalid node name for inject_value" << std::endl;
     }
   } else if (debugger_request.command.empty()) {
@@ -322,7 +319,6 @@ std::vector<string> DebugExecutorImpl::GetNotCompletedNodes() {
 }
 
 void DebugExecutorState::PreRunAsync(Executor::DoneCallback done) {
-  // TODO(cais): Unique difference
   debug_exec_impl_->node_value_store.clear();
 }
 
