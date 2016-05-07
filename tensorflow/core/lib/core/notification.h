@@ -64,8 +64,8 @@ class Notification {
 
 class MultiUseNotification {
  public:
-  MultiUseNotification() :
-      pos_(0), target_pos_(1), target_pos_inc_(1), completed_(false) {}
+  MultiUseNotification()
+      : pos_(0), target_pos_(1), target_pos_inc_(1), completed_(false) {}
   ~MultiUseNotification() {}
 
   void NotifyOnce() {
@@ -88,15 +88,23 @@ class MultiUseNotification {
     target_pos_ += target_pos_inc_;
   }
 
+  // Mark the object as completed.
   void MarkAsCompleted() {
     mutex_lock l(mu_);
     cv_.notify_all();
     completed_ = true;
   }
 
+  // Get whether the object is marked as completed.
   bool IsCompleted() {
     mutex_lock l(mu_);
     return completed_;
+  }
+
+  // Get how many times the object has been notified.
+  int TimesNotified() {
+    mutex_lock l(mu_);
+    return pos_;
   }
 
  private:

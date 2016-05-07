@@ -810,9 +810,9 @@ Status DirectSession::GetOrCreateExecutors(
   return Status::OK();
 }
 
-Status DirectSession::CreateLocalExecutor(
-    const LocalExecutorParams& params, const Graph* graph,
-    Executor** executor) {
+Status DirectSession::CreateLocalExecutor(const LocalExecutorParams& params,
+                                          const Graph* graph,
+                                          Executor** executor) {
   return NewLocalExecutor(params, graph, executor);
 }
 

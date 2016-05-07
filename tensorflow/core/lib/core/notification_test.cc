@@ -25,7 +25,7 @@ limitations under the License.
 namespace tensorflow {
 namespace {
 
-const int microsec_to_sleep = 100 * 1000;  // 100 ms
+const int microsec_to_sleep = 200 * 1000;  // 200 ms
 
 TEST(NotificationTest, TestSingleNotification) {
   thread::ThreadPool* thread_pool =
@@ -113,6 +113,7 @@ TEST(MultiUseNotificationTest, TestNotifyOnce) {
 
   // Verify the counter has been incremented
   EXPECT_EQ(1, counter);
+  EXPECT_EQ(1, proceed.TimesNotified());
 
   // Unblock the thread for the 2nd time
   proceed.NotifyOnce();
@@ -120,6 +121,7 @@ TEST(MultiUseNotificationTest, TestNotifyOnce) {
 
   // Verify the counter has been incremented
   EXPECT_EQ(2, counter);
+  EXPECT_EQ(2, proceed.TimesNotified());
 
   proceed.MarkAsCompleted();
 
@@ -162,6 +164,7 @@ TEST(MultiUseNotificationTest, TestNotifyMultipleTimes) {
 
   // Verify the counter has been incremented
   EXPECT_EQ(times_to_notify, counter);
+  EXPECT_EQ(times_to_notify, proceed.TimesNotified());
 
   proceed.MarkAsCompleted();
 

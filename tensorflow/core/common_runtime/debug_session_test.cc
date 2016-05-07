@@ -27,7 +27,6 @@ limitations under the License.
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/framework/tensor_testutil.h"
 #include "tensorflow/core/framework/types.pb.h"
-#include "tensorflow/core/graph/costmodel.h"
 #include "tensorflow/core/graph/graph.h"
 #include "tensorflow/core/graph/testlib.h"
 #include "tensorflow/core/kernels/ops_util.h"
@@ -107,20 +106,32 @@ TEST_F(DebugSessionMinusAXTest, RunSimpleNetworkStepRightAfterRun) {
   std::vector<string> target_nodes = {y_neg_};
   std::vector<Tensor> outputs;
 
-  thread_pool->Schedule([&session, &inputs, 
-                         &output_names, &target_nodes, &outputs] {
-    Status s = session->Run(inputs, output_names, target_nodes, &outputs);
-  });
+  // The debugger will run on two threads: a graph execution thread and a
+  // debug thread. The former executes the nodes in the executed subgraph,
+  // while the latter sends signals to the former thread to step, inspect,
+  // modify it, etc. The graph execution thread will be scheduled using the
+  // lambda below, where as the debug thread will run in the main function
+  // body.
 
+  // Schedule the graph execution thread.
+  thread_pool->Schedule(
+      [&session, &inputs, &output_names, &target_nodes, &outputs] {
+        Status s = session->Run(inputs, output_names, target_nodes, &outputs);
+      });
+
+  // Do a step immediately after the execution thread is started, to test
+  // (the absence of) race conditions.
   DebuggerRequest step_request("step");
   DebuggerResponse step_response = session->SendDebugMessage(step_request);
 
+  // Query the debugger state using "where"
   DebuggerRequest where_request("where");
   DebuggerResponse where_response = session->SendDebugMessage(where_request);
 
   // Stepping right after the Run() call should lead to two completed nodes
   ASSERT_EQ(2, where_response.completed_nodes.size());
 
+  // Step over the remaining nodes
   const int steps_remaining = where_response.remaining_nodes.size();
   for (int i = 0; i < steps_remaining; ++i) {
     session->SendDebugMessage(step_request);
@@ -151,16 +162,17 @@ TEST_F(DebugSessionMinusAXTest, RunSimpleNetworkWithInspectionAndInjection) {
   std::vector<string> target_nodes = {y_neg_};
   std::vector<Tensor> outputs;
 
-  thread_pool->Schedule([&session, &inputs, 
-  	                     &output_names, &target_nodes, &outputs] {
-  	Status s = session->Run(inputs, output_names, target_nodes, &outputs);
-  });
+  // Schedule the debugger's execution thread.
+  thread_pool->Schedule(
+      [&session, &inputs, &output_names, &target_nodes, &outputs] {
+        Status s = session->Run(inputs, output_names, target_nodes, &outputs);
+      });
 
   DebuggerRequest where_request("where");
   DebuggerResponse where_response = session->SendDebugMessage(where_request);
 
   const int total_num_nodes = where_response.completed_nodes.size() +
-  							  where_response.remaining_nodes.size();
+                              where_response.remaining_nodes.size();
 
   // Record all nodes. Expected node order:
   //   _SOURCE
@@ -178,6 +190,7 @@ TEST_F(DebugSessionMinusAXTest, RunSimpleNetworkWithInspectionAndInjection) {
     all_nodes.push_back(node_name);
   }
 
+  // Verify the node order is what we think it is.
   ASSERT_EQ("_SOURCE", all_nodes[0]);
   ASSERT_EQ("n/_0", all_nodes[1]);
   ASSERT_EQ("n/_1", all_nodes[2]);
@@ -186,24 +199,23 @@ TEST_F(DebugSessionMinusAXTest, RunSimpleNetworkWithInspectionAndInjection) {
   ASSERT_EQ("n/_3", all_nodes[5]);
   ASSERT_EQ("_SINK", all_nodes[6]);
 
-  ASSERT_TRUE(total_num_nodes > 0);
+  ASSERT_GT(total_num_nodes, 0);
   ASSERT_EQ(1, where_response.completed_nodes.size());
-  ASSERT_TRUE(where_response.remaining_nodes.size() > 0);
+  ASSERT_GT(where_response.remaining_nodes.size(), 0);
   ASSERT_FALSE(where_response.is_completed);
 
+  // Step through all remaining nodes in the executed subgraph.
   DebuggerRequest step_request("step");
   for (int k = 1; k < total_num_nodes; ++k) {
     DebuggerResponse step_response = session->SendDebugMessage(step_request);
 
     // Send another "where" request
     where_response = session->SendDebugMessage(where_request);
-    ASSERT_EQ(total_num_nodes,
-              where_response.completed_nodes.size() +
-                  where_response.remaining_nodes.size());
+    ASSERT_EQ(total_num_nodes, where_response.completed_nodes.size() +
+                                   where_response.remaining_nodes.size());
 
     const int num_completed = where_response.completed_nodes.size();
-    const string& curr_node =
-        where_response.completed_nodes[num_completed - 1];
+    const string& curr_node = where_response.completed_nodes[num_completed - 1];
 
     // Verify the progression along the nodes
     ASSERT_EQ(k + 1, where_response.completed_nodes.size());
@@ -211,7 +223,7 @@ TEST_F(DebugSessionMinusAXTest, RunSimpleNetworkWithInspectionAndInjection) {
       ASSERT_EQ(all_nodes[i], where_response.completed_nodes[i]);
     }
     for (size_t i = 0; i < where_response.remaining_nodes.size(); ++i) {
-      ASSERT_EQ(all_nodes[i + where_response.completed_nodes.size()], 
+      ASSERT_EQ(all_nodes[i + where_response.completed_nodes.size()],
                 where_response.remaining_nodes[i]);
     }
 
@@ -236,10 +248,9 @@ TEST_F(DebugSessionMinusAXTest, RunSimpleNetworkWithInspectionAndInjection) {
       EXPECT_FLOAT_EQ(-1.0, mat(1, 0));
       EXPECT_FLOAT_EQ(0.0, mat(1, 1));
 
-      // Inject new value to a
+      // Inject new value to node "a"
       DebuggerRequest inject_request("inject_value n/_0");
       inject_request.input_tensor = a_prime_tensor;
-
       DebuggerResponse inject_response =
           session->SendDebugMessage(inject_request);
     } else if (curr_node == "n/_1") {  // x

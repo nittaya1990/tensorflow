@@ -1,10 +1,10 @@
-  /* Copyright 2016 Google Inc. All Rights Reserved.
+/* Copyright 2016 Google Inc. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+  http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -79,8 +79,7 @@ class DebugExecutorImpl : public ExecutorImpl {
 
   // Simulation methods for calculating node order
   void SimProcess(const string& node_name);
-  void SimPropagateOutputs(const string& node_name,
-                           std::deque<string>* ready);
+  void SimPropagateOutputs(const string& node_name, std::deque<string>* ready);
   void SimNodeDone(const string& node_name,
                    const std::deque<string>& ready_queue,
                    std::deque<string>* inline_ready_queue);
@@ -105,6 +104,10 @@ class DebugExecutorImpl : public ExecutorImpl {
   // tfdb(cais)
   std::unordered_map<string, Tensor> injected_tensors;
 
+  // Number of completed debugger requests in the current debug round
+  // (i.e., Run() call)
+  int64 completed_debug_requests;
+
   TF_DISALLOW_COPY_AND_ASSIGN(DebugExecutorImpl);
 };  // end class DebugExecutorImpl
 
@@ -113,7 +116,7 @@ class DebugExecutorImpl : public ExecutorImpl {
 // track of how many predecessors of a node have not done (pending_).
 class DebugExecutorState : public ExecutorState {
  public:
-  DebugExecutorState(const DebugExecutorImpl::Args& args, 
+  DebugExecutorState(const DebugExecutorImpl::Args& args,
                      DebugExecutorImpl* impl);
 
   void PreRunAsync(Executor::DoneCallback done) override;
@@ -122,12 +125,11 @@ class DebugExecutorState : public ExecutorState {
   void InjectNodeValue(Tensor value);
 
  private:
-
   // Activate the successors of a node.
   void ActivateNode(const Node* node, const bool is_dead, FrameState* frame,
                     int64 iter, const EntryVector& outputs,
-                    TaggedNodeSeq* ready) EXCLUSIVE_LOCKS_REQUIRED(mu_)
-      override;
+                    TaggedNodeSeq* ready)
+      EXCLUSIVE_LOCKS_REQUIRED(mu_) override;
 
   // Override the two hooks for debugging
   void NodeDoneEarlyHook(const Node* node) override;
@@ -155,21 +157,21 @@ class DebugSession : public DirectSession {
                            const std::vector<string>& target_nodes,
                            std::vector<Tensor>* outputs) override;
 
-  ::tensorflow::DebuggerResponse
-      SendDebugMessage(const DebuggerRequest& request) override;
+  ::tensorflow::DebuggerResponse SendDebugMessage(
+      const DebuggerRequest& request) override;
 
  private:
-  ::tensorflow::Status CreateLocalExecutor(
-      const LocalExecutorParams& params, const Graph* graph,
-      Executor** executor) override;
+  ::tensorflow::Status CreateLocalExecutor(const LocalExecutorParams& params,
+                                           const Graph* graph,
+                                           Executor** executor) override;
 
   void SchedClosure(std::function<void()> c) override;
 
   ::tensorflow::Status GetOrCreateExecutors(
       gtl::ArraySlice<string> inputs, gtl::ArraySlice<string> outputs,
       gtl::ArraySlice<string> target_nodes,
-      ExecutorsAndKeys** executors_and_keys, RunStateArgs* run_state_args)
-      override;
+      ExecutorsAndKeys** executors_and_keys,
+      RunStateArgs* run_state_args) override;
 
   void WaitForNotification(RunState* run_state, int64 timeout_in_ms) override;
 

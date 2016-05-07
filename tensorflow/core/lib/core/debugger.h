@@ -23,10 +23,8 @@ namespace tensorflow {
 // TensorFlow Debugger request class.
 class DebuggerRequest {
  public:
-  DebuggerRequest()
-    : command() {}
-  DebuggerRequest(const string& command_)
-    : command(command_) {}
+  DebuggerRequest() : command() {}
+  DebuggerRequest(const string& command_) : command(command_) {}
   ~DebuggerRequest() {}
 
   // Command for the debugger
@@ -48,12 +46,12 @@ class DebuggerRequest {
 class DebuggerResponse {
  public:
   DebuggerResponse()
-    : command(),
-      is_completed(false),
-      all_nodes(),
-      completed_nodes(),
-      remaining_nodes(),
-      has_output_tensor(false) {}
+      : command(),
+        is_completed(false),
+        all_nodes(),
+        completed_nodes(),
+        remaining_nodes(),
+        has_output_tensor(false) {}
   ~DebuggerResponse() {}
 
   // Echo of the command in request (e.g., "inspect_value node_a")

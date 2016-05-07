@@ -125,7 +125,6 @@ class DebugRound(object):
     # Wait for the Run() call to settle
     time.sleep(self._init_delay_sec)
 
-    print("Returning...")  # DEBUG
     return thr
 
   def query_node_order(self):

@@ -170,14 +170,13 @@ class Executor {
     return ret;
   }
 
-  NodeItem* nodes = nullptr;     // array of size "graph_.num_node_ids()"
+  NodeItem* nodes = nullptr;  // array of size "graph_.num_node_ids()"
 
  protected:
   friend class ExecutorState;
 
   Executor(const LocalExecutorParams& p, const Graph* g)
-      : graph_(g), params_(p),
-        initial_pending_counts_(graph_->num_node_ids()) {
+      : graph_(g), params_(p), initial_pending_counts_(graph_->num_node_ids()) {
     CHECK(p.create_kernel != nullptr);
     CHECK(p.delete_kernel != nullptr);
   }
@@ -288,8 +287,7 @@ class ExecutorBarrier {
 // An implementation of Executor
 class ExecutorImpl : public Executor {
  public:
-  ExecutorImpl(const LocalExecutorParams& p, const Graph* g)
-      : Executor(p, g) {}
+  ExecutorImpl(const LocalExecutorParams& p, const Graph* g) : Executor(p, g) {}
 
   ~ExecutorImpl() override {
     for (int i = 0; i < graph_->num_node_ids(); i++) {
@@ -634,10 +632,10 @@ class ExecutorState {
                   TaggedNodeSeq* ready) EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   // Activate the successors of a node.
-  virtual void ActivateNode(const Node* node,
-                    const bool is_dead, FrameState* frame,
-                    int64 iter, const EntryVector& outputs,
-                    TaggedNodeSeq* ready) EXCLUSIVE_LOCKS_REQUIRED(mu_);
+  virtual void ActivateNode(const Node* node, const bool is_dead,
+                            FrameState* frame, int64 iter,
+                            const EntryVector& outputs, TaggedNodeSeq* ready)
+      EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   // Process a ready node in current thread.
   virtual void Process(TaggedNode node, int64 scheduled_usec);
@@ -655,13 +653,13 @@ class ExecutorState {
 
   // After processing the outputs, propagates the outputs to their dsts.
   virtual void PropagateOutputs(const TaggedNode& tagged_node,
-                        const EntryVector& outputs, TaggedNodeSeq* ready);
+                                const EntryVector& outputs,
+                                TaggedNodeSeq* ready);
 
   // "node" just finishes. Takes ownership of "stats". Returns true if
   // execution has completed.
-  bool NodeDone(const Status& s,
-      const Node* node, const TaggedNodeSeq& ready,
-      NodeExecStats* stats, std::deque<TaggedNode>* inline_ready);
+  bool NodeDone(const Status& s, const Node* node, const TaggedNodeSeq& ready,
+                NodeExecStats* stats, std::deque<TaggedNode>* inline_ready);
 
   // A hook to execute when NodeDone just occurred.
   // It is invoked by NodeDone as the first call inside the funciton body.

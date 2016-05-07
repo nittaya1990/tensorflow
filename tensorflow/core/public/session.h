@@ -178,7 +178,11 @@ class Session {
   /// the `SessionOptions::target` field).
   virtual Status Close() = 0;
 
-  // tfdb(cais)
+  /// \brief Closes this session.
+  ///
+  /// Dispatch a debugger (tfdb) message to the Session object and get
+  /// a response. Only Session subclasses meant to support debugging need
+  /// override this no-op base implementation.
   virtual DebuggerResponse SendDebugMessage(const DebuggerRequest& request) {
     std::cerr << "ERROR: SendDebugMessage not supported for this session."
               << std::endl;
