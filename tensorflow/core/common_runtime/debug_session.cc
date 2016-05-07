@@ -326,28 +326,6 @@ void DebugExecutorState::PreRunAsync(Executor::DoneCallback done) {
   debug_exec_impl_->node_value_store.clear();
 }
 
-// namespace {
-
-// TODO(cais): Remove unused local function
-// Helpers to make a copy of 'p' and makes a copy of the input type
-// vector and the device context vector.
-//
-// NOTE: We need to make a copy of p.input for asynchronous kernel
-// because OpKernelContext methods like input_type(i) needs the param
-// points to valid input type vector. It's not an issue for sync
-// kernels because the type vector is kept on the stack.
-OpKernelContext::Params* CopyParams(const OpKernelContext::Params& p) {
-  OpKernelContext::Params* ret = new OpKernelContext::Params;
-  *ret = p;
-  // Ensure the copy of Params will make a new eigen GPU device if
-  // necessary.
-  ret->eigen_gpu_device = nullptr;
-  ret->inputs = new TensorValueVec(*p.inputs);
-  ret->input_device_contexts = new DeviceContextVec(*p.input_device_contexts);
-  ret->input_alloc_attrs = new AllocatorAttributeVec(*p.input_alloc_attrs);
-  return ret;
-}
-
 // tfdb: Inject a new Tensor value into the current node.
 void DebugExecutorState::InjectNodeValue(Tensor value) {
   const NodeItem* nodes = impl_->nodes;
