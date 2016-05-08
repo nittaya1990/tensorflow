@@ -342,17 +342,13 @@ void DebugExecutorState::InjectNodeValue(Tensor value) {
       int dst_loc = dst_item.input_start + dst_slot;
 
       if (stored_outputs[src_slot].ref != nullptr) {
+        // Inject value through the reference
         *(stored_outputs[src_slot].ref) = value;
       } else {
-        Entry injected_entry;
-        injected_entry.val = value;
-        injected_entry.ref = &value;
-        input_tensors[dst_loc] = injected_entry;
+        // Inject new value to the input tensor
+        input_tensors[dst_loc].val = value;
       }
     }
-
-    // TODO(cais): For cases other than the simplest one, the following
-    //             fields also need to be updated
   }
 }
 
