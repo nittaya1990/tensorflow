@@ -363,95 +363,31 @@ void DebugExecutorState::ActivateNode(const Node* node, const bool is_dead,
   stored_output_iter = output_iter;
   stored_outputs = outputs;
 
-  const NodeItem* nodes = impl_->nodes;
-  IterationState* output_iter_state = output_frame->GetIteration(output_iter);
-  for (const Edge* e : node->out_edges()) {
-    const Node* dst_node = e->dst();
-    const int dst_id = dst_node->id();
-    const int src_slot = e->src_output();
+  ExecutorState::ActivateNode(node, is_dead, output_frame, output_iter,
+                              outputs, ready);
 
-    // tfdb(cais): Record output
+  for (const Edge* e : node->out_edges()) {
+    // tfdb Debugger: Record output
     const Node* output_src_node = e->src();
     const string& output_src_node_name = output_src_node->name();
 
-    bool dst_dead = false;
-    bool dst_ready = false;
-    // True iff this input for dst is needed. We only set this input for
-    // dst if this flag is true. This is needed to make the thread safety
-    // analysis happy.
+    const int src_slot = e->src_output();
+
+    // Assume: IsMerge is not true.
     bool dst_need_input = !e->IsControlEdge();
-    if (IsMerge(dst_node)) {
-      // A merge node is ready if all control inputs have arrived and either
-      // a) a live data input becomes available or b) all data inputs are
-      // dead.
-      // For Merge, pending's LSB is set iff a live data input has arrived.
-      if (e->IsControlEdge()) {
-        output_iter_state->decrement_pending(dst_id, 2);
-        int count = output_iter_state->pending(dst_id);
-        dst_dead =
-            (output_iter_state->dead_count(dst_id) == dst_node->num_inputs());
-        dst_ready = (count == 0) || ((count == 1) && dst_dead);
-      } else {
-        if (outputs[src_slot].has_value) {
-          // This is a live data input.
-          int count = output_iter_state->pending(dst_id);
-          output_iter_state->mark_live(dst_id);
-          // Only the first live edge sets the input and (potentially)
-          // triggers execution. The low bit of count is set if and
-          // only if no live input has been used yet (mark_live clears
-          // it). The node should be started if and only if this is
-          // the first live input and there are no pending control
-          // edges, i.e. count == 1.
-          dst_ready = (count == 1);
-          dst_need_input = ((count & 0x1) == 1);
-        } else {
-          // This is a dead data input.
-          output_iter_state->increment_dead_count(dst_id);
-          dst_dead =
-              (output_iter_state->dead_count(dst_id) == dst_node->num_inputs());
-          dst_ready = (output_iter_state->pending(dst_id) == 1) && dst_dead;
-          dst_need_input = false;
-        }
-      }
-    } else {
-      // A non-merge node is ready if all its inputs are ready. We wait
-      // for all inputs to come in even if we know the node is dead. This
-      // ensures that all input tensors get cleaned up.
-      if (is_dead || (!e->IsControlEdge() && !outputs[src_slot].has_value)) {
-        output_iter_state->increment_dead_count(dst_id);
-      }
-      dst_dead = output_iter_state->dead_count(dst_id) > 0;
-      dst_ready = (output_iter_state->decrement_pending(dst_id, 1) == 0);
-    }
-
     if (dst_need_input) {
-      const NodeItem& dst_item = nodes[dst_id];
-      const int dst_slot = e->dst_input();
-      Entry* input_tensors = output_iter_state->input_tensors;
-      int dst_loc = dst_item.input_start + dst_slot;
-
       // Debugger: supply output tensor for inspect_value
       if (outputs[src_slot].val.IsInitialized()) {
         // Store a copy of the output value
         Tensor tensor_val_copy(outputs[src_slot].val);
 
         debug_exec_impl_->node_value_store.insert(
-            {output_src_node_name, tensor_val_copy});
+            std::make_pair(output_src_node_name, tensor_val_copy));
       } else if (outputs[src_slot].ref != nullptr) {
         // Store a copy of the ref to the Tensor value
         debug_exec_impl_->node_ref_store.insert(
-            {output_src_node_name, outputs[src_slot].ref});
+            std::make_pair(output_src_node_name, outputs[src_slot].ref));
       }
-
-      input_tensors[dst_loc] = outputs[src_slot];
-    }
-
-    // Add dst to the ready queue if it's ready
-    if (dst_ready) {
-      dst_dead = dst_dead && !IsControlTrigger(dst_node);
-      ready->push_back(
-          TaggedNode(dst_node, output_frame, output_iter, dst_dead));
-      output_iter_state->outstanding_ops++;
     }
   }
 }
