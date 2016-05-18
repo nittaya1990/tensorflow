@@ -55,6 +55,7 @@
 #     tagged image name with an argument, to push the image to a central repo
 #     such as gcr.io or Docker Hub.
 
+# TODO(cais): Add support for TF_DOCKER_BUILD_PYTHON_VERSION (PYTHON2/PYTHON3)
 
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -302,7 +303,8 @@ docker tag -f "${IMG}" "${FINAL_IMG}" || \
 echo ""
 echo "Successfully tagged docker image: ${FINAL_IMG}"
 
-# Optional: call command specified by TF_DOCKER_BUILD_PUSH_CMD
+
+# Optional: call command specified by TF_DOCKER_BUILD_PUSH_CMD to push image
 if [[ ! -z "${TF_DOCKER_BUILD_PUSH_CMD}" ]]; then
   ${TF_DOCKER_BUILD_PUSH_CMD} ${FINAL_TAG}
 
