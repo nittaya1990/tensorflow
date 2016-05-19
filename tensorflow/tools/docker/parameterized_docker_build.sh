@@ -217,7 +217,7 @@ else
 
     # Modify the devel Dockerfile to specify the git branch
     sed -r "s/([\s]*git checkout )(.*)/\1${TF_DOCKER_BUILD_DEVEL_BRANCH}/g" \
-        "{ORIG_DOCKERFILE}" > "${DOCKERFILE}"
+        "${ORIG_DOCKERFILE}" > "${DOCKERFILE}"
   else
     DOCKERFILE="${TMP_DIR}/"$(basename "${ORIG_DOCKERFILE}")
   fi
