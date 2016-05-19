@@ -30,8 +30,9 @@ RUN pip --no-cache-dir install \
 ENV TENSORFLOW_VERSION 0.8.0
 
 # --- DO NOT EDIT OR DELETE BETWEEN THE LINES --- #
-# COPY _PIP_FILE_ / #
-# RUN pip --no-cache-dir install /_PIP_FILE_ #
+# These lines will be edited automatically by parameterized_docker_build.sh. #
+# COPY _PIP_FILE_ /
+# RUN pip --no-cache-dir install /_PIP_FILE_
 # RUN rm -f /_PIP_FILE_
 
 # Install TensorFlow GPU version.
