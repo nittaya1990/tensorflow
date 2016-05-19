@@ -25,6 +25,10 @@
 #   TF_DOCKER_BUILD_IS_DEVEL: (NO | YES)
 #     Is this developer image
 #
+#   TF_DOCKER_BUILD_DEVEL_BRANCH
+#     (Required if TF_DOCKER_BUILD_IS_DEVEL is YES)
+#     Specifies the branch to checkout for devel docker images
+#
 #   TF_DOCKER_BUILD_CENTRAL_PIP
 #     (Optional)
 #     If set to any non-0 and non-empty value, will attempt to use the PIP file
@@ -76,6 +80,7 @@ TF_DOCKER_BUILD_CENTRAL_PIP=$(to_lower ${TF_DOCKER_BUILD_CENTRAL_PIP})
 echo "Required build parameters:"
 echo "  TF_DOCKER_BUILD_TYPE=${TF_DOCKER_BUILD_TYPE}"
 echo "  TF_DOCKER_BUILD_IS_DEVEL=${TF_DOCKER_BUILD_IS_DEVEL}"
+echo "  TF_DOCKER_BUILD_DEVEL_BRANCH=${TF_DOCKER_BUILD_DEVEL_BRANCH}"
 echo ""
 echo "Optional build parameters:"
 echo "  TF_DOCKER_BUILD_CENTRAL_PIP=${TF_DOCKER_BUILD_CENTRAL_PIP}"
@@ -103,6 +108,10 @@ ORIG_DOCKERFILE="Dockerfile"
 if [[ ${TF_DOCKER_BUILD_IS_DEVEL} == "yes" ]]; then
   FINAL_TAG="${FINAL_TAG}-devel"
   ORIG_DOCKERFILE="${ORIG_DOCKERFILE}.devel"
+
+  if [[ -z "${TF_DOCKER_BUILD_DEVEL_BRANCH}" ]]; then
+    die "ERROR: TF_DOCKER_BUILD_DEVEL_BRANCH is missing for devel docker build"
+  fi
 elif [[ ${TF_DOCKER_BUILD_IS_DEVEL} == "no" ]]; then
   :
 else
@@ -193,6 +202,8 @@ if [[ "${DO_PIP_BUILD}" == "1" ]]; then
   # Use string replacement to put the correct file name into the Dockerfile
   PIP_WHL=$(basename "${PIP_WHL}")
 
+  # Modify the non-devel Dockerfile to point to the correct pip whl file
+  # location
   sed -e "/# --- DO NOT EDIT OR DELETE BETWEEN THE LINES --- #/,"\
 "/# --- ~ DO NOT EDIT OR DELETE BETWEEN THE LINES --- #/c"\
 "COPY ${PIP_WHL} /\n"\
@@ -201,7 +212,15 @@ if [[ "${DO_PIP_BUILD}" == "1" ]]; then
 
   echo "Modified Dockerfile at: ${DOCKERFILE}"
 else
-  DOCKERFILE="${TMP_DIR}/"$(basename "${ORIG_DOCKERFILE}")
+  if [[ "${TF_DOCKER_BUILD_IS_DEVEL}" == "yes" ]]; then
+    DOCKERFILE="${TMP_DIR}/Dockerfile"
+
+    # Modify the devel Dockerfile to specify the git branch
+    sed -r "s/([\s]*git checkout )(.*)/\1${TF_DOCKER_BUILD_DEVEL_BRANCH}/g" \
+        "{ORIG_DOCKERFILE}" > "${DOCKERFILE}"
+  else
+    DOCKERFILE="${TMP_DIR}/"$(basename "${ORIG_DOCKERFILE}")
+  fi
 fi
 
 
@@ -273,7 +292,8 @@ if [[ "${TF_DOCKER_BUILD_IS_DEVEL}" == "no" ]]; then
 else
   docker run --rm -p ${CONTAINER_PORT}:${CONTAINER_PORT} \
       -v ${TMP_DIR}/notebooks:/root/notebooks "${IMG}" \
-      bash -c "cd /tensorflow; ./tensorflow/tools/ci_build/builds/test_tutorials.sh"
+      bash -c \
+      "cd /tensorflow; tensorflow/tools/ci_build/builds/test_tutorials.sh"
   if [[ $? != "0" ]]; then
     CHECK_FAILED=1
   fi
