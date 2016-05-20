@@ -9,7 +9,7 @@ RUN add-apt-repository -y ppa:openjdk-r/ppa && \
     add-apt-repository -y ppa:mc3man/trusty-media && \
     add-apt-repository -y ppa:george-edison55/cmake-3.x
 RUN /install/install_deb_packages.sh
-RUN /install/install_pip_packages.sh
+RUN /install/install_python3.5_pip_packages.sh
 RUN /install/install_bazel.sh
 RUN /install/install_proto3.sh
 

@@ -176,7 +176,16 @@ if [[ -z $(which virtualenv) ]]; then
   die "FAILED: virtualenv not available on path"
 fi
 
-virtualenv --system-site-packages -p "${PYTHON_BIN_PATH}" "${VENV_DIR}" || \
+VENV_FLAGS="--system-site-packages"
+if [[ "${PY_MAJOR_MINOR_VER}" == "3.5" ]]; then
+  # virtualenv system-site-packages has issues with Python 3.5.
+  # So far that particular Python version we will install dependencies.
+  echo "Disabling virtualenv flags ${VENV_FLAGS} for Python version "\
+"${PY_MAJOR_MINOR_VER}"
+  echo ""
+fi
+
+virtualenv ${VENV_FLAGS} -p "${PYTHON_BIN_PATH}" "${VENV_DIR}" || \
     die "FAILED: Unable to create virtualenv"
 
 source "${VENV_DIR}/bin/activate" || \
@@ -187,7 +196,16 @@ source "${VENV_DIR}/bin/activate" || \
 pip install -v ${WHL_PATH} || die "pip install (without --upgrade) FAILED"
 # Force tensorflow reinstallation. Otherwise it may not get installed from
 # last build if it had the same version number as previous build.
-pip install -v --upgrade --no-deps --force-reinstall ${WHL_PATH} || \
+
+PIP_FLAGS="--upgrade --no-deps --force-reinstall"
+if [[ "${PY_MAJOR_MINOR_VER}" == "3.5" ]]; then
+  echo "Disabling pip install flags ${PIP_FLAGS} for Python version "\
+"${PY_MAJOR_MINOR_VER}"
+  echo ""
+  PIP_FLAGS=""
+fi
+
+pip install -v ${PIP_FLAGS} ${WHL_PATH} || \
     die "pip install (forcing to reinstall tensorflow) FAILED"
 echo "Successfully installed pip package ${WHL_PATH}"
 
