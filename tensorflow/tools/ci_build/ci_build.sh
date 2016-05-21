@@ -37,7 +37,7 @@ shift 1
 
 # Dockerfile to be used in docker build
 DOCKERFILE_PATH="${SCRIPT_DIR}/Dockerfile.${CONTAINER_TYPE}"
-DOCKER_CONTEXT_PATH="${SCRIPTS_DIR}"
+DOCKER_CONTEXT_PATH="${SCRIPT_DIR}"
 
 if [[ "$1" == "--dockerfile" ]]; then
   DOCKERFILE_PATH="$2"
