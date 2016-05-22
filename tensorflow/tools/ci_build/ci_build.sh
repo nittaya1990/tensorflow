@@ -14,7 +14,7 @@
 # limitations under the License.
 # ==============================================================================
 #
-# Usage: ci_build.sh <CONTAINER_TYPE> [--dockerfile <DOCKER_FILE_PATH>]
+# Usage: ci_build.sh <CONTAINER_TYPE> [--dockerfile <DOCKERFILE_PATH>]
 #                    <COMMAND>
 #
 # CONTAINER_TYPE: Type of the docker container used the run the build:

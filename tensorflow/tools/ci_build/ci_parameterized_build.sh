@@ -23,7 +23,7 @@
 #   TF_BUILD_IS_OPT:           (NO_OPT | OPT)
 #   TF_BUILD_IS_PIP:           (NO_PIP | PIP | BOTH)
 #
-# Note: 
+# Note:
 #   1) Certain combinations of parameter values are regarded
 # as invalid and will cause the script to exit with code 0. For example:
 #   NO_OPT & PIP     (PIP builds should always use OPT)
