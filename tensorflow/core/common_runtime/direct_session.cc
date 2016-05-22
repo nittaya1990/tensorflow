@@ -319,6 +319,61 @@ Status DirectSession::Run(const RunOptions& run_options,
   args.runner = [this, pool](Executor::Args::Closure c) {
     SchedClosure(pool, c);
   };
+
+  args.node_output_val_callback = [](const string& node_name,
+                                     const Tensor& tensor_val,
+                                     OpKernelContext* ctx) {
+    std::cout << "node_output_val_callback from direct_session: " << node_name << std::endl << std::flush;
+    std::cout << "  shape: " << tensor_val.shape().DebugString() << std::endl << std::flush;
+    std::cout << "  dtype: " << tensor_val.dtype() << std::endl << std::flush;
+    Env::Default()->SleepForMicroseconds(100 * 1000);  // DEBUG: Test latency tolerance
+
+    // AllocatorAttributes host_alloc_attrs;
+    // host_alloc_attrs.set_gpu_compatible(true);
+    // host_alloc_attrs.set_on_host(true);
+
+    Device* device = static_cast<Device*>(ctx->device());
+
+    if (device->name().find("gpu:") != string::npos) {
+      std::cout << "  device: " << device->name() << std::endl << std::flush;
+      Allocator* cpu_allocator = tensorflow::cpu_allocator();
+      Tensor* cpu_tensor = new Tensor(cpu_allocator, tensor_val.dtype(), tensor_val.shape());
+      std::cout << "  cpu_tensor: " << cpu_tensor->DebugString() << std::endl << std::flush;
+
+      DeviceContext* device_ctxt = ctx->op_device_context();
+
+      bool copy_done = false;
+
+      device_ctxt->CopyDeviceTensorToCPU(
+          &tensor_val, "TensorCopy", device, cpu_tensor,
+          [&copy_done](const Status& s) {
+            std::cout << "CopyDeviceTensorToCPU: s.ok() = " << s.ok() << std::endl << std::flush;
+           copy_done = true;
+          });
+
+      while (!copy_done) {
+        Env::Default()->SleepForMicroseconds(1 * 1000);
+      }
+
+      std::cout << "After copying, cpu_tensor = " << cpu_tensor->DebugString() << std::endl << std::flush;
+      std::cout << "node_output_val_callback: Returning" << std::endl << std::flush;
+    } else if (device->name().find("cpu:") != string::npos) {
+      std::cout << "  val (on cpu): " << tensor_val.DebugString() << std::endl << std::flush;
+    }
+  };
+
+  args.node_output_ref_callback = [](const string& node_name,
+                                     const Tensor* tensor_ref,
+                                     OpKernelContext* ctx) {
+    std::cout << "node_output_ref_callback from direct_session: " << node_name << std::endl << std::flush;
+    std::cout << "  ref: " << tensor_ref << std::endl << std::flush;
+    if (tensor_ref != nullptr) {
+      // TODO(cais): Unify with val callback
+      // std::cout << "  *ref = " << (*tensor_ref).DebugString() << std::endl << std::flush;
+    }
+    Env::Default()->SleepForMicroseconds(100 * 1000);  // DEBUG: Test latency tolerance
+  };
+
   args.session_state = &session_state_;
   args.tensor_store = &run_state.tensor_store;
   if (LogMemory::IsEnabled()) {
