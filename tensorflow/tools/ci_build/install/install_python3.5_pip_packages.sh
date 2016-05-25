@@ -56,17 +56,18 @@ rm -f scipy-0.17.1-cp35-cp35m-manylinux1_x86_64.whl
 
 pip3.5 install --upgrade scikit-learn
 
+# Install recent-enough version of wheel for Python 3.5 wheel builds
+pip3.5 install wheel==0.29.0
+
 # pip3.5 install pandas will fail if apt-get install python3-pandas is not
 # done first.
-apt-get install -y python3-pandas
+# apt-get install -y python3-pandas   # TODO(cais): Remove this
 pip3.5 install --upgrade pandas==0.18.1
 
 # Remove packages in /usr/lib/python* that may interfere with packages in
 # /usr/local/lib. These packages may get installed inadvertantly with packages
 # such as apt-get python-pandas. Their older versions can mask the more recent
 # versions installed above with pip and cause test failures.
-rm -rf /usr/lib/python3/dist-packages/numpy \
-       /usr/lib/python3/dist-packages/scipy
-
-# Install recent-enough version of wheel for Python 3.5 wheel builds
-pip3.5 install wheel==0.29.0
+# TODO(cais): Remove this
+# rm -rf /usr/lib/python3/dist-packages/numpy \
+#        /usr/lib/python3/dist-packages/scipy
