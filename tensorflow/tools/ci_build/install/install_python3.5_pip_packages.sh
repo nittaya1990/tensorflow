@@ -34,8 +34,6 @@ make install
 rm -f /usr/bin/swig
 ln -s /usr/local/bin/swig /usr/bin/swig
 
-which swig
-
 popd
 
 rm -rf swig-3.0.8
@@ -58,7 +56,15 @@ rm -f scipy-0.17.1-cp35-cp35m-manylinux1_x86_64.whl
 
 pip3.5 install --upgrade scikit-learn
 
-pip3.5 install --upgrade pandas
+# pip3.5 install pandas has bugs. Use apt-get install instead
+apt-get install -y python3-pandas
+
+# Remove packages in /usr/lib/python* that may interfere with packages in
+# /usr/local/lib. These packages may get installed inadvertantly with packages
+# such as apt-get python-pandas. Their older versions can mask the more recent
+# versions installed above with pip and cause test failures.
+rm -rf /usr/lib/python3/dist-packages/numpy \
+       /usr/lib/python3/dist-packages/scipy
 
 # Install recent-enough version of wheel for Python 3.5 wheel builds
 pip3.5 install wheel==0.29.0
