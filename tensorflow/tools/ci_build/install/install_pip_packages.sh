@@ -63,6 +63,10 @@ mv scikit_learn-0.17.1-cp34-cp34m-manylinux1_x86_64.whl \
 pip3 install scikit_learn-0.17.1-cp34-cp34m-linux_x86_64.whl
 rm scikit_learn-0.17.1-cp34-cp34m-linux_x86_64.whl
 
+# pandas required by tf.learn/inflow
+pip install pandas==0.18.1
+pip3 install pandas==0.18.1
+
 # Benchmark tests require the following:
 pip install psutil
 pip3 install psutil
@@ -72,12 +76,3 @@ pip3 install py-cpuinfo
 # pylint tests require the following:
 pip install pylint
 pip3 install pylint
-
-# Remove packages in /usr/lib/python* that may interfere with packages in
-# /usr/local/lib. These packages may get installed inadvertantly with packages
-# such as apt-get python-pandas. Their older versions can mask the more recent
-# versions installed above with pip and cause test failures.
-rm -rf /usr/lib/python2.7/dist-packages/numpy \
-       /usr/lib/python2.7/dist-packages/scipy \
-       /usr/lib/python3/dist-packages/numpy \
-       /usr/lib/python3/dist-packages/scipy

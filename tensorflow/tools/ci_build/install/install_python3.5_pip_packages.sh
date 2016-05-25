@@ -58,6 +58,7 @@ rm -f scipy-0.17.1-cp35-cp35m-manylinux1_x86_64.whl
 
 pip3.5 install --upgrade scikit-learn
 
+pip3.5 install --upgrade pandas
+
 # Install recent-enough version of wheel for Python 3.5 wheel builds
 pip3.5 install wheel==0.29.0
-
