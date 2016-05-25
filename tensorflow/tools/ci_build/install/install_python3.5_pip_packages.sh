@@ -56,8 +56,10 @@ rm -f scipy-0.17.1-cp35-cp35m-manylinux1_x86_64.whl
 
 pip3.5 install --upgrade scikit-learn
 
-# pip3.5 install pandas has bugs. Use apt-get install instead
+# pip3.5 install pandas will fail if apt-get install python3-pandas is not
+# done first.
 apt-get install -y python3-pandas
+pip3.5 install --upgrade pandas==0.18.1
 
 # Remove packages in /usr/lib/python* that may interfere with packages in
 # /usr/local/lib. These packages may get installed inadvertantly with packages
