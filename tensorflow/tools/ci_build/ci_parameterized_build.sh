@@ -53,6 +53,12 @@
 #   TF_BUILD_BAZEL_TARGET:
 #                      Used to override the default bazel build target:
 #                      //tensorflow/...
+#   TF_BUILD_BAZEL_TARGET_QUERY:
+#                      If set to any non-empty value, will let bazel run a
+#                      query to determine what targets to test.
+#                      E.g.,
+#                        kind(py_test, attr(tags, 'local', //tensorflow/...))
+#                      Applicable only if TF_BIULD_IS_PIP==NO_PIP
 #   TF_BUILD_BAZEL_CLEAN:
 #                      Will perform "bazel clean", if and only if this variable
 #                      is set to any non-empty and non-0 value
@@ -157,6 +163,7 @@ echo "  TF_BUILD_APPEND_CI_DOCKER_EXTRA_PARAMS="\
 "${TF_BUILD_APPEND_CI_DOCKER_EXTRA_PARAMS}"
 echo "  TF_BUILD_APPEND_ARGUMENTS=${TF_BUILD_APPEND_ARGUMENTS}"
 echo "  TF_BUILD_BAZEL_TARGET=${TF_BUILD_BAZEL_TARGET}"
+echo "  TF_BUILD_BAZEL_TARGET_QUERY=${TF_BUILD_BAZEL_TARGET_QUERY}"
 echo "  TF_BUILD_BAZEL_CLEAN=${TF_BUILD_BAZEL_CLEAN}"
 echo "  TF_BUILD_SERIAL_TESTS=${TF_BUILD_SERIAL_TESTS}"
 echo "  TF_BUILD_TEST_TUTORIALS=${TF_BUILD_TEST_TUTORIALS}"
@@ -277,6 +284,20 @@ if [[ ${TF_BUILD_IS_PIP} == "no_pip" ]] ||
   # Process optional bazel target override
   if [[ ! -z "${TF_BUILD_BAZEL_TARGET}" ]]; then
     BAZEL_TARGET=${TF_BUILD_BAZEL_TARGET}
+  fi
+
+  if [[ ! -z ${TF_BUILD_BAZEL_TARGET_QUERY} ]]; then
+    BAZEL_TARGET=$(bazel query "${TF_BUILD_BAZEL_TARGET_QUERY}" | xargs)
+    if [[ -z "${BAZEL_TARGET}" ]]; then
+      die "ERROR: no target from bazel query ${TF_BUILD_BAZEL_TARGET_QUERY}"
+    fi
+    NUM_TARGETS=$(echo "${BAZEL_TARGET}" | wc -w)
+    echo ""
+    echo "Found ${NUM_TARGETS} test targets in total:"
+    echo "Using bazel targets from bazel query: "\
+"${TF_BUILD_BAZEL_TARGET_QUERY}"
+    echo "${BAZEL_TARGET}"
+    echo ""
   fi
 
   if [[ ${CTYPE} == "cpu" ]] || [[ ${CTYPE} == "gpu" ]]; then
