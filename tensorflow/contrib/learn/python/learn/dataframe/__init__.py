@@ -1,5 +1,5 @@
-"""DataFrames for ingesting and preprocessing data."""
-# Copyright 2016 Google Inc. All Rights Reserved.
+# pylint: disable=g-bad-file-header
+# Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+# ==============================================================================
+
+"""DataFrames for ingesting and preprocessing data."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -22,5 +25,9 @@ from tensorflow.contrib.learn.python.learn.dataframe.column import TransformedCo
 from tensorflow.contrib.learn.python.learn.dataframe.dataframe import DataFrame
 from tensorflow.contrib.learn.python.learn.dataframe.transform import parameter
 from tensorflow.contrib.learn.python.learn.dataframe.transform import Transform
+
+# Transforms
+from tensorflow.contrib.learn.python.learn.dataframe.transforms.reader_source import ReaderSource
+
 
 __all__ = ['Column', 'TransformedColumn', 'DataFrame', 'parameter', 'Transform']
