@@ -287,16 +287,10 @@ if [[ ${TF_BUILD_IS_PIP} == "no_pip" ]] ||
   fi
 
   if [[ ! -z ${TF_BUILD_BAZEL_TARGET_QUERY} ]]; then
-    BAZEL_TARGET=$(bazel query "${TF_BUILD_BAZEL_TARGET_QUERY}" | xargs)
-    if [[ -z "${BAZEL_TARGET}" ]]; then
-      die "ERROR: no target from bazel query ${TF_BUILD_BAZEL_TARGET_QUERY}"
-    fi
-    NUM_TARGETS=$(echo "${BAZEL_TARGET}" | wc -w)
+    BAZEL_TARGET='$(bazel query "'"${TF_BUILD_BAZEL_TARGET_QUERY}"'")'
     echo ""
-    echo "Found ${NUM_TARGETS} test targets in total:"
-    echo "Using bazel targets from bazel query: "\
-"${TF_BUILD_BAZEL_TARGET_QUERY}"
-    echo "${BAZEL_TARGET}"
+    echo "bazel test will use the following bazel query to determine "\
+"the test targets to run: ${BAZEL_TARGET}"
     echo ""
   fi
 
