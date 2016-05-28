@@ -313,8 +313,10 @@ def pow(x, y, name=None):
   ```
 
   Args:
-    x: A `Tensor` of type `float`, `double`, `int32`, `complex64`, or `int64`.
-    y: A `Tensor` of type `float`, `double`, `int32`, `complex64`, or `int64`.
+    x: A `Tensor` of type `float`, `double`, `int32`, `int64`, `complex64`, or
+     `complex128`.
+    y: A `Tensor` of type `float`, `double`, `int32`, `int64`, `complex64`, or
+     `complex128`.
     name: A name for the operation (optional).
 
   Returns:
@@ -359,7 +361,7 @@ def complex(real, imag, name=None):
     elif input_types == (dtypes.float32, dtypes.float32):
       Tout = dtypes.complex64
     else:
-      raise TypeError("Types of real and imag don't match: "
+      raise TypeError("real and imag have incorrect types: "
                       "{} {}".format(real.dtype.name, imag.dtype.name))
     return gen_math_ops._complex(real, imag, Tout=Tout, name=name)
 
@@ -1533,6 +1535,7 @@ def _BroadcastShape(op):
 
 @ops.RegisterShape("SparseDenseCwiseMul")
 @ops.RegisterShape("SparseDenseCwiseDiv")
+@ops.RegisterShape("SparseDenseCwiseAdd")
 def _SparseDenseBinaryOpShape(op):  # pylint: disable=invalid-name
   """Common shape for 'sparse <binary cwise op> dense -> sparse' operators."""
   nnz = op.inputs[1].get_shape()[0]
