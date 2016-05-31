@@ -667,8 +667,7 @@ class ExecutorState {
   CancellationManager* cancellation_manager_;
   Executor::Args::Runner runner_;
 
-  Executor::Args::NodeOutputValCallback node_output_val_callback_;
-  Executor::Args::NodeOutputRefCallback node_output_ref_callback_;
+  // Executor::Args::NodeOutputCallback node_output_callback_;
 
   // Owned.
 
@@ -819,8 +818,7 @@ ExecutorState::ExecutorState(const Executor::Args& args, ExecutorImpl* impl)
       impl_(impl),
       cancellation_manager_(args.cancellation_manager),
       runner_(args.runner),
-      node_output_val_callback_(args.node_output_val_callback),
-      node_output_ref_callback_(args.node_output_ref_callback),
+      // node_output_callback_(args.node_output_callback),
       num_outstanding_ops_(0) {
   // We start the entire execution in iteration 0 of the root frame
   // so let us create the root frame and the state for iteration 0.
@@ -1125,8 +1123,8 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
         }
         if (stats_collector_) nodestats::SetOpEnd(stats);
 
-        std::cout << "Calling ProcessOutputs(): device->name() = " << device->name() 
-                  << "; node name = " << item.node->name() << std::endl << std::flush;
+        // std::cout << "Calling ProcessOutputs(): device->name() = " << device->name() 
+        //           << "; node name = " << item.node->name() << std::endl << std::flush;
         // std::cout << "    device_context" << device_context->  
         s = ProcessOutputs(item, &ctx, &outputs, stats);
         if (s.ok() && impl_->device_record_tensor_accesses_) {
@@ -1308,10 +1306,11 @@ Status ExecutorState::ProcessOutputs(const NodeItem& item,
                                           ctx->step_id(), i, to_log);
           }
 
-          // Device* device = static_cast<Device*>(ctx->device());  // TODO(cais): Use ctx methods
-          if (node_output_ref_callback_ != nullptr) {
-            // node_output_ref_callback_(item.node->name(), out->ref, device, ctx->op_device_context());
-            node_output_ref_callback_(item.node->name(), out->ref, ctx);
+          // if (node_output_callback_ != nullptr) {
+          //   node_output_callback_(item.node->name(), out->ref, true, ctx);
+          // }
+          if (impl_->params_.node_output_callback != nullptr) {
+            impl_->params_.node_output_callback(item.node->name(), out->ref, true, ctx);
           }
         } else {
           // NOTE that std::move is used here, so val.tensor goes to
@@ -1322,12 +1321,11 @@ Status ExecutorState::ProcessOutputs(const NodeItem& item,
                                           ctx->step_id(), i, out->val);
           }
 
-          // Device* device = static_cast<Device*>(ctx->device());  // TODO(cais): Use ctx methods
-          if (node_output_val_callback_ != nullptr) {
-            // node_output_val_callback_(item.node->name(),  out->val, device, ctx->op_device_context());
-            node_output_val_callback_(item.node->name(),  out->val, ctx);
-          } else {
-            std::cout << "nullptr node_output_val_callback_: " << item.node->name() << std::endl << std::flush;
+          // if (node_output_callback_ != nullptr) {
+          //   node_output_callback_(item.node->name(), &out->val, false, ctx);
+          // }
+          if (impl_->params_.node_output_callback != nullptr) {
+            impl_->params_.node_output_callback(item.node->name(), &out->val, false, ctx);
           }
         }
       } else {
@@ -1966,77 +1964,22 @@ void ExecutorState::CleanupFramesIterations(FrameState* frame, int64 iter,
 }
 
 void ExecutorImpl::RunAsync(const Args& args, DoneCallback done) {
-  Args new_args = args;
+  // Args new_args = args;
 
-  // TODO(cais): Dedupe with direct_session.cc
-  if (new_args.node_output_val_callback == nullptr) {
-    new_args.node_output_val_callback = [](const string& node_name,
-                                           const Tensor& tensor_val,
-                                           OpKernelContext* ctx) {
-      std::cout << "node_output_val_callback from ExecutorImpl::RunAsync(): " << node_name << std::endl << std::flush;
-      std::cout << "  shape: " << tensor_val.shape().DebugString() << std::endl << std::flush;
-      std::cout << "  dtype: " << tensor_val.dtype() << std::endl << std::flush;
-      Env::Default()->SleepForMicroseconds(100 * 1000);  // DEBUG: Test latency tolerance
+  // // TODO(cais): Dedupe with direct_session.cc
+  // if (new_args.node_output_callback == nullptr) {
+  // }
 
-      // AllocatorAttributes host_alloc_attrs;
-      // host_alloc_attrs.set_gpu_compatible(true);
-      // host_alloc_attrs.set_on_host(true);
-
-      Device* device = static_cast<Device*>(ctx->device());
-
-      if (device->name().find("gpu:") != string::npos) {
-        std::cout << "  device: " << device->name() << std::endl << std::flush;
-        Allocator* cpu_allocator = tensorflow::cpu_allocator();
-        Tensor* cpu_tensor = new Tensor(cpu_allocator, tensor_val.dtype(), tensor_val.shape());
-        std::cout << "  cpu_tensor: " << cpu_tensor->DebugString() << std::endl << std::flush;
-
-        DeviceContext* device_ctxt = ctx->op_device_context();
-
-        bool copy_done = false;
-
-        device_ctxt->CopyDeviceTensorToCPU(
-            &tensor_val, "TensorCopy", device, cpu_tensor,
-            [&copy_done](const Status& s) {
-              std::cout << "CopyDeviceTensorToCPU: s.ok() = " << s.ok() << std::endl << std::flush;
-             copy_done = true;
-            });
-
-        while (!copy_done) {
-          Env::Default()->SleepForMicroseconds(1 * 1000);
-        }
-
-        std::cout << "After copying, cpu_tensor = " << cpu_tensor->DebugString() << std::endl << std::flush;
-        std::cout << "node_output_val_callback: Returning" << std::endl << std::flush;
-      } else if (device->name().find("cpu:") != string::npos) {
-        std::cout << "  val (on cpu): " << tensor_val.DebugString() << std::endl << std::flush;
-      }
-    };
-
-    new_args.node_output_ref_callback = [](const string& node_name,
-                                           const Tensor* tensor_ref,
-                                           OpKernelContext* ctx) {
-    std::cout << "node_output_ref_callback from ExecutorImpl::RunAsync(): " << node_name << std::endl << std::flush;
-    std::cout << "  ref: " << tensor_ref << std::endl << std::flush;
-    if (tensor_ref != nullptr) {
-      // TODO(cais): Unify with val callback
-      // std::cout << "  *ref = " << (*tensor_ref).DebugString() << std::endl << std::flush;
-    }
-    Env::Default()->SleepForMicroseconds(100 * 1000);  // DEBUG: Test latency tolerance
-  };
-  }
-
-  if (new_args.node_output_val_callback == nullptr) {
-    std::cout << "WARNING: Calling new ExecutorState: args.node_output_val_callback is nullptr = "
-              << (args.node_output_val_callback ==nullptr) << std::endl << std::flush;
-  }
-
-  (new ExecutorState(new_args, this))->RunAsync(done);
+  (new ExecutorState(args, this))->RunAsync(done);
 }
 
 }  // end namespace
 
 Status NewLocalExecutor(const LocalExecutorParams& params, const Graph* graph,
                         Executor** executor) {
+  std::cout << "** params.node_output_callback == nullptr: "
+            << (params.node_output_callback == nullptr) << std::endl;
+
   ExecutorImpl* impl = new ExecutorImpl(params, graph);
   Status s = impl->Initialize();
   if (s.ok()) {

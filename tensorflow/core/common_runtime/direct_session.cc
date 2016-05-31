@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/direct_session.h"
 
 #include <atomic>
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -145,7 +146,8 @@ DirectSession::DirectSession(const SessionOptions& options,
     : options_(options),
       device_mgr_(device_mgr),
       cancellation_manager_(new CancellationManager()),
-      operation_timeout_in_ms_(options_.config.operation_timeout_in_ms()) {
+      operation_timeout_in_ms_(options_.config.operation_timeout_in_ms()),
+      state_dumper_() {
   if (options_.config.session_inter_op_thread_pool_size() > 0) {
     for (int i = 0; i < options_.config.session_inter_op_thread_pool_size();
          ++i) {
@@ -318,60 +320,6 @@ Status DirectSession::Run(const RunOptions& run_options,
   args.cancellation_manager = cancellation_manager_;
   args.runner = [this, pool](Executor::Args::Closure c) {
     SchedClosure(pool, c);
-  };
-
-  args.node_output_val_callback = [](const string& node_name,
-                                     const Tensor& tensor_val,
-                                     OpKernelContext* ctx) {
-    std::cout << "node_output_val_callback from direct_session: " << node_name << std::endl << std::flush;
-    std::cout << "  shape: " << tensor_val.shape().DebugString() << std::endl << std::flush;
-    std::cout << "  dtype: " << tensor_val.dtype() << std::endl << std::flush;
-    Env::Default()->SleepForMicroseconds(100 * 1000);  // DEBUG: Test latency tolerance
-
-    // AllocatorAttributes host_alloc_attrs;
-    // host_alloc_attrs.set_gpu_compatible(true);
-    // host_alloc_attrs.set_on_host(true);
-
-    Device* device = static_cast<Device*>(ctx->device());
-
-    if (device->name().find("gpu:") != string::npos) {
-      std::cout << "  device: " << device->name() << std::endl << std::flush;
-      Allocator* cpu_allocator = tensorflow::cpu_allocator();
-      Tensor* cpu_tensor = new Tensor(cpu_allocator, tensor_val.dtype(), tensor_val.shape());
-      std::cout << "  cpu_tensor: " << cpu_tensor->DebugString() << std::endl << std::flush;
-
-      DeviceContext* device_ctxt = ctx->op_device_context();
-
-      bool copy_done = false;
-
-      device_ctxt->CopyDeviceTensorToCPU(
-          &tensor_val, "TensorCopy", device, cpu_tensor,
-          [&copy_done](const Status& s) {
-            std::cout << "CopyDeviceTensorToCPU: s.ok() = " << s.ok() << std::endl << std::flush;
-           copy_done = true;
-          });
-
-      while (!copy_done) {
-        Env::Default()->SleepForMicroseconds(1 * 1000);
-      }
-
-      std::cout << "After copying, cpu_tensor = " << cpu_tensor->DebugString() << std::endl << std::flush;
-      std::cout << "node_output_val_callback: Returning" << std::endl << std::flush;
-    } else if (device->name().find("cpu:") != string::npos) {
-      std::cout << "  val (on cpu): " << tensor_val.DebugString() << std::endl << std::flush;
-    }
-  };
-
-  args.node_output_ref_callback = [](const string& node_name,
-                                     const Tensor* tensor_ref,
-                                     OpKernelContext* ctx) {
-    std::cout << "node_output_ref_callback from direct_session: " << node_name << std::endl << std::flush;
-    std::cout << "  ref: " << tensor_ref << std::endl << std::flush;
-    if (tensor_ref != nullptr) {
-      // TODO(cais): Unify with val callback
-      // std::cout << "  *ref = " << (*tensor_ref).DebugString() << std::endl << std::flush;
-    }
-    Env::Default()->SleepForMicroseconds(100 * 1000);  // DEBUG: Test latency tolerance
   };
 
   args.session_state = &session_state_;
@@ -841,6 +789,60 @@ Status DirectSession::GetOrCreateExecutors(
       if (kernel && !lib->IsStateful(kernel->type_string())) {
         delete kernel;
       }
+    };
+
+    // TODO(cais): Look into the limitation that Executors created by ConstantFolding
+    // do not get this callback.
+    params.node_output_callback = [this](const string& node_name,
+                                     const Tensor* tensor,
+                                     const bool is_ref,
+                                     OpKernelContext* ctx) {
+      std::ostringstream stream;
+
+      std::chrono::milliseconds ms =
+          std::chrono::duration_cast<std::chrono::milliseconds>(
+              std::chrono::system_clock::now().time_since_epoch());
+      int64 epoch_timestamp = ms.count();
+
+      stream << "(" << epoch_timestamp << ") node_output_callback from direct_session: "
+             << node_name << std::endl;
+      stream << "  is_ref: " << is_ref << std::endl;
+      stream << "  shape: " << tensor->shape().DebugString() << std::endl;
+      stream << "  dtype: " << tensor->dtype() << std::endl;
+
+      // AllocatorAttributes host_alloc_attrs;
+      // host_alloc_attrs.set_gpu_compatible(true);
+      // host_alloc_attrs.set_on_host(true);
+
+      Device* device = static_cast<Device*>(ctx->device());
+
+      if (device->name().find("gpu:") != string::npos) {
+        stream << "  device: " << device->name() << std::endl;
+
+        Allocator* cpu_allocator = tensorflow::cpu_allocator();
+        Tensor* cpu_tensor = new Tensor(cpu_allocator, tensor->dtype(), tensor->shape());
+
+        DeviceContext* device_ctxt = ctx->op_device_context();
+
+        bool copy_done = false;
+
+        device_ctxt->CopyDeviceTensorToCPU(
+            tensor, "TensorCopy", device, cpu_tensor,
+            [&copy_done](const Status& s) {
+              std::cout << "CopyDeviceTensorToCPU: s.ok() = " << s.ok() << std::endl << std::flush;
+             copy_done = true;
+            });
+
+        while (!copy_done) {
+          Env::Default()->SleepForMicroseconds(1 * 1000);
+        }
+
+        stream << "After copying, cpu_tensor = " << cpu_tensor->DebugString() << std::endl;
+      } else if (device->name().find("cpu:") != string::npos) {
+        stream << "  val of " << node_name << " (on cpu): " << tensor->DebugString() << std::endl;
+      }
+
+      state_dumper_.dump(stream.str(), node_name, tensor);
     };
 
     optimizer.Optimize(lib, device, &partition_graph);

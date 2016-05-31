@@ -40,11 +40,63 @@ limitations under the License.
 #include "tensorflow/core/platform/thread_annotations.h"
 #include "tensorflow/core/platform/types.h"
 #include "tensorflow/core/public/session.h"
+#include "tensorflow/core/util/tensor_slice_writer.h"  // tfdb(cais)
 
 namespace tensorflow {
 
 class CostModel;
 class Device;
+
+class StateDumper {
+ public:
+  StateDumper() :
+    writer_("/tmp/tfdb.dump", checkpoint::CreateTableTensorSliceBuilder) {
+    std::cout << "** In StateDumper() constructor" << std::endl << std::flush;
+  }
+  virtual ~StateDumper() {
+    std::cout << "** In StateDumper() destructor" << std::endl << std::flush;
+    TF_CHECK_OK(writer_.Finish());
+  }
+  void dump(const string& msg,
+            const string& tensor_name,
+            const Tensor* tensor) {
+    mutex_lock l(mu_);
+    std::cout << msg << std::endl << std::flush;
+
+    if (tensor != nullptr) {
+      TensorShape shape(tensor->shape());
+      std::ostringstream slice_stream("");
+      for (size_t i = 0; i < shape.dims(); ++i) {
+        slice_stream << "-";
+        if (i < shape.dims() - 1) {
+          slice_stream << ":";
+        }
+      }
+      TensorSlice slice = TensorSlice::ParseOrDie(slice_stream.str());
+
+      // TOCO(cais): Make data type adaptive
+      if (tensor->dtype() == DT_FLOAT) {
+        // Guard against uninitizlied Tensors
+        if (tensor->SummarizeValue(1).find("uninitialized Tensor") == string::npos) {
+          std::cout << "|| data_type = " << tensor->dtype()
+                    << "; size = " << tensor->flat<float>().size() << std::endl << std::flush;
+          const float* data = tensor->flat<float>().data();
+          std::cout << "|| writer writing" << std::endl << std::flush;
+          TF_CHECK_OK(writer_.Add(tensor_name, shape, slice, data));
+          std::cout << "|| writer done writing" << std::endl << std::flush;
+        } else {
+          std::cout << "|| writer skipping uninitizlied Tensor: " << tensor_name
+                    << std::endl << std::flush;
+        }
+      }
+    }
+
+  }
+
+ private:
+  mutable mutex mu_;
+  checkpoint::TensorSliceWriter writer_;
+};
 
 class DirectSession : public Session {
  public:
@@ -263,6 +315,9 @@ class DirectSession : public Session {
 
   // Manages all the cost models for the graphs executed in this session.
   CostModelManager cost_model_manager_;
+
+  // State dumper
+  StateDumper state_dumper_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(DirectSession);
 };

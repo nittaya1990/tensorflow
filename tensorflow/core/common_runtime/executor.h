@@ -93,28 +93,23 @@ class Executor {
     typedef std::function<void(Closure)> Runner;
     Runner runner = nullptr;
 
-    typedef std::function<void(const string& node_name,
-                               const Tensor& tensor_val,
-                               OpKernelContext* ctx)>
-                               // Device* device,
-                               // DeviceContext* device_ctxt)>
-        NodeOutputValCallback;
-    NodeOutputValCallback node_output_val_callback = nullptr;
+
 
     typedef std::function<void(const string& node_name,
-                               const Tensor* tensor_ref,
+                               const Tensor* tensor_val,
+                               const bool is_ref,
                                OpKernelContext* ctx)>
-                               // Device* device,
-                               // DeviceContext* device_ctxt)>
-        NodeOutputRefCallback;
-    NodeOutputRefCallback node_output_ref_callback = nullptr;
-    
+        NodeOutputCallback;
+    NodeOutputCallback node_output_callback = nullptr;
   };
   typedef std::function<void(const Status&)> DoneCallback;
   virtual void RunAsync(const Args& args, DoneCallback done) = 0;
 
   // Synchronous wrapper for RunAsync().
   Status Run(const Args& args) {
+    if (args.node_output_callback == nullptr) {
+     std::cout << "*** In Executor::Run: args.node_output_callback = nullptr ***" << std::endl;
+    }
     Status ret;
     Notification n;
     RunAsync(args, [&ret, &n](const Status& s) {
@@ -145,6 +140,8 @@ struct LocalExecutorParams {
   // when the executor is deleted.
   std::function<Status(const NodeDef&, OpKernel**)> create_kernel;
   std::function<void(OpKernel*)> delete_kernel;
+
+  Executor::Args::NodeOutputCallback node_output_callback;
 };
 ::tensorflow::Status NewLocalExecutor(const LocalExecutorParams& params,
                                       const Graph* graph, Executor** executor);

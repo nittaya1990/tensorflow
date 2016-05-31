@@ -372,6 +372,8 @@ bool DoConstantFolding(const ConstantFoldingOptions& opts,
   };
   params.delete_kernel = [](OpKernel* kernel) { delete kernel; };
   Executor* executor;
+
+  std::cout << "** DoConstantFolding calling NewLocalExecutor" << std::endl;
   if (!NewLocalExecutor(params, constant_graph, &executor).ok()) {
     return false;
   }
