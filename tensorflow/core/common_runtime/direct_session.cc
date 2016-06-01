@@ -816,7 +816,12 @@ Status DirectSession::GetOrCreateExecutors(
 
       Device* device = static_cast<Device*>(ctx->device());
 
-      if (device->name().find("gpu:") != string::npos) {
+      const bool is_tensor_initialized = tensor->IsInitialized();
+
+      if (device->name().find("gpu:") != string::npos && is_tensor_initialized && is_ref) {
+	// Omit uniniatizlied Tensors.
+        // Copying non-ref Tensors from GPU often fails. Limiting the copying to ref
+	// Tensors for now.
         stream << "  device: " << device->name() << std::endl;
 
         Allocator* cpu_allocator = tensorflow::cpu_allocator();
@@ -826,23 +831,39 @@ Status DirectSession::GetOrCreateExecutors(
 
         bool copy_done = false;
 
+	std::cout << "||| Copying Tensor from GPU to CPU: " << node_name
+		  << ", src = " << tensor << "; dst = " << cpu_tensor
+		  << std::endl << std::flush;
         device_ctxt->CopyDeviceTensorToCPU(
             tensor, "TensorCopy", device, cpu_tensor,
-            [&copy_done](const Status& s) {
-              std::cout << "CopyDeviceTensorToCPU: s.ok() = " << s.ok() << std::endl << std::flush;
-             copy_done = true;
-            });
+            [&copy_done, &node_name, &cpu_tensor](const Status& s) {
+              copy_done = true;
+              // std::cout << "CopyDeviceTensorToCPU: s.ok() = " << s.ok()
+              //           << std::endl << std::flush;
+
+	      if (s.ok()) {
+		std::cout << "||| After copying, cpu_tensor \"" << node_name 
+			  << "\" = " << cpu_tensor
+			  << "; data type: " << DataTypeString(cpu_tensor->dtype())
+			  << "; shape: " << cpu_tensor->shape().DebugString()
+			  << "; value: " << cpu_tensor->DebugString()
+			  << std::endl << std::flush;
+		Env::Default()->SleepForMicroseconds(1 * 1000);
+	      }
+             });
 
         while (!copy_done) {
           Env::Default()->SleepForMicroseconds(1 * 1000);
         }
 
-        stream << "After copying, cpu_tensor = " << cpu_tensor->DebugString() << std::endl;
+        // std::cout << "||| After copying, cpu_tensor " << node_name
+        //        << " = " << cpu_tensor->DebugString()
+        //           << std::endl << std::flush;
       } else if (device->name().find("cpu:") != string::npos) {
-        stream << "  val of " << node_name << " (on cpu): " << tensor->DebugString() << std::endl;
+        stream << "  val of " << node_name << " (on cpu): "
+               << tensor->DebugString() << std::endl;
+	state_dumper_.dump(stream.str(), node_name, tensor);
       }
-
-      state_dumper_.dump(stream.str(), node_name, tensor);
     };
 
     optimizer.Optimize(lib, device, &partition_graph);
