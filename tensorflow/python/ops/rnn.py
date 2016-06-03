@@ -1,4 +1,4 @@
-# Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -126,7 +126,8 @@ def rnn(cell, inputs, initial_state=None, dtype=None,
       state = initial_state
     else:
       if not dtype:
-        raise ValueError("If no initial_state is provided, dtype must be.")
+        raise ValueError("If no initial_state is provided, "
+                           "dtype must be specified")
       state = cell.zero_state(batch_size, dtype)
 
     if sequence_length is not None:  # Prepare variables
