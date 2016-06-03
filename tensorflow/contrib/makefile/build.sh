@@ -54,9 +54,9 @@ popd
 echo ""
 echo "=== Building iOS native version of protobuf ==="
 echo ""
-tensorflow/contrib/makefile/compile_ios_protobuf.sh
+${SCRIPT_DIR}/compile_ios_protobuf.sh
 
 echo ""
 echo "=== Building all iOS architectures for TensorFlow ==="
 echo ""
-tensorflow/contrib/makefile/compile_ios_tensorflow.sh
+${SCRIPT_DIR}/compile_ios_tensorflow.sh
