@@ -87,6 +87,10 @@ class DirectSession : public Session {
     cost_model_manager_.ExportCostModels(cost_models);
   }
 
+ protected:
+  void SetNodeOutputCallback(Executor::Args::NodeOutputCallback callback);
+  void SetOptimizeGraph(const bool optimize_graph);
+
  private:
   typedef DirectSession ME;
 
@@ -263,6 +267,9 @@ class DirectSession : public Session {
 
   // Manages all the cost models for the graphs executed in this session.
   CostModelManager cost_model_manager_;
+
+  Executor::Args::NodeOutputCallback node_output_callback_ = nullptr;
+  bool do_optimize_graph_ = true;
 
   TF_DISALLOW_COPY_AND_ASSIGN(DirectSession);
 };

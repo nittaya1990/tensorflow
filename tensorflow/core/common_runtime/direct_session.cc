@@ -787,8 +787,12 @@ Status DirectSession::GetOrCreateExecutors(
         delete kernel;
       }
     };
+    params.node_output_callback = node_output_callback_;
 
-    optimizer.Optimize(lib, device, &partition_graph);
+    if (do_optimize_graph_) {
+      optimizer.Optimize(lib, device, &partition_graph);
+    }
+
     s = EnsureMemoryTypes(DeviceType(device->device_type()), device->name(),
                           partition_graph);
     if (!s.ok()) {
@@ -982,6 +986,15 @@ Status DirectSession::CreateGraphs(const BuildGraphOptions& options,
 ::tensorflow::Status DirectSession::Close() {
   cancellation_manager_->StartCancel();
   return ::tensorflow::Status::OK();
+}
+
+void DirectSession::SetNodeOutputCallback(
+    Executor::Args::NodeOutputCallback callback) {
+  node_output_callback_ = callback;
+}
+
+void DirectSession::SetOptimizeGraph(const bool optimize_graph) {
+  do_optimize_graph_ = optimize_graph;
 }
 
 DirectSession::RunState::~RunState() {

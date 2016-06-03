@@ -1298,6 +1298,10 @@ Status ExecutorState::ProcessOutputs(const NodeItem& item, OpKernelContext* ctx,
             LogMemory::RecordTensorOutput(ctx->op_kernel().name(),
                                           ctx->step_id(), i, to_log);
           }
+
+          if (impl_->params_.node_output_callback != nullptr) {
+            impl_->params_.node_output_callback(item.node->name(), out->ref, true, ctx);
+          }
         } else {
           // NOTE that std::move is used here, so val.tensor goes to
           // uninitialized state (val.tensor->IsInitialized return false).
@@ -1305,6 +1309,10 @@ Status ExecutorState::ProcessOutputs(const NodeItem& item, OpKernelContext* ctx,
           if (log_memory_) {
             LogMemory::RecordTensorOutput(ctx->op_kernel().name(),
                                           ctx->step_id(), i, out->val);
+          }
+
+          if (impl_->params_.node_output_callback != nullptr) {
+            impl_->params_.node_output_callback(item.node->name(), &out->val, false, ctx);
           }
         }
       } else {

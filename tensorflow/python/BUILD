@@ -963,6 +963,7 @@ tf_cuda_library(
         "//tensorflow/core",
         "//tensorflow/core:all_kernels",
         "//tensorflow/core:direct_session",
+        "//tensorflow/core:debug_session",
         "//tensorflow/core:lib",
         "//tensorflow/core:protos_cc",
         "//third_party/py/numpy:headers",

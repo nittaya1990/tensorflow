@@ -577,6 +577,17 @@ tf_cuda_library(
     alwayslink = 1,
 )
 
+tf_cuda_library(
+    name = "debug_session",
+    copts = tf_copts(),
+    linkstatic = 1,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":debug_session_internal",
+    ],
+    alwayslink = 1,
+)
+
 # -----------------------------------------------------------------------------
 # Public Android targets
 
@@ -1025,6 +1036,25 @@ tf_cuda_library(
     alwayslink = 1,
 )
 
+tf_cuda_library(
+    name = "debug_session_internal",
+    srcs = ["debug/debug_session.cc"],
+    hdrs = ["debug/debug_session.h"],
+    copts = tf_copts(),
+    linkstatic = 1,
+    deps = [
+        ":core_cpu_internal",
+        ":direct_session_internal",
+        ":framework",
+        ":gpu_tracer",
+        ":lib",
+        ":lib_internal",
+        ":proto_text",
+        ":protos_all_cc",
+    ],
+    alwayslink = 1,
+)
+
 cc_library(
     name = "example_parser_configuration",
     srcs = ["example/example_parser_configuration.cc"],
@@ -1383,6 +1413,40 @@ tf_cc_test(
         ":core",
         ":core_cpu",
         ":core_cpu_internal",
+        ":direct_session_internal",
+        ":framework",
+        ":framework_internal",
+        ":lib",
+        ":lib_internal",
+        ":ops",
+        ":protos_all_cc",
+        ":test",
+        ":test_main",
+        ":testlib",
+        "//tensorflow/cc:cc_ops",
+        "//tensorflow/core/kernels:control_flow_ops",
+        "//tensorflow/core/kernels:cwise_op",
+        "//tensorflow/core/kernels:dense_update_ops",
+        "//tensorflow/core/kernels:fifo_queue_op",
+        "//tensorflow/core/kernels:identity_op",
+        "//tensorflow/core/kernels:matmul_op",
+        "//tensorflow/core/kernels:ops_util",
+        "//tensorflow/core/kernels:queue_ops",
+        "//tensorflow/core/kernels:session_ops",
+        "//tensorflow/core/kernels:variable_ops",
+        "//third_party/eigen3",
+    ],
+)
+
+tf_cc_test(
+    name = "debug/debug_session_test",
+    size = "small",
+    linkstatic = tf_kernel_tests_linkstatic(),
+    deps = [
+        ":core",
+        ":core_cpu",
+        ":core_cpu_internal",
+        ":debug_session_internal",
         ":direct_session_internal",
         ":framework",
         ":framework_internal",
