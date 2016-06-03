@@ -1301,7 +1301,8 @@ Status ExecutorState::ProcessOutputs(const NodeItem& item, OpKernelContext* ctx,
           }
 
           if (impl_->params_.node_output_callback != nullptr) {
-            impl_->params_.node_output_callback(item.node->name(), out->ref, true, ctx);
+            impl_->params_.node_output_callback(item.node->name(), out->ref,
+                                                true, ctx);
           }
         } else {
           // NOTE that std::move is used here, so val.tensor goes to
@@ -1313,7 +1314,8 @@ Status ExecutorState::ProcessOutputs(const NodeItem& item, OpKernelContext* ctx,
           }
 
           if (impl_->params_.node_output_callback != nullptr) {
-            impl_->params_.node_output_callback(item.node->name(), &out->val, false, ctx);
+            impl_->params_.node_output_callback(item.node->name(), &out->val,
+                                                false, ctx);
           }
         }
       } else {

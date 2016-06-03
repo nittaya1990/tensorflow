@@ -15,7 +15,7 @@ limitations under the License.
 
 #include "tensorflow/core/debug/debug_session.h"
 
-#include <chrono>
+#include <chrono>  // TODO(cais): Replace chrono
 #include <sstream>
 
 #include "tensorflow/core/common_runtime/device_factory.h"
@@ -43,10 +43,11 @@ DebugSession::DebugSession(const SessionOptions& options,
     int64 epoch_timestamp = ms.count();
 
     if (comp_cbk_ != nullptr) {
-      comp_cbk_(node_name, is_ref, epoch_timestamp);
+      comp_cbk_(node_name, epoch_timestamp, is_ref);
     }
 
-    stream << "(" << epoch_timestamp 
+    // DEBUG
+    stream << "(" << epoch_timestamp
            << ") node_output_callback from direct_session: "
            << node_name << std::endl;
     stream << "  is_ref: " << is_ref << std::endl;
@@ -98,7 +99,7 @@ DebugSession::DebugSession(const SessionOptions& options,
         Env::Default()->SleepForMicroseconds(1 * 1000);
       }
 
-      
+
     } else if (device->name().find("cpu:") != string::npos) {
         stream << "  val of " << node_name << " (on cpu): "
                << tensor->DebugString() << std::endl;
@@ -110,7 +111,6 @@ DebugSession::DebugSession(const SessionOptions& options,
         }
     }
   });
-  
 }
 
 void DebugSession::SetNodeCompletionCallback(
@@ -150,4 +150,4 @@ class DebugSessionRegistrar {
 };
 static DebugSessionRegistrar registrar;
 
-}
+}  // namespace tensorflow

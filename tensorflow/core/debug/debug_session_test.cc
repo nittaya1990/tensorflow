@@ -66,8 +66,6 @@ class DebugSessionMinusAXTest : public ::testing::Test {
   string y_;
   string y_neg_;
   GraphDef def_;
-
-  
 };
 
 TEST_F(DebugSessionMinusAXTest, RunSimpleNetwork) {
@@ -75,23 +73,17 @@ TEST_F(DebugSessionMinusAXTest, RunSimpleNetwork) {
   std::unique_ptr<DebugSession> session(CreateSession());
   ASSERT_TRUE(session != nullptr);
 
-  // DEBUG
-  std::cout << "a_ name = " << a_ << std::endl;
-  std::cout << "x_ name = " << x_ << std::endl;
-  std::cout << "y_ name = " << y_ << std::endl;
-  std::cout << "y_neg_ name = " << y_neg_ << std::endl;
-
   // Supply completion and value callbacks
   mutex mu;
   std::vector<string> completed_nodes;
   std::vector<bool> is_refs;
-    
+
   session->SetNodeCompletionCallback(
       [&mu, &completed_nodes, &is_refs](const string& node_name,
                                         const int64& completion_timestamp,
                                         const bool is_ref) {
     mutex_lock l(mu);
-  	completed_nodes.push_back(node_name);
+    completed_nodes.push_back(node_name);
     is_refs.push_back(is_ref);
   });
 
@@ -127,7 +119,7 @@ TEST_F(DebugSessionMinusAXTest, RunSimpleNetwork) {
 
   // Verify the calling history of the completion callback
   ASSERT_GE(completed_nodes.size(), 4);  // There may be added nodes.
-  ASSERT_EQ(completed_nodes.size(), is_refs.size());  
+  ASSERT_EQ(completed_nodes.size(), is_refs.size());
 
   ASSERT_NE(completed_nodes.end(),
             std::find(completed_nodes.begin(), completed_nodes.end(), a_));
@@ -139,7 +131,7 @@ TEST_F(DebugSessionMinusAXTest, RunSimpleNetwork) {
             std::find(completed_nodes.begin(), completed_nodes.end(), y_neg_));
 
   // In this graph, there is no ref-type tensor.
-  ASSERT_EQ(is_refs.end(), std::find(is_refs.begin(), is_refs.end(), false));
+  ASSERT_EQ(is_refs.end(), std::find(is_refs.begin(), is_refs.end(), true));
 
   // Verify the calling history of the value callabck
   ASSERT_EQ(completed_nodes.size(), tensors_initialized.size());
