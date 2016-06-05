@@ -152,6 +152,7 @@ if [[ $(echo ${WHL_PATH} | wc -w) -ne 1 ]]; then
 fi
 
 echo "whl file path = ${WHL_PATH}"
+exit 0  # DEBUG
 
 # Install, in user's local home folder
 echo "Installing pip whl file: ${WHL_PATH}"

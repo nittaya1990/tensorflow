@@ -55,6 +55,9 @@ DebugSession::DebugSession(const SessionOptions& options,
     stream << "  shape: " << tensor->shape().DebugString() << std::endl;
     stream << "  dtype: " << tensor->dtype() << std::endl;
 
+    // DEBUG
+    std::cout << "== Node: " << node_name << "; output_slot = " << output_slot << std::endl;
+
     Device* device = static_cast<Device*>(ctx->device());
     AllocatorAttributes alloc_attrs = ctx->output_alloc_attr(output_slot);
 
@@ -64,8 +67,9 @@ DebugSession::DebugSession(const SessionOptions& options,
     // Copying non-ref Tensors from GPU often fails. Limiting the copying to
     // ref Tensors for now.
     if (device->name().find("gpu:") != string::npos &&
-        !alloc_attrs.on_host() && is_tensor_initialized && is_ref) {
+        !alloc_attrs.on_host() && is_tensor_initialized) {
       stream << "  device: " << device->name() << std::endl;
+      std::cout << "  device: " << device->name() << std::endl;  // DEBUG
 
       Allocator* cpu_allocator = tensorflow::cpu_allocator();
       Tensor* cpu_tensor = new Tensor(cpu_allocator,
