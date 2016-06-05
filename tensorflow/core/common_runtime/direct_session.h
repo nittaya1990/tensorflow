@@ -88,7 +88,11 @@ class DirectSession : public Session {
   }
 
  protected:
-  void SetNodeOutputCallback(Executor::Args::NodeOutputCallback callback);
+  // Set the callback for node outputs, which will be invoked when a node's
+  // outputs become available (in ProcessOutputs()).
+  void SetNodeOutputsCallback(Executor::Args::NodeOutputsCallback callback);
+
+  // Set whether graph optimization will be carried out.
   void SetOptimizeGraph(const bool optimize_graph);
 
  private:
@@ -270,7 +274,7 @@ class DirectSession : public Session {
   // Manages all the cost models for the graphs executed in this session.
   CostModelManager cost_model_manager_;
 
-  Executor::Args::NodeOutputCallback node_output_callback_ = nullptr;
+  Executor::Args::NodeOutputsCallback node_output_callback_ = nullptr;
   bool do_optimize_graph_ = true;
 
   TF_DISALLOW_COPY_AND_ASSIGN(DirectSession);

@@ -95,11 +95,12 @@ class Executor {
 
     // A callback that is invoked each time a node has finished executing.
     // TODO(cais): Supply status in return value
-    typedef std::function<void(const string& node_name,
-                               const Tensor* tensor_value,
-                               const bool is_ref,
-                               OpKernelContext* ctx)> NodeOutputCallback;
-    NodeOutputCallback node_output_callback = nullptr;
+    typedef std::function<Status(const string& node_name,
+                                 const int output_slot,
+                                 const Tensor* tensor_value,
+                                 const bool is_ref,
+                                 OpKernelContext* ctx)> NodeOutputsCallback;
+    NodeOutputsCallback node_outputs_cb = nullptr;
   };
   typedef std::function<void(const Status&)> DoneCallback;
   virtual void RunAsync(const Args& args, DoneCallback done) = 0;
@@ -137,7 +138,7 @@ struct LocalExecutorParams {
   std::function<Status(const NodeDef&, OpKernel**)> create_kernel;
   std::function<void(OpKernel*)> delete_kernel;
 
-  Executor::Args::NodeOutputCallback node_output_callback;
+  Executor::Args::NodeOutputsCallback node_outputs_cb;
 };
 ::tensorflow::Status NewLocalExecutor(const LocalExecutorParams& params,
                                       const Graph* graph, Executor** executor);

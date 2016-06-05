@@ -784,7 +784,7 @@ Status DirectSession::GetOrCreateExecutors(
         delete kernel;
       }
     };
-    params.node_output_callback = node_output_callback_;
+    params.node_outputs_cb = node_output_callback_;
 
     if (do_optimize_graph_) {
       optimizer.Optimize(lib, device, &partition_graph);
@@ -983,8 +983,8 @@ Status DirectSession::CreateGraphs(const BuildGraphOptions& options,
   return ::tensorflow::Status::OK();
 }
 
-void DirectSession::SetNodeOutputCallback(
-    Executor::Args::NodeOutputCallback callback) {
+void DirectSession::SetNodeOutputsCallback(
+    Executor::Args::NodeOutputsCallback callback) {
   node_output_callback_ = callback;
 }
 

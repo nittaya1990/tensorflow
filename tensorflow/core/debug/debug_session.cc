@@ -31,10 +31,11 @@ DebugSession::DebugSession(const SessionOptions& options,
   SetOptimizeGraph(false);
 
   // Supply node output callback
-  SetNodeOutputCallback([this](const string& node_name,
-                               const Tensor* tensor,
-                               const bool is_ref,
-                               OpKernelContext* ctx) {
+  SetNodeOutputsCallback([this](const string& node_name,
+                                const int output_slot,
+                                const Tensor* tensor,
+                                const bool is_ref,
+                                OpKernelContext* ctx) {
     std::ostringstream stream;
 
     std::chrono::milliseconds ms =
@@ -42,19 +43,20 @@ DebugSession::DebugSession(const SessionOptions& options,
             std::chrono::system_clock::now().time_since_epoch());
     int64 epoch_timestamp = ms.count();
 
-    if (comp_cbk_ != nullptr) {
-      comp_cbk_(node_name, epoch_timestamp, is_ref);
+    if (comp_cb_ != nullptr) {
+      comp_cb_(node_name, output_slot, epoch_timestamp, is_ref);
     }
 
     // DEBUG
     stream << "(" << epoch_timestamp
-           << ") node_output_callback from direct_session: "
+           << ") node_outputs_cb from debug session: "
            << node_name << std::endl;
     stream << "  is_ref: " << is_ref << std::endl;
     stream << "  shape: " << tensor->shape().DebugString() << std::endl;
     stream << "  dtype: " << tensor->dtype() << std::endl;
 
     Device* device = static_cast<Device*>(ctx->device());
+    AllocatorAttributes alloc_attrs = ctx->output_alloc_attr(output_slot);
 
     const bool is_tensor_initialized = tensor->IsInitialized();
 
@@ -62,7 +64,7 @@ DebugSession::DebugSession(const SessionOptions& options,
     // Copying non-ref Tensors from GPU often fails. Limiting the copying to
     // ref Tensors for now.
     if (device->name().find("gpu:") != string::npos &&
-        is_tensor_initialized && is_ref) {
+        !alloc_attrs.on_host() && is_tensor_initialized && is_ref) {
       stream << "  device: " << device->name() << std::endl;
 
       Allocator* cpu_allocator = tensorflow::cpu_allocator();
@@ -100,26 +102,28 @@ DebugSession::DebugSession(const SessionOptions& options,
       }
 
 
-    } else if (device->name().find("cpu:") != string::npos) {
+    } else {
         stream << "  val of " << node_name << " (on cpu): "
                << tensor->DebugString() << std::endl;
         // state_dumper_.dump(stream.str(), node_name, tensor);
         std::cout << stream.str() << std::endl << std::flush;
 
-        if (val_cbk_ != nullptr) {
-          val_cbk_(node_name, *tensor, is_ref);
+        if (val_cb_ != nullptr) {
+          val_cb_(node_name, output_slot, *tensor, is_ref);
         }
     }
+
+    return Status::OK();
   });
 }
 
 void DebugSession::SetNodeCompletionCallback(
     NodeCompletionCallback callback) {
-  comp_cbk_ = callback;
+  comp_cb_ = callback;
 }
 
 void DebugSession::SetNodeValueCallback(NodeValueCallback callback) {
-  val_cbk_ = callback;
+  val_cb_ = callback;
 }
 
 class DebugSessionFactory : public SessionFactory {

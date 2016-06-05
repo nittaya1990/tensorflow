@@ -31,6 +31,7 @@ class DebugSession : public DirectSession {
   // asynchronously copied from device (e.g., GPU) to host, hence the need
   // for the NodeValueCallback below.
   typedef std::function<void(const string& node_name,
+                             const int output_slot,
                              const int64& completion_timestamp,
                              const bool is_ref)>
       NodeCompletionCallback;
@@ -40,16 +41,14 @@ class DebugSession : public DirectSession {
   // output tensor is available on the host, possibly after copying from
   // a device (e.g., GPU).
   typedef std::function<void(const string& node_name,
+                             const int output_slot,
                              const Tensor& tensor_value,
                              const bool is_ref)> NodeValueCallback;
   void SetNodeValueCallback(NodeValueCallback callback);
 
  private:
-  // Custom node output callback
-  Executor::Args::NodeOutputCallback custom_node_output_cbk_;
-
-  NodeCompletionCallback comp_cbk_ = nullptr;
-  NodeValueCallback val_cbk_ = nullptr;
+  NodeCompletionCallback comp_cb_ = nullptr;
+  NodeValueCallback val_cb_ = nullptr;
 };
 
 }  // end namespace tensorflow
