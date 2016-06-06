@@ -107,10 +107,12 @@ void DebugSession::CopyTensor(const string& node_name,
       Tensor* cpu_tensor = new Tensor(cpu_allocator,
                                       src_tensor->dtype(),
                                       src_tensor->shape());
-      // {
-      //   mutex_lock l(mu_);
-      //   host_tensors_.insert(std::make_pair(node_name, cpu_tensor));
-      // }
+
+      // Keep track of the tensors created for copying and free them later.
+      {
+        mutex_lock l(mu_);
+        host_tensors_.insert(std::make_pair(node_name, cpu_tensor));
+      }
 
       DeviceContext* device_ctxt = ctx->op_device_context();
 
