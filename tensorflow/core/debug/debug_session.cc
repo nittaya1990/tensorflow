@@ -15,8 +15,6 @@ limitations under the License.
 
 #include "tensorflow/core/debug/debug_session.h"
 
-#include <sstream>
-
 #include "tensorflow/core/common_runtime/device_factory.h"
 #include "tensorflow/core/common_runtime/session_factory.h"
 #include "tensorflow/core/framework/tensor.h"
@@ -25,7 +23,7 @@ namespace tensorflow {
 
 DebugSession::DebugSession(const SessionOptions& options,
                            const DeviceMgr* device_mgr)
-    : DirectSession(options, device_mgr) {
+  : DirectSession(options, device_mgr), host_tensors_() {
   // Disable the graph optimization by default
   SetOptimizeGraph(false);
 
@@ -35,38 +33,32 @@ DebugSession::DebugSession(const SessionOptions& options,
                                 const Tensor* tensor,
                                 const bool is_ref,
                                 OpKernelContext* ctx) {
-    std::ostringstream stream;
+    // std::ostringstream stream;
 
     if (comp_cb_ != nullptr) {
       comp_cb_(node_name, output_slot, is_ref);
     }
 
     // DEBUG
-    stream << "node_outputs_cb from debug session: node_name = "
-           << node_name << std::endl;
-    stream << "  is_ref: " << is_ref << std::endl;
-    stream << "  shape: " << tensor->shape().DebugString() << std::endl;
-    stream << "  dtype: " << tensor->dtype() << std::endl;
-
-    // DEBUG
-    std::cout << "== Node: " << node_name << "; output_slot = " << output_slot << std::endl;
-    
+    // stream << "node_outputs_cb from debug session: node_name = "
+    //        << node_name << std::endl;
+    // stream << "  is_ref: " << is_ref << std::endl;
+    // stream << "  shape: " << tensor->shape().DebugString() << std::endl;
+    // stream << "  dtype: " << tensor->dtype() << std::endl;
     // stream << "  val of " << node_name << " (on cpu): "
     //        << tensor->DebugString() << std::endl;
 
     // state_dumper_.dump(stream.str(), node_name, tensor);
-    std::cout << stream.str() << std::endl << std::flush;
+    // std::cout << stream.str() << std::endl << std::flush;
 
-
+    // Copy tensor values (e.g., from GPU to host) only if the
+    // value callback is not nullptr.
     if (val_cb_ != nullptr) {
-      CopyTensor(node_name, output_slot, tensor, ctx,
-                 [this, &node_name, &output_slot, &is_ref](
-                      const Tensor* copied_tensor) {
-        std::cout << "  val of " << node_name << " (on cpu): "
-                  << copied_tensor->DebugString()
-                  << std::endl << std::flush;  // DEBUG
-
-        val_cb_(node_name, output_slot, *copied_tensor, is_ref);
+      CopyTensor(
+          node_name, output_slot, tensor, ctx,
+          [this, node_name, output_slot, is_ref](
+              const Tensor* copied_tensor) {
+            val_cb_(node_name, output_slot, *copied_tensor, is_ref);
       });
     }
 
@@ -101,7 +93,7 @@ void DebugSession::CopyTensor(const string& node_name,
                               const int output_slot,
                               const Tensor* src_tensor,
                               OpKernelContext* ctx,
-                              CopyDoneCallback copy_done) {
+                              CopyDoneCallback copy_done_cb) {
   Device* device = static_cast<Device*>(ctx->device());
   AllocatorAttributes alloc_attrs = ctx->output_alloc_attr(output_slot);
 
@@ -109,43 +101,39 @@ void DebugSession::CopyTensor(const string& node_name,
 
   // Omit uniniatizlied Tensors.
   if (device->name().find("gpu:") != string::npos &&
-        !alloc_attrs.on_host() && is_tensor_initialized) {
+      !alloc_attrs.on_host() && is_tensor_initialized) {
       // For GPU tensors, copy them to CPU.
-      std::cout << "  device: " << device->name() << std::endl;  // DEBUG
-
       Allocator* cpu_allocator = tensorflow::cpu_allocator();
       Tensor* cpu_tensor = new Tensor(cpu_allocator,
                                       src_tensor->dtype(),
                                       src_tensor->shape());
-      {
-        mutex_lock l(mu_);
-        host_tensors_.insert(std::make_pair(node_name, cpu_tensor));
-      }
-      // TODO(cais): Delete to prevent memory leak.
+      // {
+      //   mutex_lock l(mu_);
+      //   host_tensors_.insert(std::make_pair(node_name, cpu_tensor));
+      // }
 
       DeviceContext* device_ctxt = ctx->op_device_context();
 
-      std::cout << "||| Copying Tensor from GPU to CPU: " << node_name
-                << ", src = " << src_tensor << "; dst = " << cpu_tensor
-                << std::endl << std::flush;
+      // std::cout << "||| Copying Tensor from GPU to CPU: " << node_name
+      //           << ", src = " << src_tensor << "; dst = " << cpu_tensor
+      //           << std::endl << std::flush;
       device_ctxt->CopyDeviceTensorToCPU(
           src_tensor, "TensorCopy", device, cpu_tensor,
-          [&node_name, &cpu_tensor](const Status& s) {
-            // std::cout << "CopyDeviceTensorToCPU: s.ok() = " << s.ok()
-            //           << std::endl << std::flush;
+          [node_name, cpu_tensor, copy_done_cb](const Status& s) {
+            std::cout << "||| In CopyDeviceTensorToCPU callback: s.ok() = "
+		      << s.ok() << std::endl << std::flush;
 
             if (s.ok()) {
-              std::cout << "||| After copying, cpu_tensor \"" << node_name
-                        << "\" = " << cpu_tensor
-                        << "; data type: "
-                        << DataTypeString(cpu_tensor->dtype())
-                        << "; shape: " << cpu_tensor->shape().DebugString()
-                        << "; value: " << cpu_tensor->DebugString()
-                        << std::endl << std::flush;
-            }
+              // std::cout << "||| After copying, cpu_tensor \"" << node_name
+	      // 		<< "\": pointer = " << cpu_tensor
+	      // 	        << "; value = " << cpu_tensor->DebugString()
+	      // 		<< std::endl << std::flush;
+	      copy_done_cb(cpu_tensor);
+            } else {
+	      // TODO: Log copy failure
+	    }
       });
 
-      // TODO
   } else {
     // For CPU tensors, simply copy the reference
     const Tensor* dst_tensor = src_tensor;
@@ -155,7 +143,7 @@ void DebugSession::CopyTensor(const string& node_name,
       host_tensors_.insert(std::make_pair(node_name, dst_tensor));
     }
 
-    copy_done(dst_tensor);
+    copy_done_cb(dst_tensor);
   }
 }
 

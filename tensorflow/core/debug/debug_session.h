@@ -65,7 +65,7 @@ class DebugSession : public DirectSession {
                   const int output_slot,
                   const Tensor* src_tensor,
                   OpKernelContext* ctx,
-                  CopyDoneCallback copy_done);
+                  CopyDoneCallback copy_done_cb);
 };
 
 }  // end namespace tensorflow
