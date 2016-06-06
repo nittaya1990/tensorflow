@@ -16,6 +16,8 @@ limitations under the License.
 #ifndef TENSORFLOW_DEBUG_DEBUG_SESSION_H_
 #define TENSORFLOW_DEBUG_DEBUG_SESSION_H_
 
+#include <unordered_map>
+
 #include "tensorflow/core/common_runtime/direct_session.h"
 #include "tensorflow/core/common_runtime/executor.h"
 
@@ -32,7 +34,6 @@ class DebugSession : public DirectSession {
   // for the NodeValueCallback below.
   typedef std::function<void(const string& node_name,
                              const int output_slot,
-                             const int64& completion_timestamp,
                              const bool is_ref)>
       NodeCompletionCallback;
   void SetNodeCompletionCallback(NodeCompletionCallback callback);
@@ -46,9 +47,25 @@ class DebugSession : public DirectSession {
                              const bool is_ref)> NodeValueCallback;
   void SetNodeValueCallback(NodeValueCallback callback);
 
+  Status Run(const std::vector<std::pair<string, Tensor> >& inputs,
+             const std::vector<string>& output_tensor_names,
+             const std::vector<string>& target_node_names,
+             std::vector<Tensor>* outputs) override;
+
  private:
   NodeCompletionCallback comp_cb_ = nullptr;
   NodeValueCallback val_cb_ = nullptr;
+
+  mutex mu_;
+  std::unordered_map<string, const Tensor*> host_tensors_ GUARDED_BY(mu_);
+
+  typedef std::function<void(const Tensor* dst_tensor)> CopyDoneCallback;
+
+  void CopyTensor(const string& node_name,
+                  const int output_slot,
+                  const Tensor* src_tensor,
+                  OpKernelContext* ctx,
+                  CopyDoneCallback copy_done);
 };
 
 }  // end namespace tensorflow

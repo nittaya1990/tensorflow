@@ -15,7 +15,6 @@ limitations under the License.
 
 #include "tensorflow/core/debug/debug_session.h"
 
-#include <chrono>  // TODO(cais): Replace chrono
 #include <sstream>
 
 #include "tensorflow/core/common_runtime/device_factory.h"
@@ -38,18 +37,12 @@ DebugSession::DebugSession(const SessionOptions& options,
                                 OpKernelContext* ctx) {
     std::ostringstream stream;
 
-    std::chrono::milliseconds ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch());
-    int64 epoch_timestamp = ms.count();
-
     if (comp_cb_ != nullptr) {
-      comp_cb_(node_name, output_slot, epoch_timestamp, is_ref);
+      comp_cb_(node_name, output_slot, is_ref);
     }
 
     // DEBUG
-    stream << "(" << epoch_timestamp
-           << ") node_outputs_cb from debug session: "
+    stream << "node_outputs_cb from debug session: node_name = "
            << node_name << std::endl;
     stream << "  is_ref: " << is_ref << std::endl;
     stream << "  shape: " << tensor->shape().DebugString() << std::endl;
@@ -57,68 +50,29 @@ DebugSession::DebugSession(const SessionOptions& options,
 
     // DEBUG
     std::cout << "== Node: " << node_name << "; output_slot = " << output_slot << std::endl;
+    
+    // stream << "  val of " << node_name << " (on cpu): "
+    //        << tensor->DebugString() << std::endl;
 
-    Device* device = static_cast<Device*>(ctx->device());
-    AllocatorAttributes alloc_attrs = ctx->output_alloc_attr(output_slot);
+    // state_dumper_.dump(stream.str(), node_name, tensor);
+    std::cout << stream.str() << std::endl << std::flush;
 
-    const bool is_tensor_initialized = tensor->IsInitialized();
 
-    // Omit uniniatizlied Tensors.
-    // Copying non-ref Tensors from GPU often fails. Limiting the copying to
-    // ref Tensors for now.
-    if (device->name().find("gpu:") != string::npos &&
-        !alloc_attrs.on_host() && is_tensor_initialized) {
-      stream << "  device: " << device->name() << std::endl;
-      std::cout << "  device: " << device->name() << std::endl;  // DEBUG
+    if (val_cb_ != nullptr) {
+      CopyTensor(node_name, output_slot, tensor, ctx,
+                 [this, &node_name, &output_slot, &is_ref](
+                      const Tensor* copied_tensor) {
+        std::cout << "  val of " << node_name << " (on cpu): "
+                  << copied_tensor->DebugString()
+                  << std::endl << std::flush;  // DEBUG
 
-      Allocator* cpu_allocator = tensorflow::cpu_allocator();
-      Tensor* cpu_tensor = new Tensor(cpu_allocator,
-                                      tensor->dtype(),
-                                      tensor->shape());
-      // TODO(cais): Delete to prevent memory leak.
-
-      DeviceContext* device_ctxt = ctx->op_device_context();
-
-      bool copy_done = false;
-
-      std::cout << "||| Copying Tensor from GPU to CPU: " << node_name
-                << ", src = " << tensor << "; dst = " << cpu_tensor
-                << std::endl << std::flush;
-      device_ctxt->CopyDeviceTensorToCPU(
-          tensor, "TensorCopy", device, cpu_tensor,
-          [&copy_done, &node_name, &cpu_tensor](const Status& s) {
-            copy_done = true;
-            // std::cout << "CopyDeviceTensorToCPU: s.ok() = " << s.ok()
-            //           << std::endl << std::flush;
-
-          if (s.ok()) {
-            std::cout << "||| After copying, cpu_tensor \"" << node_name
-                      << "\" = " << cpu_tensor
-                      << "; data type: " << DataTypeString(cpu_tensor->dtype())
-                      << "; shape: " << cpu_tensor->shape().DebugString()
-                      << "; value: " << cpu_tensor->DebugString()
-                      << std::endl << std::flush;
-          }
+        val_cb_(node_name, output_slot, *copied_tensor, is_ref);
       });
-
-      while (!copy_done) {
-        Env::Default()->SleepForMicroseconds(1 * 1000);
-      }
-
-
-    } else {
-        stream << "  val of " << node_name << " (on cpu): "
-               << tensor->DebugString() << std::endl;
-        // state_dumper_.dump(stream.str(), node_name, tensor);
-        std::cout << stream.str() << std::endl << std::flush;
-
-        if (val_cb_ != nullptr) {
-          val_cb_(node_name, output_slot, *tensor, is_ref);
-        }
     }
 
     return Status::OK();
   });
+
 }
 
 void DebugSession::SetNodeCompletionCallback(
@@ -128,6 +82,81 @@ void DebugSession::SetNodeCompletionCallback(
 
 void DebugSession::SetNodeValueCallback(NodeValueCallback callback) {
   val_cb_ = callback;
+}
+
+Status DebugSession::Run(const std::vector<std::pair<string, Tensor> >& inputs,
+                         const std::vector<string>& output_tensor_names,
+                         const std::vector<string>& target_node_names,
+                         std::vector<Tensor>* outputs) {
+  {
+    mutex_lock l(mu_);
+    host_tensors_.clear();
+  }
+
+  return DirectSession::Run(inputs, output_tensor_names, target_node_names,
+                            outputs);
+}
+
+void DebugSession::CopyTensor(const string& node_name,
+                              const int output_slot,
+                              const Tensor* src_tensor,
+                              OpKernelContext* ctx,
+                              CopyDoneCallback copy_done) {
+  Device* device = static_cast<Device*>(ctx->device());
+  AllocatorAttributes alloc_attrs = ctx->output_alloc_attr(output_slot);
+
+  const bool is_tensor_initialized = src_tensor->IsInitialized();
+
+  // Omit uniniatizlied Tensors.
+  if (device->name().find("gpu:") != string::npos &&
+        !alloc_attrs.on_host() && is_tensor_initialized) {
+      // For GPU tensors, copy them to CPU.
+      std::cout << "  device: " << device->name() << std::endl;  // DEBUG
+
+      Allocator* cpu_allocator = tensorflow::cpu_allocator();
+      Tensor* cpu_tensor = new Tensor(cpu_allocator,
+                                      src_tensor->dtype(),
+                                      src_tensor->shape());
+      {
+        mutex_lock l(mu_);
+        host_tensors_.insert(std::make_pair(node_name, cpu_tensor));
+      }
+      // TODO(cais): Delete to prevent memory leak.
+
+      DeviceContext* device_ctxt = ctx->op_device_context();
+
+      std::cout << "||| Copying Tensor from GPU to CPU: " << node_name
+                << ", src = " << src_tensor << "; dst = " << cpu_tensor
+                << std::endl << std::flush;
+      device_ctxt->CopyDeviceTensorToCPU(
+          src_tensor, "TensorCopy", device, cpu_tensor,
+          [&node_name, &cpu_tensor](const Status& s) {
+            // std::cout << "CopyDeviceTensorToCPU: s.ok() = " << s.ok()
+            //           << std::endl << std::flush;
+
+            if (s.ok()) {
+              std::cout << "||| After copying, cpu_tensor \"" << node_name
+                        << "\" = " << cpu_tensor
+                        << "; data type: "
+                        << DataTypeString(cpu_tensor->dtype())
+                        << "; shape: " << cpu_tensor->shape().DebugString()
+                        << "; value: " << cpu_tensor->DebugString()
+                        << std::endl << std::flush;
+            }
+      });
+
+      // TODO
+  } else {
+    // For CPU tensors, simply copy the reference
+    const Tensor* dst_tensor = src_tensor;
+
+    {
+      mutex_lock l(mu_);
+      host_tensors_.insert(std::make_pair(node_name, dst_tensor));
+    }
+
+    copy_done(dst_tensor);
+  }
 }
 
 class DebugSessionFactory : public SessionFactory {
