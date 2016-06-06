@@ -91,7 +91,6 @@ TEST_F(DebugSessionGPUMinusAXTest, RunSimpleNetwork) {
       [&mu, &completed_nodes, &output_slots_comp, &is_refs_comp](
           const string& node_name,
           const int output_slot,
-          const int64& completion_timestamp,
           const bool is_ref) {
     mutex_lock l(mu);
     completed_nodes.push_back(node_name);
