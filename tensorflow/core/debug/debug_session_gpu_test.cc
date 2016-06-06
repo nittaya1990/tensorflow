@@ -13,6 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#if GOOGLE_CUDA
+
 #include "tensorflow/core/debug/debug_session.h"
 
 #include <algorithm>
@@ -202,3 +204,5 @@ TEST_F(DebugSessionGPUMinusAXTest, RunSimpleNetwork) {
 
 }  // end namespace
 }  // end namespace tensorflow
+
+#endif  // GOOGLE_CUDA
