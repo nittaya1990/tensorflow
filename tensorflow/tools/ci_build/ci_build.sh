@@ -139,10 +139,25 @@ if [[ $? != "0" ]]; then
   die "ERROR: docker build failed. Dockerfile is at ${DOCKERFILE_PATH}"
 fi
 
+INTERACTIVE_DOCKER_FLAGS=""
+if [[ ! -z "${TF_BUILD_INTERACTIVE}" ]] &&
+   [[ "${TF_BUILD_INTERACTIVE}" != "0" ]]; then
+  INTERACTIVE_DOCKER_FLAGS="-it"
+  BUILD_COMMAND="/bin/bash"
+  
+  echo "#############################################"
+  echo "To launch build inside docker container, run:"
+  echo "  ${COMMAND}"
+  echo "#############################################"
+else
+  BUILD_COMMAND=("${COMMAND}")
+fi
+
 # Run the command inside the container.
 echo "Running '${COMMAND[@]}' inside ${DOCKER_IMG_NAME}..."
 mkdir -p ${WORKSPACE}/bazel-ci_build-cache
 docker run \
+    ${INTERACTIVE_DOCKER_FLAGS} \
     -v ${WORKSPACE}/bazel-ci_build-cache:${WORKSPACE}/bazel-ci_build-cache \
     -e "CI_BUILD_HOME=${WORKSPACE}/bazel-ci_build-cache" \
     -e "CI_BUILD_USER=$(id -u --name)" \
@@ -156,4 +171,4 @@ docker run \
     ${CI_DOCKER_EXTRA_PARAMS[@]} \
     "${DOCKER_IMG_NAME}" \
     ${CI_COMMAND_PREFIX[@]} \
-    ${COMMAND[@]}
+    ${BUILD_COMMAND[@]}

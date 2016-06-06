@@ -77,6 +77,10 @@
 #                      If set to any non-empty and non-0 value, will disable
 #                      support for Google Cloud Platform (GCP), which is
 #                      enabled by default.
+#   TF_BUILD_INTERACTIVE:
+#                      If set to any non-empty and non-0 value, will drop to
+#                      the shell command line inside the build docker
+#                      container, instead of running the bulid commands.
 #
 # This script can be used by Jenkins parameterized / matrix builds.
 
@@ -112,7 +116,7 @@ NO_DOCKER_OPT_FLAG="--linkopt=-headerpad_max_install_names "\
 
 DO_DOCKER=1
 
-BAZEL_CMD="bazel test"
+BAZEL_CMD="bazel test --test_timeout=5"
 BAZEL_BUILD_ONLY_CMD="bazel build"
 BAZEL_CLEAN_CMD="bazel clean"
 BAZEL_SERIAL_FLAG="--jobs=1"
@@ -163,6 +167,7 @@ echo "  TF_BUILD_TEST_TUTORIALS=${TF_BUILD_TEST_TUTORIALS}"
 echo "  TF_BUILD_INTEGRATION_TESTS=${TF_BUILD_INTEGRATION_TESTS}"
 echo "  TF_BUILD_RUN_BENCHMARKS=${TF_BUILD_RUN_BENCHMARKS}"
 echo "  TF_BUILD_DISABLE_GCP=${TF_BUILD_DISABLE_GCP}"
+echo "  TF_BUILD_INTERACTIVE=${TF_BUILD_INTERACTIVE}"
 
 # Function that tries to determine CUDA capability, if deviceQuery binary
 # is available on path

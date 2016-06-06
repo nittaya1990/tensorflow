@@ -260,42 +260,59 @@ void GPUUtil::CopyGPUTensorToCPU(Device* gpu_device,
                                  const DeviceContext* device_context,
                                  const Tensor* gpu_tensor, Tensor* cpu_tensor,
                                  StatusCallback done) {
+  std::cout << "* In gpu_util.cc: CopyGPUTensorToCPU" << std::endl;
   VLOG(1) << "CopyGPUTensorToCPU";
   const DeviceBase::GpuDeviceInfo* dev_info = nullptr;
   gpu::Stream* send_stream = nullptr;
   Status s = PrepareCopy(gpu_device, device_context, *gpu_tensor, cpu_tensor,
                          &dev_info, &send_stream);
+  std::cout << "* gpu_util.cc: Done calling PrepareCopy" << std::endl;
   if (!s.ok()) {
+    std::cout << "* gpu_util.cc: s.ok() is false" << std::endl;
     done(s);
     return;
   }
+  std::cout << "* gpu_util.cc: s.ok() is true" << std::endl;
 
   auto send_device_to_host_stream =
       static_cast<const GPUDeviceContext*>(device_context)
           ->device_to_host_stream();
+  std::cout << "* gpu_util.cc: send_device_to_host_stream = "
+            << send_device_to_host_stream << std::endl << std::flush;
   if (send_device_to_host_stream == nullptr) {
+    std::cout << "* gpu_util.cc: send_device_to_host_stream is nullptr!" << std::endl;
     done(errors::Internal("No send gpu copy-out-stream is available."));
     return;
   }
+
+  std::cout << "* gpu_util.cc: Calling ThenWaitFor(send_stream)" << std::endl;
   // Wait for the sender's main stream to make sure the data are available.
   send_device_to_host_stream->ThenWaitFor(send_stream);
+  std::cout << "* gpu_util.cc: Done calling ThenWaitFor(send_stream)" << std::endl;
 
   const int64 total_bytes = gpu_tensor->TotalBytes();
+  std::cout << "* gpu_util.cc: total_bytes = " << total_bytes << std::endl;
   if (total_bytes > 0) {
     void* src_ptr = GetBase(gpu_tensor);
     DeviceMemoryBase gpu_src_ptr(src_ptr, total_bytes);
-    void* dst_ptr = GetBase(cpu_tensor);
+    void* dst_ptr = GetBase(cpu_tensor); 
+    std::cout << "* gpu_util.cc: Calling ThenMemCopy()" << std::endl << std::flush;
     send_device_to_host_stream->ThenMemcpy(dst_ptr, gpu_src_ptr, total_bytes);
+    std::cout << "* gpu_util.cc: Done calling ThenMemCopy()" << std::endl;
   }
   // Use of the input may outlive stack scope, so keep a ref.
   TensorReference input_ref(*gpu_tensor);
+  std::cout << "* gpu_util.cc: Calling ThenExecute()" << std::endl << std::flush;
   dev_info->event_mgr->ThenExecute(
       send_device_to_host_stream,
       [send_device_to_host_stream, done, input_ref]() {
         if (!send_device_to_host_stream->ok()) {
+	  std::cout << "* gpu_utli.cc: GPU-CPU Memcpy failed." << std::endl << std::flush;
           LOG(FATAL) << "GPU->CPU Memcpy failed";
         }
+	std::cout << "* gpu_util.cc: GPU->CPU Memcpy succeeded." << std::endl << std::flush;
         input_ref.Unref();
+	std::cout << "* gpu_util.cc: Calling done() callback." << std::endl << std::flush;
         done(Status::OK());
       });
 }

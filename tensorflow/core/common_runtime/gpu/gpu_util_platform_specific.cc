@@ -33,6 +33,7 @@ void GPUDeviceContext::CopyDeviceTensorToCPU(const Tensor* device_tensor,
                                              const string& tensor_name,
                                              Device* device, Tensor* cpu_tensor,
                                              StatusCallback done) {
+  std::cout << "In gpu_util_platform_specific.cc: CopyDeviceTensorToCPU" << std::endl;
   GPUUtil::CopyGPUTensorToCPU(device, this, device_tensor, cpu_tensor, done);
 }
 

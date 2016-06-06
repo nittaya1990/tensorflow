@@ -53,14 +53,17 @@ DebugSession::DebugSession(const SessionOptions& options,
 
     // Copy tensor values (e.g., from GPU to host) only if the
     // value callback is not nullptr.
-    if (val_cb_ != nullptr) {
+    // if (val_cb_ != nullptr) {
       CopyTensor(
           node_name, output_slot, tensor, ctx,
           [this, node_name, output_slot, is_ref](
               const Tensor* copied_tensor) {
-            val_cb_(node_name, output_slot, *copied_tensor, is_ref);
+            std::cout << "||| copied_tensor of node " << node_name
+                      << "; value = " << copied_tensor->DebugString()
+                      << std::endl << std::flush;  // DEBUG
+            // val_cb_(node_name, output_slot, *copied_tensor, is_ref);
       });
-    }
+    // }
 
     return Status::OK();
   });
@@ -123,7 +126,7 @@ void DebugSession::CopyTensor(const string& node_name,
           src_tensor, "TensorCopy", device, cpu_tensor,
           [node_name, cpu_tensor, copy_done_cb](const Status& s) {
             std::cout << "||| In CopyDeviceTensorToCPU callback: s.ok() = "
-		      << s.ok() << std::endl << std::flush;
+                      << s.ok() << std::endl << std::flush;
 
             if (s.ok()) {
               // std::cout << "||| After copying, cpu_tensor \"" << node_name

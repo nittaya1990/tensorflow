@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "tensorflow/stream_executor/stream.h"
 
+#include <iostream>  // DEBUG
+
 #include "tensorflow/stream_executor/platform/port.h"
 
 #include "tensorflow/stream_executor/blas.h"
@@ -3609,6 +3611,8 @@ Stream &Stream::ThenPopulateRandUniform(
 
 Stream &Stream::ThenMemcpy(void *host_dst, const DeviceMemoryBase &gpu_src,
                            uint64 size) {
+  // std::cout << "In stream.cc: ThenMemcpy: host_dst = " << host_dst
+  // 	    << "; size = " << size << std::endl << std::flush;
   VLOG_CALL(PARAM(host_dst), PARAM(gpu_src), PARAM(size));
 
   if (ok()) {

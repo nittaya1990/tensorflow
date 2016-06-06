@@ -80,13 +80,25 @@ class EventMgr {
 
   inline void ThenExecute(perftools::gputools::Stream* stream,
                           std::function<void()> func) {
+    std::cout << "** gpu_event_mgr.h: In ThenExecute()" << std::endl << std::flush;
     ToFreeVector to_free;
     {
       mutex_lock l(mu_);
+      std::cout << "** gpu_event_mgr.h: ThenExecute() has acquired lock"
+		<< std::endl << std::flush;
       QueueFunc(stream, func);
+      std::cout << "** gpu_event_mgr.h: ThenExecute() done calling QueueFunc"
+		<< std::endl << std::flush;
       PollEvents(false, &to_free);
+      std::cout << "** gpu_event_mgr.h: ThenExecute() done calling PollEvents"
+		<< std::endl << std::flush;
     }
+
+    std::cout << "** gpu_event_mgr.h: ThenExecute() calling FreeMemory()"
+	      << std::endl << std::flush;
     FreeMemory(to_free);
+    std::cout << "** gpu_event_mgr.h: ThenExecute() done calling FreeMemory()"
+	      << std::endl << std::flush;
   }
 
  private:

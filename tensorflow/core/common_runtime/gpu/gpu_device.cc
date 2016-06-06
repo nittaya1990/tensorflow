@@ -248,16 +248,22 @@ BaseGPUDevice::BaseGPUDevice(const SessionOptions& options, const string& name,
     host_to_device_stream->Init();
     VLOG(2) << "Created host_to_device_stream[" << i
             << "] = " << host_to_device_stream;
+    std::cout << "Created host_to_device_stream[" << i
+	      << "] = " << host_to_device_stream << std::endl << std::flush;
 
     auto device_to_host_stream = new gpu::Stream(executor_);
     device_to_host_stream->Init();
     VLOG(2) << "Created device_to_host_stream[" << i
             << "] = " << device_to_host_stream;
+    std::cout << "Created device_to_host_stream[" << i
+	      << "] = " << device_to_host_stream << std::endl << std::flush;
 
     auto device_to_device_stream = new gpu::Stream(executor_);
     device_to_device_stream->Init();
     VLOG(2) << "Created device_to_device_stream[" << i
             << "] = " << device_to_device_stream;
+    std::cout << "Created device_to_device_stream[" << i
+	      << "] = " << device_to_device_stream << std::endl << std::flush;
 
     streams_.push_back({stream, host_to_device_stream, device_to_host_stream,
                         device_to_device_stream});
@@ -720,8 +726,108 @@ struct CudaVersion {
 
 // "configure" uses the specific name to substitute the following string.
 // If you change it, make sure you modify "configure" as well.
-std::vector<CudaVersion> supported_cuda_compute_capabilities = {
-    CudaVersion("3.5"), CudaVersion("5.2")};
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+// Unofficial setting. DO NOT SUBMIT!!!
+std::vector<CudaVersion> supported_cuda_compute_capabilities = {CudaVersion("3.0"),};
 
 std::vector<CudaVersion> GetSupportedCudaComputeCapabilities() {
   auto cuda_caps = supported_cuda_compute_capabilities;
