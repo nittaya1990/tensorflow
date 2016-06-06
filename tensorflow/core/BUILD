@@ -1510,6 +1510,33 @@ tf_cc_test(
     ],
 )
 
+tf_cc_test_gpu(
+    name = "debug/debug_session_gpu_test",
+    size = "small",
+    args = ["--heap_check=local"],
+    linkstatic = tf_kernel_tests_linkstatic(),
+    tags = tf_cuda_tests_tags() + ["nomac"],
+    deps = [
+        ":all_kernels",
+        ":core_cpu",
+        ":core_cpu_internal",
+        ":debug_session",
+        ":direct_session",
+        ":direct_session_internal",
+        ":framework",
+        ":framework_internal",
+        ":gpu_runtime",
+        ":lib",
+        ":lib_internal",
+        ":protos_all_cc",
+        ":test",
+        ":test_main",
+        ":testlib",
+        "//tensorflow/cc:cc_ops",
+        "//tensorflow/core/kernels:ops_util",
+    ],
+)
+
 tf_cc_test(
     name = "common_runtime/direct_session_with_tracking_alloc_test",
     size = "small",
