@@ -32,8 +32,7 @@ class DebugSession : public DirectSession {
   // necessarily available when this callback is invoked. It may need to be
   // asynchronously copied from device (e.g., GPU) to host, hence the need
   // for the NodeValueCallback below.
-  typedef std::function<void(const string& node_name,
-                             const int output_slot,
+  typedef std::function<void(const string& node_name, const int output_slot,
                              const bool is_ref)>
       NodeCompletionCallback;
   void SetNodeCompletionCallback(NodeCompletionCallback callback);
@@ -41,10 +40,9 @@ class DebugSession : public DirectSession {
   // Callback for node value. This is invoked when the value of a node's
   // output tensor is available on the host, possibly after copying from
   // a device (e.g., GPU).
-  typedef std::function<void(const string& node_name,
-                             const int output_slot,
-                             const Tensor& tensor_value,
-                             const bool is_ref)> NodeValueCallback;
+  typedef std::function<void(const string& node_name, const int output_slot,
+                             const Tensor& tensor_value, const bool is_ref)>
+      NodeValueCallback;
   void SetNodeValueCallback(NodeValueCallback callback);
 
   Status Run(const std::vector<std::pair<string, Tensor> >& inputs,
@@ -61,11 +59,11 @@ class DebugSession : public DirectSession {
 
   typedef std::function<void(const Tensor* dst_tensor)> CopyDoneCallback;
 
-  void CopyTensor(const string& node_name,
-                  const int output_slot,
-                  const Tensor* src_tensor,
-                  OpKernelContext* ctx,
+  void CopyTensor(const string& node_name, const int output_slot,
+                  const Tensor* src_tensor, OpKernelContext* ctx,
                   CopyDoneCallback copy_done_cb);
+
+  void ClearHostTensors();
 };
 
 }  // end namespace tensorflow

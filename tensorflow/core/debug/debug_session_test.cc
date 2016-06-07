@@ -83,14 +83,12 @@ TEST_F(DebugSessionMinusAXTest, RunSimpleNetwork) {
 
   session->SetNodeCompletionCallback(
       [&mu, &completed_nodes, &output_slots_comp, &is_refs_comp](
-          const string& node_name,
-          const int output_slot,
-          const bool is_ref) {
-    mutex_lock l(mu);
-    completed_nodes.push_back(node_name);
-    output_slots_comp.push_back(output_slot);
-    is_refs_comp.push_back(is_ref);
-  });
+          const string& node_name, const int output_slot, const bool is_ref) {
+        mutex_lock l(mu);
+        completed_nodes.push_back(node_name);
+        output_slots_comp.push_back(output_slot);
+        is_refs_comp.push_back(is_ref);
+      });
 
   std::vector<bool> tensors_initialized;
   std::unordered_map<string, Tensor> tensor_vals;
@@ -101,17 +99,14 @@ TEST_F(DebugSessionMinusAXTest, RunSimpleNetwork) {
 
   session->SetNodeValueCallback(
       [&mu, &tensors_initialized, &tensor_vals, &output_slots_val,
-       &is_refs_val](
-          const string& node_name,
-          const int output_slot,
-          const Tensor& tensor_value,
-          const bool is_ref) {
-    mutex_lock l(mu);
-    tensors_initialized.push_back(tensor_value.IsInitialized());
-    tensor_vals.insert(std::make_pair(node_name, tensor_value));
-    output_slots_val.push_back(output_slot);
-    is_refs_val.push_back(is_ref);
-  });
+       &is_refs_val](const string& node_name, const int output_slot,
+                     const Tensor& tensor_value, const bool is_ref) {
+        mutex_lock l(mu);
+        tensors_initialized.push_back(tensor_value.IsInitialized());
+        tensor_vals.insert(std::make_pair(node_name, tensor_value));
+        output_slots_val.push_back(output_slot);
+        is_refs_val.push_back(is_ref);
+      });
 
   TF_ASSERT_OK(session->Create(def_));
 
@@ -143,8 +138,7 @@ TEST_F(DebugSessionMinusAXTest, RunSimpleNetwork) {
   ASSERT_NE(completed_nodes.end(),
             std::find(completed_nodes.begin(), completed_nodes.end(), y_));
   ASSERT_NE(completed_nodes.end(),
-            std::find(completed_nodes.begin(), completed_nodes.end(),
-                      y_neg_));
+            std::find(completed_nodes.begin(), completed_nodes.end(), y_neg_));
 
   // In this graph, there is no ref-type tensor.
   ASSERT_EQ(is_refs_comp.end(),
@@ -158,9 +152,9 @@ TEST_F(DebugSessionMinusAXTest, RunSimpleNetwork) {
                           [](int slot) { return slot == 0; }));
 
   // In this graph, there is no uninitialized node value.
-  ASSERT_EQ(tensors_initialized.end(),
-            std::find(tensors_initialized.begin(),
-                      tensors_initialized.end(), false));
+  ASSERT_EQ(
+      tensors_initialized.end(),
+      std::find(tensors_initialized.begin(), tensors_initialized.end(), false));
 
   ASSERT_EQ(completed_nodes.size(), tensor_vals.size());
   ASSERT_EQ(completed_nodes.size(), output_slots_val.size());
