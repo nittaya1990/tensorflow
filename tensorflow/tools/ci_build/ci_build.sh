@@ -73,6 +73,7 @@ fi
 if [[ "${CI_DOCKER_EXTRA_PARAMS}" != *"--rm"* ]]; then
   CI_DOCKER_EXTRA_PARAMS="--rm ${CI_DOCKER_EXTRA_PARAMS}"
 fi
+CI_DOCKER_EXTRA_PARAMS="--pid=host ${CI_DOCKER_EXTRA_PARAMS}"
 CI_TENSORFLOW_SUBMODULE_PATH="${CI_TENSORFLOW_SUBMODULE_PATH:-.}"
 CI_COMMAND_PREFIX=("${CI_COMMAND_PREFIX[@]:-${CI_TENSORFLOW_SUBMODULE_PATH}/tensorflow/tools/ci_build/builds/with_the_same_user "\
 "${CI_TENSORFLOW_SUBMODULE_PATH}/tensorflow/tools/ci_build/builds/configured ${CONTAINER_TYPE}}")
