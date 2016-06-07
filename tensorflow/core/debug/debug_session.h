@@ -50,6 +50,10 @@ class DebugSession : public DirectSession {
              const std::vector<string>& target_node_names,
              std::vector<Tensor>* outputs) override;
 
+  void SetOptimizeGraph(const bool optimize_graph) {
+    DirectSession::SetOptimizeGraph(optimize_graph);
+  }
+
  private:
   NodeCompletionCallback comp_cb_ = nullptr;
   NodeValueCallback val_cb_ = nullptr;

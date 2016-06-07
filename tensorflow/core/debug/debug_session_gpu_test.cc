@@ -79,6 +79,8 @@ TEST_F(DebugSessionGPUMinusAXTest, RunSimpleNetwork) {
   std::unique_ptr<DebugSession> session(CreateSession());
   ASSERT_TRUE(session != nullptr);
 
+  session->SetOptimizeGraph(false);
+
   // Supply completion and value callbacks
   mutex mu;
   std::vector<string> completed_nodes;
