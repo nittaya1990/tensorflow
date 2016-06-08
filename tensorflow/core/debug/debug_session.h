@@ -26,7 +26,9 @@ namespace tensorflow {
 class DebugSession : public DirectSession {
  public:
   DebugSession(const SessionOptions& options, const DeviceMgr* device_mgr);
-  ~DebugSession() override {}
+  ~DebugSession() override {
+    ClearHostTensors();
+  }
 
   // Callback for node completion. The value of the output tensor is not
   // necessarily available when this callback is invoked. It may need to be

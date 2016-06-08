@@ -95,6 +95,8 @@ void DebugSession::CopyTensor(const string& node_name, const int output_slot,
 
     DeviceContext* device_ctxt = ctx->op_device_context();
 
+    // Copy device (e.g., GPU) tensor to host and when done, invoke the
+    // callback.
     device_ctxt->CopyDeviceTensorToCPU(
         src_tensor, "TensorCopy", device, cpu_tensor,
         [node_name, cpu_tensor, copy_done_cb](const Status& s) {
@@ -106,8 +108,18 @@ void DebugSession::CopyTensor(const string& node_name, const int output_slot,
           }
         });
   } else {
-    // For CPU tensors, simply use the tensor reference without owning it.
-    copy_done_cb(src_tensor);
+    // For CPU tensors, copy the source tensor and own the copy, because the
+    // value callback may outlive the life time of the source tensor.
+    Tensor* dst_tensor = new Tensor();
+    dst_tensor->UnsafeCopyFromInternal(*src_tensor, src_tensor->shape());
+
+    // Keep track of the copied tensor to be freed later.
+    {
+      mutex_lock l(mu_);
+      host_tensors_.insert(std::make_pair(node_name, dst_tensor));
+    }
+
+    copy_done_cb(dst_tensor);
   }
 }
 
