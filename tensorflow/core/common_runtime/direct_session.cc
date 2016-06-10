@@ -988,10 +988,6 @@ void DirectSession::SetNodeOutputsCallback(
   node_output_callback_ = callback;
 }
 
-void DirectSession::SetOptimizeGraph(const bool optimize_graph) {
-  do_optimize_graph_ = optimize_graph;
-}
-
 DirectSession::RunState::~RunState() {
   if (rendez != nullptr) {
     if (!executors_done.HasBeenNotified()) {

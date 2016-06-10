@@ -92,9 +92,6 @@ class DirectSession : public Session {
   // outputs become available (in ProcessOutputs()).
   void SetNodeOutputsCallback(Executor::Args::NodeOutputsCallback callback);
 
-  // Set whether graph optimization will be carried out.
-  void SetOptimizeGraph(const bool optimize_graph);
-
  private:
   typedef DirectSession ME;
 

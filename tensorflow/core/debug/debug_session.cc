@@ -24,9 +24,6 @@ namespace tensorflow {
 DebugSession::DebugSession(const SessionOptions& options,
                            const DeviceMgr* device_mgr)
     : DirectSession(options, device_mgr), host_tensors_() {
-  // Disable the graph optimization by default
-  SetOptimizeGraph(false);
-
   // Supply node output callback
   SetNodeOutputsCallback([this](const string& node_name, const int output_slot,
                                 const Tensor* tensor, const bool is_ref,

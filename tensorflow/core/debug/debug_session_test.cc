@@ -27,7 +27,14 @@ namespace {
 
 DebugSession* CreateSession() {
   SessionOptions options;
+  // Specify to use DebugSession.
   options.target = "debug";
+
+  // Turn off graph optimizer so we can observe intermediate node states.
+  options.config.mutable_graph_options()
+      ->mutable_optimizer_options()
+      ->set_opt_level(OptimizerOptions_Level_L0);
+
   (*options.config.mutable_device_count())["CPU"] = 2;
   return dynamic_cast<DebugSession*>(NewSession(options));
 }
@@ -72,8 +79,6 @@ TEST_F(DebugSessionMinusAXTest, RunSimpleNetwork) {
   Initialize({3, 2, -1, 0});
   std::unique_ptr<DebugSession> session(CreateSession());
   ASSERT_TRUE(session != nullptr);
-
-  session->SetOptimizeGraph(false);
 
   // Supply completion and value callbacks
   mutex mu;
