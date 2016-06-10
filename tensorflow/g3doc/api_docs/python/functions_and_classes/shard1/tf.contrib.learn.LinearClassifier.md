@@ -8,20 +8,36 @@ Linear classifier model.
   installed_x_impression = crossed_column(
       [installed_app_id, impression_app_id])
 
+  # Estimator using the default optimizer.
   estimator = LinearClassifier(
       feature_columns=[impression_app_id, installed_x_impression])
 
+  # Or estimator using the FTRL optimizer with regularization.
+  estimator = LinearClassifier(
+      feature_columns=[impression_app_id, installed_x_impression],
+      optimizer=tf.train.FtrlOptimizer(
+        learning_rate=0.1,
+        l1_regularization_strength=0.001
+      ))
+
+  # Or estimator using the SDCAOptimizer.
+  estimator = LinearClassifier(
+     feature_columns=[impression_app_id, installed_x_impression],
+     optimizer=tf.contrib.learn.SDCAOptimizer(
+       example_id_column='example_id', symmetric_l2_regularization=2.0
+     ))
+
   # Input builders
-  def input_fn_train: # returns X, Y
+  def input_fn_train: # returns x, y
     ...
-  def input_fn_eval: # returns X, Y
+  def input_fn_eval: # returns x, y
     ...
   estimator.fit(input_fn=input_fn_train)
   estimator.evaluate(input_fn=input_fn_eval)
-  estimator.predict(x)
+  estimator.predict(x=x)
   ```
 
-  Input of `fit`, `train`, and `evaluate` should have following features,
+  Input of `fit` and `evaluate` should have following features,
     otherwise there will be a `KeyError`:
       if `weight_column_name` is not `None`, a feature with
         `key=weight_column_name` whose value is a `Tensor`.
@@ -43,11 +59,16 @@ Parameters:
   weight_column_name: A string defining feature column name representing
     weights. It is used to down weight or boost examples during training. It
     will be multiplied by the loss of the example.
-  optimizer: An instance of `tf.Optimizer` used to train the model. If `None`,
-    will use an Ftrl optimizer.
+  optimizer: The optimizer used to train the model. If specified, it should be
+    either an instance of `tf.Optimizer` or the SDCAOptimizer. If `None`, the
+    Ftrl optimizer will be used.
+  gradient_clip_norm: A float > 0. If provided, gradients are clipped
+    to their global norm with this clipping ratio. See tf.clip_by_global_norm
+    for more details.
+  config: RunConfig object to configure the runtime settings.
 - - -
 
-#### `tf.contrib.learn.LinearClassifier.__init__(feature_columns=None, model_dir=None, n_classes=2, weight_column_name=None, optimizer=None)` {#LinearClassifier.__init__}
+#### `tf.contrib.learn.LinearClassifier.__init__(feature_columns=None, model_dir=None, n_classes=2, weight_column_name=None, optimizer=None, gradient_clip_norm=None, config=None)` {#LinearClassifier.__init__}
 
 
 
@@ -93,7 +114,14 @@ Evaluates given model with provided evaluation data.
 *  <b>`steps`</b>: Number of steps for which to evaluate model. If `None`, evaluate
     forever.
 *  <b>`metrics`</b>: Dict of metric ops to run. If None, the default metric functions
-    are used; if {}, no metrics are used.
+    are used; if {}, no metrics are used. If model has one output (i.e.,
+    returning single predction), keys are `str`, e.g. `'accuracy'` - just a
+    name of the metric that will show up in the logs / summaries.
+    Otherwise, keys are tuple of two `str`, e.g. `('accuracy', 'classes')`
+    - name of the metric and name of `Tensor` in the predictions to run
+    this metric on. Metric ops should support streaming, e.g., returning
+    update_op and value tensors. See more details in
+    ../../../../metrics/python/metrics/ops/streaming_metrics.py.
 *  <b>`name`</b>: Name of the evaluation if user needs to run multiple evaluation on
     different data sets, such as evaluate on training data vs test data.
 

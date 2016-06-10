@@ -38,6 +38,7 @@ of a tensor and change the shape of a tensor.
 @@reshape
 @@squeeze
 @@expand_dims
+@@meshgrid
 
 ## Slicing and Joining
 
@@ -54,6 +55,7 @@ or join multiple tensors together.
 @@reverse_sequence
 @@reverse
 @@transpose
+@@extract_image_patches
 @@space_to_batch
 @@batch_to_space
 @@space_to_depth
@@ -97,6 +99,32 @@ _baseslice = slice
 
 # Aliases for some automatically-generated names.
 listdiff = gen_array_ops.list_diff
+
+
+def shape(input, name=None):
+  """Returns the shape of a tensor.
+
+  This operation returns a 1-D integer tensor representing the shape of `input`.
+
+  For example:
+
+  ```python
+  # 't' is [[[1, 1, 1], [2, 2, 2]], [[3, 3, 3], [4, 4, 4]]]
+  shape(t) ==> [2, 2, 3]
+  ```
+
+  Args:
+    input: A `Tensor` or `SparseTensor`.
+    name: A name for the operation (optional).
+
+  Returns:
+    A `Tensor` of type `int32`.
+  """
+  with ops.op_scope([input], name, "Shape") as name:
+    if isinstance(input, ops.SparseTensor):
+      return input.shape
+    else:
+      return gen_array_ops.shape(input, name=name)
 
 
 def rank(input, name=None):
@@ -585,8 +613,8 @@ def sparse_mask(a, mask_indices, name=None):
   """Masks elements of `IndexedSlices`.
 
   Given an `IndexedSlices` instance `a`, returns another `IndexedSlices` that
-  contains a subset of the slices of `a`. Only the slices at indices specified
-  in `mask_indices` are returned.
+  contains a subset of the slices of `a`. Only the slices at indices not
+  specified in `mask_indices` are returned.
 
   This is useful when you need to extract a subset of slices in an
   `IndexedSlices` object.
@@ -600,7 +628,7 @@ def sparse_mask(a, mask_indices, name=None):
   tf.shape(a.values) => [4, 10]
 
   # `b` will be the subset of `a` slices at its second and third indices, so
-  # we want to mask of its first and last indices (which are at absolute
+  # we want to mask its first and last indices (which are at absolute
   # indices 12, 45)
   b = tf.sparse_mask(a, [12, 45])
 
@@ -657,8 +685,10 @@ def split(split_dim, num_split, value, name="split"):
 
 @ops.RegisterShape("Reverse")
 def _ReverseShape(op):
+  input_shape = op.inputs[0].get_shape()
   dims_shape = op.inputs[1].get_shape().with_rank(1)
-  input_shape = op.inputs[0].get_shape().with_rank(dims_shape[0])
+  if dims_shape[0].value is not None:
+    input_shape = input_shape.with_rank(dims_shape[0])
   if input_shape.ndims is not None and input_shape.ndims > 8:
     raise ValueError(
         "tf.reverse() does not work on tensors with more than 8 dimensions")
@@ -1016,6 +1046,82 @@ def pad(tensor, paddings, mode="CONSTANT", name=None):  # pylint: disable=invali
                                      mode="SYMMETRIC",
                                      name=name)
   raise ValueError("Unknown padding mode: %s" % mode)
+
+
+def meshgrid(*args, **kwargs):
+  """Broadcasts parameters for evaluation on an N-D grid.
+
+  Given N one-dimensional coordinate arrays `*args`, returns a list `outputs`
+  of N-D coordinate arrays for evaluating expressions on an N-D grid.
+
+  Notes:
+
+  `meshgrid` supports cartesian ('xy') and matrix ('ij') indexing conventions.
+  When the `indexing` argument is set to 'xy' (the default), the broadcasting
+  instructions for the first two dimensions are swapped.
+
+  Examples:
+
+  Calling `X, Y = meshgrid(x, y)` with the tensors
+  ```prettyprint
+    x = [1, 2, 3]
+    y = [4, 5, 6]
+  ```
+  results in
+  ```prettyprint
+    X = [[1, 1, 1],
+         [2, 2, 2],
+         [3, 3, 3]]
+    Y = [[4, 5, 6],
+         [4, 5, 6],
+         [4, 5, 6]]
+  ```
+
+  Args:
+    *args: `Tensor`s with rank 1
+    indexing: Either 'xy' or 'ij' (optional, default: 'xy')
+    name: A name for the operation (optional).
+
+  Returns:
+    outputs: A list of N `Tensor`s with rank N
+  """
+  indexing = kwargs.pop("indexing", "xy")
+  name = kwargs.pop("name", "meshgrid")
+  if len(kwargs) > 0:
+    key = list(kwargs.keys())[0]
+    raise TypeError("'{}' is an invalid keyword argument "
+                    "for this function".format(key))
+
+  if indexing not in ("xy", "ij"):
+    raise ValueError("indexing parameter must be either 'xy' or 'ij'")
+
+  with ops.op_scope(args, name, "meshgrid") as name:
+    num_inputs = len(args)
+    ones = (1,) * num_inputs
+
+    asserts = [logging_ops.Assert(
+                 gen_math_ops.equal(rank(x), 1),
+                 ["Input %d needs to have rank 1: " % i, rank(x)],
+               ) for i, x in enumerate(args)]
+
+    # Prepare reshape by inserting dimensions with size 1 where needed
+    shapes = [ones[:i] + (-1,) + ones[i + 1:] for i in range(num_inputs)]
+    # Create parameters for broadcasting each tensor to the full size
+    sizes = [size(x) for x in args]
+    bcast = [sizes[:i] + [1] + sizes[i + 1:] for i in range(num_inputs)]
+
+    # By default, the numpy version swaps the instructions
+    # for the first and second dimension
+    if indexing == "xy" and num_inputs > 1:
+      shapes[0], shapes[1] = shapes[1], shapes[0]
+      bcast[0], bcast[1] = bcast[1], bcast[0]
+
+    results = []
+    with ops.control_dependencies(asserts):
+      for a, r, e in zip(args, shapes, bcast):
+        results.append(tile(reshape(a, r), e))
+
+    return results
 
 
 @ops.RegisterShape("Placeholder")
@@ -1699,6 +1805,57 @@ def _QuantizeDequantizeShape(op):
   return common_shapes.unchanged_shape(op)
 
 
+@ops.RegisterShape("ExtractImagePatches")
+def _ExtractImagePatchesShape(op):
+  """Shape function for the ExtractImagePatches op.
+
+  Args:
+    op: An ExtractImagePatches op.
+
+  Raises:
+    ValueError: If the strides or padding are invalid.
+
+  Returns:
+    The shape of the op output.
+  """
+  images_shape = op.inputs[0].get_shape().with_rank(4)
+  batch = images_shape[0]
+  in_rows = images_shape[1]
+  in_cols = images_shape[2]
+  in_depth = images_shape[3]
+
+  ksize_b, ksize_r, ksize_c, ksize_d = op.get_attr("ksizes")
+  if ksize_b != 1 or ksize_d != 1:
+    raise ValueError("Current implementation does not yet support "
+                     "ksizes in the batch and depth dimensions.")
+
+  stride_b, stride_r, stride_c, stride_d = op.get_attr("strides")
+  if stride_b != 1 or stride_d != 1:
+    raise ValueError("Current implementation does not yet support "
+                     "strides in the batch and depth dimensions.")
+
+  rate_b, rate_r, rate_c, rate_d = op.get_attr("rates")
+  if rate_b != 1 or rate_d != 1:
+    raise ValueError("Current implementation does not yet support "
+                     "rates in the batch and depth dimensions.")
+
+  # Effective patch size, taking into account filter upsampling by rates.
+  ksize_r_eff = ksize_r + (ksize_r - 1) * (rate_r - 1)
+  ksize_c_eff = ksize_c + (ksize_c - 1) * (rate_c - 1)
+
+  padding = op.get_attr("padding")
+  out_rows, out_cols = common_shapes.get2d_conv_output_size(in_rows, in_cols,
+                                                            ksize_r_eff,
+                                                            ksize_c_eff,
+                                                            stride_r, stride_c,
+                                                            padding)
+
+  out_depth = None if in_depth is None else ksize_r * ksize_c * int(in_depth)
+  output_shape = [batch, out_rows, out_cols, out_depth]
+
+  return [tensor_shape.TensorShape(output_shape)]
+
+
 @ops.RegisterShape("SpaceToBatch")
 def _SpaceToBatchShape(op):
   """Shape function for the SpaceToBatch op.
@@ -2085,14 +2242,14 @@ def one_hot(indices, depth, on_value=None, off_value=None,
                   else None
     off_dtype = ops.convert_to_tensor(off_value).dtype.base_dtype if off_exists\
                   else None
-    
+
     if on_exists or off_exists:
       if dtype is not None:
         # Ensure provided on_value and/or off_value match dtype
         if (on_exists and on_dtype != dtype):
           raise TypeError("dtype {0} of on_value does not match " \
                           "dtype parameter {1}".format(on_dtype, dtype))
-        if (off_exists and off_dtype != dtype): 
+        if (off_exists and off_dtype != dtype):
           raise TypeError("dtype {0} of off_value does not match " \
                           "dtype parameter {1}".format(off_dtype, dtype))
       else:
@@ -2101,7 +2258,7 @@ def one_hot(indices, depth, on_value=None, off_value=None,
     elif dtype is None:
       # None of on_value, off_value, or dtype provided. Default dtype to float32
       dtype = dtypes.float32
-    
+
     if not on_exists:
       # on_value not provided: assign to value 1 of type dtype
       on_value = ops.convert_to_tensor(1, dtype, name="on_value")
@@ -2115,8 +2272,8 @@ def one_hot(indices, depth, on_value=None, off_value=None,
       raise TypeError("dtype {0} of on_value does not match " \
                       "dtype {1} of off_value".format(on_dtype, off_dtype))
 
-    return gen_array_ops._one_hot(indices, depth, on_value, 
-                                  off_value, axis, name)
+    return gen_array_ops._one_hot(indices, depth, on_value, off_value, axis,
+                                  name)
 
 
 @ops.RegisterShape("OneHot")

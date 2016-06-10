@@ -32,6 +32,7 @@ from tensorflow.contrib.learn.python.learn.estimators import estimator
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import clip_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import gradients
 from tensorflow.python.ops import logging_ops
@@ -79,6 +80,9 @@ class _DNNLinearCombinedBaseEstimator(estimator.BaseEstimator):
       will use `tf.nn.relu`.
     dnn_dropout: When not None, the probability we will drop out
       a given coordinate.
+    gradient_clip_norm: A float > 0. If provided, gradients are clipped
+      to their global norm with this clipping ratio. See tf.clip_by_global_norm
+      for more details.
     config: RunConfig object to configure the runtime settings.
 
     Raises:
@@ -96,6 +100,7 @@ class _DNNLinearCombinedBaseEstimator(estimator.BaseEstimator):
                dnn_hidden_units=None,
                dnn_activation_fn=nn.relu,
                dnn_dropout=None,
+               gradient_clip_norm=None,
                config=None):
     super(_DNNLinearCombinedBaseEstimator, self).__init__(model_dir=model_dir,
                                                           config=config)
@@ -112,6 +117,7 @@ class _DNNLinearCombinedBaseEstimator(estimator.BaseEstimator):
     self._dnn_weight_collection = "DNNLinearCombined_dnn"
     self._linear_weight_collection = "DNNLinearCombined_linear"
     self._centered_bias_weight_collection = "centered_bias"
+    self._gradient_clip_norm = gradient_clip_norm
 
   @property
   def linear_weights_(self):
@@ -162,6 +168,10 @@ class _DNNLinearCombinedBaseEstimator(estimator.BaseEstimator):
     linear_vars = self._get_linear_vars()
     dnn_vars = self._get_dnn_vars()
     grads = gradients.gradients(loss, dnn_vars + linear_vars)
+    if self._gradient_clip_norm:
+      grads, _ = clip_ops.clip_by_global_norm(grads,
+                                              self._gradient_clip_norm)
+
     dnn_grads = grads[0:len(dnn_vars)]
     linear_grads = grads[len(dnn_vars):]
 
@@ -393,16 +403,16 @@ class DNNLinearCombinedClassifier(_DNNLinearCombinedBaseEstimator):
         dnn_optimizer=tf.train.AdagradOptimizer(...))
 
     # Input builders
-    def input_fn_train: # returns X, Y
+    def input_fn_train: # returns x, y
       ...
-    def input_fn_eval: # returns X, Y
+    def input_fn_eval: # returns x, y
       ...
-    estimator.train(input_fn_train)
-    estimator.evaluate(input_fn_eval)
-    estimator.predict(x)
+    estimator.fit(input_fn=input_fn_train)
+    estimator.evaluate(input_fn=input_fn_eval)
+    estimator.predict(x=x)
     ```
 
-    Input of `fit`, `train`, and `evaluate` should have following features,
+    Input of `fit` and `evaluate` should have following features,
       otherwise there will be a `KeyError`:
         if `weight_column_name` is not `None`, a feature with
           `key=weight_column_name` whose value is a `Tensor`.
@@ -434,6 +444,9 @@ class DNNLinearCombinedClassifier(_DNNLinearCombinedBaseEstimator):
       will use `tf.nn.relu`.
     dnn_dropout: When not None, the probability we will drop out
       a given coordinate.
+    gradient_clip_norm: A float > 0. If provided, gradients are clipped
+      to their global norm with this clipping ratio. See tf.clip_by_global_norm
+      for more details.
     config: RunConfig object to configure the runtime settings.
 
     Raises:
@@ -453,6 +466,7 @@ class DNNLinearCombinedClassifier(_DNNLinearCombinedBaseEstimator):
                dnn_hidden_units=None,
                dnn_activation_fn=nn.relu,
                dnn_dropout=None,
+               gradient_clip_norm=None,
                config=None):
 
     if n_classes < 2:
@@ -470,6 +484,7 @@ class DNNLinearCombinedClassifier(_DNNLinearCombinedBaseEstimator):
         dnn_hidden_units=dnn_hidden_units,
         dnn_activation_fn=dnn_activation_fn,
         dnn_dropout=dnn_dropout,
+        gradient_clip_norm=gradient_clip_norm,
         config=config)
 
   def predict(self, x=None, input_fn=None, batch_size=None):
@@ -503,12 +518,6 @@ class DNNLinearCombinedClassifier(_DNNLinearCombinedBaseEstimator):
         x=x, input_fn=input_fn, batch_size=batch_size)
 
   def _loss_vec(self, logits, target):
-    # Check that we got int32/int64 for classification.
-    if (not target.dtype.is_compatible_with(dtypes.int64) and
-        not target.dtype.is_compatible_with(dtypes.int32)):
-      raise ValueError("Target's dtype should be int32, int64 or compatible. "
-                       "Instead got %s." % target.dtype)
-
     if self._n_classes == 2:
       # sigmoid_cross_entropy_with_logits requires [batch_size, 1] target.
       if len(target.get_shape()) == 1:
@@ -516,6 +525,11 @@ class DNNLinearCombinedClassifier(_DNNLinearCombinedBaseEstimator):
       loss_vec = nn.sigmoid_cross_entropy_with_logits(
           logits, math_ops.to_float(target))
     else:
+      # Check that we got int32/int64 for classification.
+      if (not target.dtype.is_compatible_with(dtypes.int64) and
+          not target.dtype.is_compatible_with(dtypes.int32)):
+        raise ValueError("Target's dtype should be int32, int64 or compatible. "
+                         "Instead got %s." % target.dtype)
       # sparse_softmax_cross_entropy_with_logits requires [batch_size] target.
       if len(target.get_shape()) == 2:
         target = array_ops.squeeze(target, squeeze_dims=[1])
@@ -544,16 +558,43 @@ class DNNLinearCombinedClassifier(_DNNLinearCombinedBaseEstimator):
 
     # Adding default metrics
     if metrics is None:
-      metrics = {"accuracy": metrics_lib.streaming_accuracy}
+      metrics = {("accuracy", "classes"): metrics_lib.streaming_accuracy}
 
     if self._n_classes == 2:
       predictions = math_ops.sigmoid(logits)
-      result["eval_auc"] = metrics_lib.streaming_auc(predictions, targets)
+      result["auc"] = metrics_lib.streaming_auc(predictions, targets)
 
     if metrics:
-      predictions = self._logits_to_predictions(logits, proba=False)
-      result.update(self._run_metrics(predictions, targets, metrics,
-                                      self._get_weight_tensor(features)))
+      class_metrics = {}
+      proba_metrics = {}
+      for name, metric_op in six.iteritems(metrics):
+        if isinstance(name, tuple):
+          if len(name) != 2:
+            raise ValueError("Ignoring metric {}. It returned a tuple with "
+                             "len {}, expected 2.".format(name, len(name)))
+          else:
+            if name[1] not in ["classes", "probabilities"]:
+              raise ValueError("Ignoring metric {}. The 2nd element of its "
+                               "name should be either 'classes' or "
+                               "'probabilities'.".format(name))
+            elif name[1] == "classes":
+              class_metrics[name[0]] = metric_op
+            else:
+              proba_metrics[name[0]] = metric_op
+        elif isinstance(name, str):
+          class_metrics[name] = metric_op
+        else:
+          raise ValueError("Ignoring metric {}. Its name is not in the correct "
+                           "form.".format(name))
+
+      if class_metrics:
+        predictions = self._logits_to_predictions(logits, proba=False)
+        result.update(self._run_metrics(predictions, targets, class_metrics,
+                                        self._get_weight_tensor(features)))
+      if proba_metrics:
+        predictions = self._logits_to_predictions(logits, proba=True)
+        result.update(self._run_metrics(predictions, targets, proba_metrics,
+                                        self._get_weight_tensor(features)))
 
     return result
 
@@ -586,9 +627,9 @@ class DNNLinearCombinedRegressor(_DNNLinearCombinedBaseEstimator):
         dnn_optimizer=tf.train.AdagradOptimizer(...))
 
     # Input builders
-    def input_fn_train: # returns X, Y
+    def input_fn_train: # returns x, y
       ...
-    def input_fn_eval: # returns X, Y
+    def input_fn_eval: # returns x, y
       ...
     estimator.train(input_fn_train)
     estimator.evaluate(input_fn_eval)
@@ -626,6 +667,9 @@ class DNNLinearCombinedRegressor(_DNNLinearCombinedBaseEstimator):
       use `tf.nn.relu`.
     dnn_dropout: When not None, the probability we will drop out
       a given coordinate.
+    gradient_clip_norm: A float > 0. If provided, gradients are clipped
+      to their global norm with this clipping ratio. See tf.clip_by_global_norm
+      for more details.
     config: RunConfig object to configure the runtime settings.
 
     Raises:
@@ -643,6 +687,7 @@ class DNNLinearCombinedRegressor(_DNNLinearCombinedBaseEstimator):
                dnn_hidden_units=None,
                dnn_activation_fn=nn.relu,
                dnn_dropout=None,
+               gradient_clip_norm=None,
                config=None):
     super(DNNLinearCombinedRegressor, self).__init__(
         model_dir=model_dir,
@@ -654,6 +699,7 @@ class DNNLinearCombinedRegressor(_DNNLinearCombinedBaseEstimator):
         dnn_hidden_units=dnn_hidden_units,
         dnn_activation_fn=dnn_activation_fn,
         dnn_dropout=dnn_dropout,
+        gradient_clip_norm=gradient_clip_norm,
         config=config)
 
   def predict(self, x=None, input_fn=None, batch_size=None):

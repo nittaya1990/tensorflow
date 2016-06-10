@@ -136,9 +136,9 @@ variable to its initial value.
     `initial_value` must be known.
 *  <b>`caching_device`</b>: Optional device string describing where the Variable
     should be cached for reading.  Defaults to the Variable's device.
-    If not `None`, caches on another device.  Typical use is to cache
-    on the device where the Ops using the Variable reside, to deduplicate
-    copying through `Switch` and other conditional statements.
+    If not `None`, caches on another device.  Generally the standard caching
+    mechanism is sufficient, *only* use this when a variable is accessed in
+    a `cond()`.
 *  <b>`name`</b>: Optional name for the variable. Defaults to `'Variable'` and gets
     uniquified automatically.
 *  <b>`variable_def`</b>: `VariableDef` protocol buffer. If not `None`, recreates
@@ -1108,9 +1108,9 @@ Some useful partitioners are available.  See, e.g.,
     Defaults to `[GraphKeys.VARIABLES]` (see tf.Variable).
 *  <b>`caching_device`</b>: Optional device string or function describing where the
     Variable should be cached for reading.  Defaults to the Variable's
-    device.  If not `None`, caches on another device.  Typical use is to
-    cache on the device where the Ops using the Variable reside, to
-    deduplicate copying through `Switch` and other conditional statements.
+    device.  If not `None`, caches on another device. Generally the standard
+     caching mechanism is sufficient, *only* use this when a variable is
+     accessed in a `cond()`.
 *  <b>`partitioner`</b>: Optional callable that accepts a fully defined `TensorShape`
     and `dtype` of the Variable to be created, and returns a list of
     partitions for each axis (currently only one axis can be partitioned).
@@ -1895,8 +1895,8 @@ Requires `updates.shape = indices.shape + ref.shape[1:]`.
 Masks elements of `IndexedSlices`.
 
 Given an `IndexedSlices` instance `a`, returns another `IndexedSlices` that
-contains a subset of the slices of `a`. Only the slices at indices specified
-in `mask_indices` are returned.
+contains a subset of the slices of `a`. Only the slices at indices not
+specified in `mask_indices` are returned.
 
 This is useful when you need to extract a subset of slices in an
 `IndexedSlices` object.
@@ -1910,7 +1910,7 @@ a.indices => [12, 26, 37, 45]
 tf.shape(a.values) => [4, 10]
 
 # `b` will be the subset of `a` slices at its second and third indices, so
-# we want to mask of its first and last indices (which are at absolute
+# we want to mask its first and last indices (which are at absolute
 # indices 12, 45)
 b = tf.sparse_mask(a, [12, 45])
 

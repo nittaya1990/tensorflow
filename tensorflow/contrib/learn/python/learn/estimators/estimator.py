@@ -20,6 +20,7 @@ from __future__ import division
 from __future__ import print_function
 
 import abc
+import inspect
 import os
 import tempfile
 import time
@@ -74,6 +75,19 @@ def _get_predict_input_fn(x, y, batch_size):
   return df.input_builder, df.get_feed_dict_fn()
 
 
+def _get_arguments(func):
+  """Returns list of arguments this function has."""
+  if hasattr(func, '__code__'):
+    # Regular function.
+    return inspect.getargspec(func).args
+  elif hasattr(func, '__call__'):
+    # Callable object.
+    return _get_arguments(func.__call__)
+  elif hasattr(func, 'func'):
+    # Partial function.
+    return _get_arguments(func.func)
+
+
 class BaseEstimator(sklearn.BaseEstimator):
   """Abstract BaseEstimator class to train and evaluate TensorFlow models.
 
@@ -97,8 +111,8 @@ class BaseEstimator(sklearn.BaseEstimator):
     self._model_dir = model_dir
     if self._model_dir is None:
       self._model_dir = tempfile.mkdtemp()
-      logging.info('Using temporary folder as model directory: %s',
-                   self._model_dir)
+      logging.warning('Using temporary folder as model directory: %s',
+                      self._model_dir)
 
     # Create a run configuration
     if config is None:
@@ -121,9 +135,8 @@ class BaseEstimator(sklearn.BaseEstimator):
 
     self._graph = None
 
-  def fit(
-      self, x=None, y=None, input_fn=None, steps=None, batch_size=None,
-      monitors=None):
+  def fit(self, x=None, y=None, input_fn=None, steps=None, batch_size=None,
+          monitors=None):
     """Trains a model given training data `x` predictions and `y` targets.
 
     Args:
@@ -242,7 +255,14 @@ class BaseEstimator(sklearn.BaseEstimator):
       steps: Number of steps for which to evaluate model. If `None`, evaluate
         forever.
       metrics: Dict of metric ops to run. If None, the default metric functions
-        are used; if {}, no metrics are used.
+        are used; if {}, no metrics are used. If model has one output (i.e.,
+        returning single predction), keys are `str`, e.g. `'accuracy'` - just a
+        name of the metric that will show up in the logs / summaries.
+        Otherwise, keys are tuple of two `str`, e.g. `('accuracy', 'classes')`
+        - name of the metric and name of `Tensor` in the predictions to run
+        this metric on. Metric ops should support streaming, e.g., returning
+        update_op and value tensors. See more details in
+        ../../../../metrics/python/metrics/ops/streaming_metrics.py.
       name: Name of the evaluation if user needs to run multiple evaluation on
         different data sets, such as evaluate on training data vs test data.
 
@@ -355,7 +375,15 @@ class BaseEstimator(sklearn.BaseEstimator):
     Args:
       features: `Tensor` or `dict` of `Tensor` objects.
       targets: `Tensor` or `dict` of `Tensor` objects.
-      metrics: `dict` of functions that take predictions and targets.
+      metrics: Dict of metric ops to run. If None, the default metric functions
+        are used; if {}, no metrics are used. If model has one output (i.e.,
+        returning single predction), keys are `str`, e.g. `'accuracy'` - just a
+        name of the metric that will show up in the logs / summaries.
+        Otherwise, keys are tuple of two `str`, e.g. `('accuracy', 'classes')`
+        - name of the metric and name of `Tensor` in the predictions to run
+        this metric on. Metric ops should support streaming, e.g., returning
+        update_op and value tensors. See more details in
+        ../../../../metrics/python/metrics/ops/streaming_metrics.py.
 
     Returns:
       metrics: `dict` of `Tensor` objects.
@@ -407,21 +435,20 @@ class BaseEstimator(sklearn.BaseEstimator):
                    monitors=None,
                    log_every_steps=100,
                    fail_on_nan_loss=True):
-    # TODO(wicke): This is a hack and needs to go.
-    if self._config.execution_mode not in ('all', 'train'):
-      return
+    # TODO(wicke): Remove this once Model and associated code are gone.
+    if hasattr(self._config, 'execution_mode'):
+      if self._config.execution_mode not in ('all', 'train'):
+        return
 
-    if not self._model_dir:
-      raise ValueError('Estimator\'s model_dir should be non-empty.')
-
-    # Stagger startup of worker sessions based on task id.
-    sleep_secs = min(self._config.training_worker_max_startup_secs,
-                     self._config.task *
-                     self._config.training_worker_session_startup_stagger_secs)
-    if sleep_secs:
-      logging.info('Waiting %d secs before starting task %d.', sleep_secs,
-                   self._config.task)
-      time.sleep(sleep_secs)
+      # Stagger startup of worker sessions based on task id.
+      sleep_secs = min(
+          self._config.training_worker_max_startup_secs,
+          self._config.task *
+          self._config.training_worker_session_startup_stagger_secs)
+      if sleep_secs:
+        logging.info('Waiting %d secs before starting task %d.', sleep_secs,
+                     self._config.task)
+        time.sleep(sleep_secs)
 
     # Device allocation
     device_fn = device_fn or self._device_fn
@@ -440,7 +467,7 @@ class BaseEstimator(sklearn.BaseEstimator):
       monitors += monitors_lib.get_default_monitors(
           loss_op=loss_op,
           summary_op=logging_ops.get_summary_op(),
-          save_summary_steps=100,
+          save_summary_steps=self._config.save_summary_steps,
           summary_writer=graph_actions.get_summary_writer(self._model_dir))
 
       is_chief = self._config.task == 0
@@ -464,8 +491,9 @@ class BaseEstimator(sklearn.BaseEstimator):
           log_every_steps=log_every_steps,
           supervisor_is_chief=is_chief,
           supervisor_master=self._config.master,
+          supervisor_save_model_secs=self._config.save_checkpoints_secs,
           feed_fn=feed_fn,
-          max_steps=steps,
+          steps=steps,
           fail_on_nan_loss=fail_on_nan_loss,
           monitors=monitors)
 
@@ -499,8 +527,9 @@ class BaseEstimator(sklearn.BaseEstimator):
                       feed_fn=None,
                       metrics=None,
                       name=''):
-    # TODO(wicke): This is a hack and needs to go.
-    if self._config.execution_mode not in ('all', 'evaluate', 'eval_evalset'):
+    # TODO(wicke): Remove this once Model and associated code are gone.
+    if (hasattr(self._config, 'execution_mode') and
+        self._config.execution_mode not in ('all', 'evaluate', 'eval_evalset')):
       return
 
     # Check that model has been trained.
@@ -589,17 +618,58 @@ class Estimator(BaseEstimator):
   Parameters:
     model_fn: Model function, takes features and targets tensors or dicts of
               tensors and returns predictions and loss tensors.
-              E.g. `(features, targets) -> (predictions, loss, train_op)`.
+              Supports next three signatures for the function:
+                * `(features, targets) -> (predictions, loss, train_op)`
+                * `(features, targets, mode) -> (predictions, loss, train_op)`
+                * `(features, targets, mode, params) ->
+                    (predictions, loss, train_op)`
+              Where:
+                * `features` are single `Tensor` or `dict` of `Tensor`s
+                     (depending on data passed to `fit`),
+                * `targets` are `Tensor` or
+                    `dict` of `Tensor`s (for multi-head model).
+                * `mode` represents if this training, evaluation or prediction.
+                    See `ModeKeys` for example keys.
+                * `params` is a `dict` of hyperparameters. Will receive what is
+                    passed to Estimator in `params` parameter. This allows to
+                    configure Estimators from hyper parameter tunning.
     model_dir: Directory to save model parameters, graph and etc.
     config: Configuration object.
+    params: `dict` of hyper parameters that will be passed into `model_fn`.
+            Keys are names of parameters, values are basic python types.
   """
 
   def __init__(self,
                model_fn=None,
                model_dir=None,
-               config=None):
+               config=None,
+               params=None):
     super(Estimator, self).__init__(model_dir=model_dir, config=config)
+    if model_fn is not None:
+      # Check number of arguments of the given function matches requirements.
+      model_fn_args = _get_arguments(model_fn)
+      if params is not None and 'params' not in model_fn_args:
+        raise ValueError('Estimator\'s model_fn (%s) has less then 4 '
+                         'arguments, but not None params (%s) are passed.' %
+                         (model_fn, params))
+      if params is None and 'params' in model_fn_args:
+        logging.warning('Estimator\'s model_fn (%s) has includes params '
+                        'argument, but params are not passed to Estimator.' %
+                        model_fn)
     self._model_fn = model_fn
+    self.params = params
+
+  def _call_model_fn(self, features, targets, mode):
+    """Calls model function with support of 2, 3 or 4 arguments."""
+    model_fn_args = _get_arguments(self._model_fn)
+    if 'mode' in model_fn_args:
+      if 'params' in model_fn_args:
+        return self._model_fn(
+            features, targets, mode=mode, params=self.params)
+      else:
+        return self._model_fn(
+            features, targets, mode=mode)
+    return self._model_fn(features, targets)
 
   def _get_train_ops(self, features, targets):
     """Method that builds model graph and returns trainer ops.
@@ -615,7 +685,7 @@ class Estimator(BaseEstimator):
     Returns:
       Tuple of train `Operation` and loss `Tensor`.
     """
-    _, loss, train_op = self._model_fn(features, targets, ModeKeys.TRAIN)
+    _, loss, train_op = self._call_model_fn(features, targets, ModeKeys.TRAIN)
     return train_op, loss
 
   def _get_eval_ops(self, features, targets, metrics):
@@ -628,12 +698,20 @@ class Estimator(BaseEstimator):
     Args:
       features: `Tensor` or `dict` of `Tensor` objects.
       targets: `Tensor` or `dict` of `Tensor` objects.
-      metrics: `dict` of functions that take predictions and targets.
+      metrics: Dict of metric ops to run. If None, the default metric functions
+        are used; if {}, no metrics are used. If model has one output (i.e.,
+        returning single predction), keys are `str`, e.g. `'accuracy'` - just a
+        name of the metric that will show up in the logs / summaries.
+        Otherwise, keys are tuple of two `str`, e.g. `('accuracy', 'classes')`
+        - name of the metric and name of `Tensor` in the predictions to run
+        this metric on. Metric ops should support streaming, e.g., returning
+        update_op and value tensors. See more details in
+        ../../../../metrics/python/metrics/ops/streaming_metrics.py.
 
     Returns:
       metrics: `dict` of `Tensor` objects.
     """
-    predictions, loss, _ = self._model_fn(features, targets, ModeKeys.EVAL)
+    predictions, loss, _ = self._call_model_fn(features, targets, ModeKeys.EVAL)
     result = {'loss': loss}
     metrics = metrics or {}
     if isinstance(targets, dict) and len(targets) == 1:
@@ -663,5 +741,5 @@ class Estimator(BaseEstimator):
     """
     targets = tensor_signature.create_placeholders_from_signatures(
         self._targets_info)
-    predictions, _, _ = self._model_fn(features, targets, ModeKeys.INFER)
+    predictions, _, _ = self._call_model_fn(features, targets, ModeKeys.INFER)
     return predictions

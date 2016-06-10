@@ -151,6 +151,7 @@ from tensorflow.python.ops import state_ops
 
 from tensorflow.python.training.adadelta import AdadeltaOptimizer
 from tensorflow.python.training.adagrad import AdagradOptimizer
+from tensorflow.python.training.proximal_adagrad import ProximalAdagradOptimizer
 from tensorflow.python.training.adam import AdamOptimizer
 from tensorflow.python.training.ftrl import FtrlOptimizer
 from tensorflow.python.training.momentum import MomentumOptimizer
@@ -158,6 +159,7 @@ from tensorflow.python.training.moving_averages import ExponentialMovingAverage
 from tensorflow.python.training.optimizer import Optimizer
 from tensorflow.python.training.rmsprop import RMSPropOptimizer
 from tensorflow.python.training.gradient_descent import GradientDescentOptimizer
+from tensorflow.python.training.proximal_gradient_descent import ProximalGradientDescentOptimizer
 from tensorflow.python.training.sync_replicas_optimizer import SyncReplicasOptimizer
 
 # Utility classes for training.
@@ -171,6 +173,7 @@ from tensorflow.python.training.queue_runner import *
 from tensorflow.python.training import input as _input
 from tensorflow.python.training.input import *
 
+from tensorflow.python.training.basic_loops import basic_train_loop
 from tensorflow.python.training.device_setter import replica_device_setter
 from tensorflow.python.training.saver import generate_checkpoint_state_proto
 from tensorflow.python.training.saver import get_checkpoint_state

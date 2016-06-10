@@ -144,12 +144,10 @@ def atrous_conv2d(value, filters, rate, padding, name=None):
   with ops.op_scope([value, filters], name, "atrous_conv2d") as name:
     value = ops.convert_to_tensor(value, name="value")
     filters = ops.convert_to_tensor(filters, name="filters")
-    value_shape = value.get_shape()
-    filter_shape = filters.get_shape()
-    if not value_shape[3].is_compatible_with(filter_shape[2]):
+    if not value.get_shape()[3].is_compatible_with(filters.get_shape()[2]):
       raise ValueError(
           "value's input channels does not match filters' input channels, "
-          "{} != {}".format(value_shape[3], filter_shape[2]))
+          "{} != {}".format(value.get_shape()[3], filters.get_shape()[2]))
     if rate < 1:
       raise ValueError("rate {} cannot be less than one".format(rate))
 
@@ -164,42 +162,54 @@ def atrous_conv2d(value, filters, rate, padding, name=None):
     # to "VALID". The second is required so that the height and width of the
     # zero-padded value tensor are multiples of rate.
 
-    # Spatial dimensions of original input
-    in_height = int(value_shape[1])
-    in_width = int(value_shape[2])
-
-    # Spatial dimensions of the filters and the upsampled filters in which we
-    # introduce (rate - 1) zeros between consecutive filter values.
-    filter_height = int(filter_shape[0])
-    filter_width = int(filter_shape[1])
-    filter_height_up = filter_height + (filter_height - 1) * (rate - 1)
-    filter_width_up = filter_width + (filter_width - 1) * (rate - 1)
-
     # Padding required to reduce to "VALID" convolution
     if padding == "SAME":
+      # Handle filters whose shape is unknown during graph creation.
+      if filters.get_shape().is_fully_defined():
+        filter_shape = filters.get_shape().as_list()
+      else:
+        filter_shape = array_ops.shape(filters)
+      filter_height, filter_width = filter_shape[0], filter_shape[1]
+
+      # Spatial dimensions of the filters and the upsampled filters in which we
+      # introduce (rate - 1) zeros between consecutive filter values.
+      filter_height_up = filter_height + (filter_height - 1) * (rate - 1)
+      filter_width_up = filter_width + (filter_width - 1) * (rate - 1)
+
       pad_height = filter_height_up - 1
       pad_width = filter_width_up - 1
+
+      # When pad_height (pad_width) is odd, we pad more to bottom (right),
+      # following the same convention as conv2d().
+      pad_top = pad_height // 2
+      pad_bottom = pad_height - pad_top
+      pad_left = pad_width // 2
+      pad_right = pad_width - pad_left
     elif padding == "VALID":
-      pad_height = 0
-      pad_width = 0
+      pad_top = 0
+      pad_bottom = 0
+      pad_left = 0
+      pad_right = 0
     else:
       raise ValueError("Invalid padding")
-    # When padding is "SAME" and the pad_height (pad_width) is odd, we pad more
-    # to bottom (right), following the same convention as conv2d().
-    pad_top = pad_height // 2
-    pad_bottom = pad_height - pad_top
-    pad_left = pad_width // 2
-    pad_right = pad_width - pad_left
 
-    # More padding so that rate divides the height and width of the input value
-    in_height = in_height + pad_top + pad_bottom
-    in_width = in_width + pad_left + pad_right
-    pad_bottom_extra = 0 if in_height % rate == 0 else rate - in_height % rate
-    pad_right_extra = 0 if in_width % rate == 0 else rate - in_width % rate
+    # Handle input whose shape is unknown during graph creation.
+    if value.get_shape().is_fully_defined():
+      value_shape = value.get_shape().as_list()
+    else:
+      value_shape = array_ops.shape(value)
 
-    # The paddings argument to space_to_batch includes both padding components
+    in_height = value_shape[1] + pad_top + pad_bottom
+    in_width = value_shape[2] + pad_left + pad_right
+
+    # More padding so that rate divides the height and width of the input.
+    pad_bottom_extra = (rate - in_height % rate) % rate
+    pad_right_extra = (rate - in_width % rate) % rate
+
+    # The paddings argument to space_to_batch includes both padding components.
     space_to_batch_pad = [[pad_top, pad_bottom + pad_bottom_extra],
                           [pad_left, pad_right + pad_right_extra]]
+
     value = array_ops.space_to_batch(input=value,
                                      paddings=space_to_batch_pad,
                                      block_size=rate)
@@ -210,8 +220,9 @@ def atrous_conv2d(value, filters, rate, padding, name=None):
                               padding="VALID",
                               name=name)
 
-    # The crops argument to batch_to_space is just the extra padding component
+    # The crops argument to batch_to_space is just the extra padding component.
     batch_to_space_crop = [[0, pad_bottom_extra], [0, pad_right_extra]]
+
     value = array_ops.batch_to_space(input=value,
                                      crops=batch_to_space_crop,
                                      block_size=rate)
@@ -429,30 +440,65 @@ def sparse_softmax_cross_entropy_with_logits(logits, labels, name=None):
   on `logits` internally for efficiency.  Do not call this op with the
   output of `softmax`, as it will produce incorrect results.
 
-  `logits` must have the shape `[batch_size, num_classes]`
-  and dtype `float32` or `float64`.
-
-  `labels` must have the shape `[batch_size]` and dtype `int32` or `int64`.
+  A common use case is to have logits of shape `[batch_size, num_classes]` and
+  labels of shape `[batch_size]`. But higher dimensions are supported.
 
   Args:
-    logits: Unscaled log probabilities.
-    labels: Each entry `labels[i]` must be an index in `[0, num_classes)`. Other
-      values will result in a loss of 0, but incorrect gradient computations.
+    logits: Unscaled log probabilities of rank `r` and shape
+      `[d_0, d_1, ..., d_{r-2}, num_classes]` and dtype `float32` or `float64`.
+    labels: `Tensor` of shape `[d_0, d_1, ..., d_{r-2}]` and dtype `int32` or
+      `int64`. Each entry in `labels` must be an index in `[0, num_classes)`.
+      Other values will result in a loss of 0, but incorrect gradient
+      computations.
     name: A name for the operation (optional).
 
   Returns:
-    A 1-D `Tensor` of length `batch_size` of the same type as `logits` with the
-    softmax cross entropy loss.
+    A `Tensor` of the same shape as `labels` and of the same type as `logits`
+    with the softmax cross entropy loss.
+
+  Raises:
+    ValueError: If logits are scalars (need to have rank >= 1) or if the rank
+      of the labels is not equal to the rank of the labels minus one.
   """
   # TODO(pcmurray) Raise an error when the label is not an index in
   # [0, num_classes). Note: This could break users who call this with bad
   # labels, but disregard the bad results.
 
-  # The second output tensor contains the gradients.  We use it in
-  # _CrossEntropyGrad() in nn_grad but not here.
-  cost, unused_backprop = gen_nn_ops._sparse_softmax_cross_entropy_with_logits(
-      logits, labels, name=name)
-  return cost
+  # Reshape logits and labels to rank 2.
+  with ops.op_scope([labels, logits], name,
+                    "SparseSoftmaxCrossEntropyWithLogits"):
+    labels = ops.convert_to_tensor(labels)
+    logits = ops.convert_to_tensor(logits)
+
+    # Store label shape for result later.
+    labels_static_shape = labels.get_shape()
+    labels_shape = array_ops.shape(labels)
+    if logits.get_shape().ndims is not None and logits.get_shape().ndims == 0:
+      raise ValueError("Logits cannot be scalars - received shape %s.",
+                       logits.get_shape())
+    if logits.get_shape().ndims is not None and (
+        labels_static_shape.ndims is not None and
+        labels_static_shape.ndims != logits.get_shape().ndims - 1):
+      raise ValueError("Rank mismatch: Labels rank (received %s) should equal "
+                       "logits rank (received %s) - 1.",
+                       labels_static_shape.ndims, logits.get_shape().ndims)
+    # Check if no reshapes are required.
+    if logits.get_shape().ndims == 2:
+      cost, _ = gen_nn_ops._sparse_softmax_cross_entropy_with_logits(
+          logits, labels, name=name)
+      return cost
+    # Reshape logits to 2 dim, labels to 1 dim.
+    num_classes = array_ops.gather(array_ops.shape(logits),
+                                   array_ops.rank(logits) - 1)
+    logits = array_ops.reshape(logits, [-1, num_classes])
+    labels = array_ops.reshape(labels, [-1])
+    # The second output tensor contains the gradients.  We use it in
+    # _CrossEntropyGrad() in nn_grad but not here.
+    cost, _ = gen_nn_ops._sparse_softmax_cross_entropy_with_logits(
+        logits, labels, name=name)
+    cost = array_ops.reshape(cost, labels_shape)
+    cost.set_shape(labels_static_shape)
+    return cost
 
 
 @ops.RegisterShape("SparseSoftmaxCrossEntropyWithLogits")

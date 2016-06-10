@@ -3,12 +3,28 @@ Estimator class is the basic TensorFlow model trainer/evaluator.
 Parameters:
   model_fn: Model function, takes features and targets tensors or dicts of
             tensors and returns predictions and loss tensors.
-            E.g. `(features, targets) -> (predictions, loss, train_op)`.
+            Supports next three signatures for the function:
+              * `(features, targets) -> (predictions, loss, train_op)`
+              * `(features, targets, mode) -> (predictions, loss, train_op)`
+              * `(features, targets, mode, params) ->
+                  (predictions, loss, train_op)`
+            Where:
+              * `features` are single `Tensor` or `dict` of `Tensor`s
+                   (depending on data passed to `fit`),
+              * `targets` are `Tensor` or
+                  `dict` of `Tensor`s (for multi-head model).
+              * `mode` represents if this training, evaluation or prediction.
+                  See `ModeKeys` for example keys.
+              * `params` is a `dict` of hyperparameters. Will receive what is
+                  passed to Estimator in `params` parameter. This allows to
+                  configure Estimators from hyper parameter tunning.
   model_dir: Directory to save model parameters, graph and etc.
   config: Configuration object.
+  params: `dict` of hyper parameters that will be passed into `model_fn`.
+          Keys are names of parameters, values are basic python types.
 - - -
 
-#### `tf.contrib.learn.Estimator.__init__(model_fn=None, model_dir=None, config=None)` {#Estimator.__init__}
+#### `tf.contrib.learn.Estimator.__init__(model_fn=None, model_dir=None, config=None, params=None)` {#Estimator.__init__}
 
 
 
@@ -33,7 +49,14 @@ Evaluates given model with provided evaluation data.
 *  <b>`steps`</b>: Number of steps for which to evaluate model. If `None`, evaluate
     forever.
 *  <b>`metrics`</b>: Dict of metric ops to run. If None, the default metric functions
-    are used; if {}, no metrics are used.
+    are used; if {}, no metrics are used. If model has one output (i.e.,
+    returning single predction), keys are `str`, e.g. `'accuracy'` - just a
+    name of the metric that will show up in the logs / summaries.
+    Otherwise, keys are tuple of two `str`, e.g. `('accuracy', 'classes')`
+    - name of the metric and name of `Tensor` in the predictions to run
+    this metric on. Metric ops should support streaming, e.g., returning
+    update_op and value tensors. See more details in
+    ../../../../metrics/python/metrics/ops/streaming_metrics.py.
 *  <b>`name`</b>: Name of the evaluation if user needs to run multiple evaluation on
     different data sets, such as evaluate on training data vs test data.
 

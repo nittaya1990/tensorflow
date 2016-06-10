@@ -101,6 +101,10 @@ Node* RandomUniform(Graph* g, Node* input, DataType dtype);
 // Generates random unit normal distribution of the input shape.
 Node* RandomGaussian(Graph* g, Node* input, DataType dtype);
 
+// Generates random gamma distribution with the given shape and alpha[s].
+// Output dtype determined by alpha.
+Node* RandomGamma(Graph* g, Node* shape, Node* alpha);
+
 // Generates random parameters from the truncated standard normal distribution
 // of the nput shape
 Node* TruncatedNormal(Graph* g, Node* input, DataType dtype);
@@ -168,6 +172,9 @@ Node* GetSessionTensor(Graph* g, Node* in);
 // dimension to concatenate on, and the tensors to concatenate are
 // given in "tensors".
 Node* Concat(Graph* g, Node* concat_dim, gtl::ArraySlice<Node*> tensors);
+
+// Add a Relu node in "g".
+Node* Relu(Graph* g, Node* in);
 
 }  // end namespace graph
 }  // end namespace test

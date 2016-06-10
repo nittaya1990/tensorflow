@@ -839,6 +839,8 @@ class ControlFlowState(object):
     Note that this method modifies `between_op_list` and `between_ops`.
     """
     forward_ctxt = _GetWhileContext(op)
+    if forward_ctxt.grad_state:
+      raise TypeError("Second-order gradient for while loops not supported.")
     grad_state = self._map.get(forward_ctxt)
     if grad_state is None:
       # This is a new while loop so create a grad state for it.
@@ -891,7 +893,7 @@ class ControlFlowState(object):
       else:
         # Only the shape of value is needed for backprop.
         forward_ctxt.outer_context.Enter()
-        shape = array_ops.shape(value)
+        shape = array_ops.shape(val)
         forward_ctxt.outer_context.Exit()
         # Save the shape to a stack.
         history_shape = outer_grad_state.AddForwardAccumulator(shape)
@@ -900,7 +902,7 @@ class ControlFlowState(object):
         outer_grad_ctxt.Enter()
         real_shape = outer_grad_state.AddBackPropAccumulatedValue(
             history_shape, shape)
-        result = array_ops.zeros(real_shape, value.dtype)
+        result = array_ops.zeros(real_shape, val.dtype)
         outer_grad_ctxt.Exit()
     else:
       # This is not a nested loop.

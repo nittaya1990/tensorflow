@@ -19,6 +19,7 @@ limitations under the License.
 
 #include "tensorflow/core/common_runtime/process_util.h"
 #include "tensorflow/core/distributed_runtime/rpc/grpc_client_cq_tag.h"
+#include "tensorflow/core/distributed_runtime/rpc/grpc_worker_service_impl.h"
 #include "tensorflow/core/distributed_runtime/worker_cache_logger.h"
 #include "tensorflow/core/distributed_runtime/worker_interface.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -27,7 +28,6 @@ limitations under the License.
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/tracing.h"
 #include "tensorflow/core/protobuf/worker.pb.h"
-#include "tensorflow/core/protobuf/worker_service.grpc.pb.h"
 
 namespace tensorflow {
 
@@ -169,6 +169,9 @@ class GrpcRemoteWorker : public WorkerInterface {
                     AsyncMethod<RequestMessage, ResponseMessage> async_method,
                     StatusCallback done, CallOptions* call_opts = nullptr) {
     ::grpc::ClientContext* context = new ::grpc::ClientContext;
+    // The initialization and recovery protocols rely on blocking
+    // until we get a response.
+    context->set_fail_fast(false);
     if (call_opts) {
       call_opts->SetCancelCallback([context]() { context->TryCancel(); });
     }
