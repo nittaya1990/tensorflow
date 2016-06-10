@@ -785,10 +785,7 @@ Status DirectSession::GetOrCreateExecutors(
       }
     };
     params.node_outputs_cb = node_output_callback_;
-
-    if (do_optimize_graph_) {
-      optimizer.Optimize(lib, device, &partition_graph);
-    }
+    optimizer.Optimize(lib, device, &partition_graph);
 
     s = EnsureMemoryTypes(DeviceType(device->device_type()), device->name(),
                           partition_graph);

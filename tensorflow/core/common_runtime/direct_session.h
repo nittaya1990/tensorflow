@@ -272,7 +272,6 @@ class DirectSession : public Session {
   CostModelManager cost_model_manager_;
 
   Executor::Args::NodeOutputsCallback node_output_callback_ = nullptr;
-  bool do_optimize_graph_ = true;
 
   TF_DISALLOW_COPY_AND_ASSIGN(DirectSession);
 };
