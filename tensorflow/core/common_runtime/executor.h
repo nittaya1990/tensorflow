@@ -95,7 +95,7 @@ class Executor {
 
     // A callback that is invoked each time a node has finished executing.
     typedef std::function<Status(const string& node_name, const int output_slot,
-                                 const Tensor* tensor_value, const bool is_ref,
+                                 const Tensor* tensor, const bool is_ref,
                                  OpKernelContext* ctx)>
         NodeOutputsCallback;
     NodeOutputsCallback node_outputs_cb = nullptr;

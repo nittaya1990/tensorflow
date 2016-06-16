@@ -980,11 +980,6 @@ Status DirectSession::CreateGraphs(const BuildGraphOptions& options,
   return ::tensorflow::Status::OK();
 }
 
-void DirectSession::SetNodeOutputsCallback(
-    Executor::Args::NodeOutputsCallback callback) {
-  node_output_callback_ = callback;
-}
-
 DirectSession::RunState::~RunState() {
   if (rendez != nullptr) {
     if (!executors_done.HasBeenNotified()) {

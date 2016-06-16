@@ -44,6 +44,7 @@ limitations under the License.
 namespace tensorflow {
 
 class CostModel;
+class DebugGateway;
 class Device;
 
 class DirectSession : public Session {
@@ -86,11 +87,6 @@ class DirectSession : public Session {
   void ExportCostModels(CostModelManager::CostModelMap* cost_models) {
     cost_model_manager_.ExportCostModels(cost_models);
   }
-
- protected:
-  // Set the callback for node outputs, which will be invoked when a node's
-  // outputs become available (in ProcessOutputs()).
-  void SetNodeOutputsCallback(Executor::Args::NodeOutputsCallback callback);
 
  private:
   typedef DirectSession ME;
@@ -274,6 +270,8 @@ class DirectSession : public Session {
   Executor::Args::NodeOutputsCallback node_output_callback_ = nullptr;
 
   TF_DISALLOW_COPY_AND_ASSIGN(DirectSession);
+
+  friend class DebugGateway;
 };
 
 }  // end namespace tensorflow

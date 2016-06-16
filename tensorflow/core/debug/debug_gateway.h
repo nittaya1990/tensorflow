@@ -23,12 +23,10 @@ limitations under the License.
 
 namespace tensorflow {
 
-class DebugSession : public DirectSession {
+class DebugGateway {
  public:
-  DebugSession(const SessionOptions& options, const DeviceMgr* device_mgr);
-  ~DebugSession() override {
-    ClearHostTensors();
-  }
+  DebugGateway(DirectSession* session);
+  virtual ~DebugGateway() {}
 
   // Callback for node completion. The value of the output tensor is not
   // necessarily available when this callback is invoked. It may need to be
@@ -47,12 +45,9 @@ class DebugSession : public DirectSession {
       NodeValueCallback;
   void SetNodeValueCallback(NodeValueCallback callback);
 
-  Status Run(const std::vector<std::pair<string, Tensor> >& inputs,
-             const std::vector<string>& output_tensor_names,
-             const std::vector<string>& target_node_names,
-             std::vector<Tensor>* outputs) override;
-
  private:
+  DirectSession* session_;
+
   NodeCompletionCallback comp_cb_ = nullptr;
   NodeValueCallback val_cb_ = nullptr;
 

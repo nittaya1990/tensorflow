@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/core/debug/debug_session.h"
+#include "tensorflow/core/debug/debug_gateway.h"
 
 #include "tensorflow/core/common_runtime/device_factory.h"
 #include "tensorflow/core/common_runtime/session_factory.h"
@@ -21,13 +21,13 @@ limitations under the License.
 
 namespace tensorflow {
 
-DebugSession::DebugSession(const SessionOptions& options,
-                           const DeviceMgr* device_mgr)
-    : DirectSession(options, device_mgr), host_tensors_() {
-  // Supply node output callback
-  SetNodeOutputsCallback([this](const string& node_name, const int output_slot,
-                                const Tensor* tensor, const bool is_ref,
-                                OpKernelContext* ctx) {
+DebugGateway::DebugGateway(DirectSession* session)
+    : session_(session) {
+  session_->node_output_callback_ = [this](const string& node_name,
+                                           const int output_slot,
+                                           const Tensor* tensor,
+                                           const bool is_ref,
+                                           OpKernelContext* ctx) {
     if (comp_cb_ != nullptr) {
       comp_cb_(node_name, output_slot, is_ref);
     }
@@ -43,31 +43,18 @@ DebugSession::DebugSession(const SessionOptions& options,
     }
 
     return Status::OK();
-  });
+  };
 }
 
-void DebugSession::SetNodeCompletionCallback(NodeCompletionCallback callback) {
+void DebugGateway::SetNodeCompletionCallback(NodeCompletionCallback callback) {
   comp_cb_ = callback;
 }
 
-void DebugSession::SetNodeValueCallback(NodeValueCallback callback) {
+void DebugGateway::SetNodeValueCallback(NodeValueCallback callback) {
   val_cb_ = callback;
 }
 
-Status DebugSession::Run(const std::vector<std::pair<string, Tensor> >& inputs,
-                         const std::vector<string>& output_tensor_names,
-                         const std::vector<string>& target_node_names,
-                         std::vector<Tensor>* outputs) {
-  Status status = DirectSession::Run(inputs, output_tensor_names,
-                                     target_node_names, outputs);
-
-  // Clear any copied intermediate tensor values stored during the Run.
-  ClearHostTensors();
-
-  return status;
-}
-
-void DebugSession::CopyTensor(const string& node_name, const int output_slot,
+void DebugGateway::CopyTensor(const string& node_name, const int output_slot,
                               const Tensor* src_tensor, OpKernelContext* ctx,
                               CopyDoneCallback copy_done_cb) {
   Device* device = static_cast<Device*>(ctx->device());
@@ -104,7 +91,7 @@ void DebugSession::CopyTensor(const string& node_name, const int output_slot,
               copy_done_cb(cpu_tensor);
             } else {
               LOG(ERROR) << "Copying of device Tensor " << node_name
-                         << " to CPU failed.";
+                         << " to CPU for debugging failed.";
             }
           });
     } else {
@@ -120,7 +107,7 @@ void DebugSession::CopyTensor(const string& node_name, const int output_slot,
   }
 }
 
-void DebugSession::ClearHostTensors() {
+void DebugGateway::ClearHostTensors() {
   mutex_lock l(mu_);
   for (auto it = host_tensors_.begin(); it != host_tensors_.end(); ++it) {
     if (it->second != nullptr) {
@@ -130,33 +117,5 @@ void DebugSession::ClearHostTensors() {
 
   host_tensors_.clear();
 }
-
-class DebugSessionFactory : public SessionFactory {
- public:
-  DebugSessionFactory() {}
-
-  bool AcceptsOptions(const SessionOptions& options) override {
-    return options.target == "debug";
-  }
-
-  Session* NewSession(const SessionOptions& options) override {
-    // Must do this before the CPU allocator is created.
-    if (options.config.graph_options().build_cost_model() > 0) {
-      EnableCPUAllocatorFullStats(true);
-    }
-    std::vector<Device*> devices;
-    DeviceFactory::AddDevices(options, "/job:localhost/replica:0/task:0",
-                              &devices);
-    return new DebugSession(options, new DeviceMgr(devices));
-  }
-};
-
-class DebugSessionRegistrar {
- public:
-  DebugSessionRegistrar() {
-    SessionFactory::Register("DEBUG_SESSION", new DebugSessionFactory());
-  }
-};
-static DebugSessionRegistrar registrar;
 
 }  // namespace tensorflow

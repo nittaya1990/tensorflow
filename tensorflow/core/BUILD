@@ -582,17 +582,6 @@ tf_cuda_library(
     alwayslink = 1,
 )
 
-tf_cuda_library(
-    name = "debug_session",
-    copts = tf_copts(),
-    linkstatic = 1,
-    visibility = ["//visibility:public"],
-    deps = [
-        ":debug_session_internal",
-    ],
-    alwayslink = 1,
-)
-
 # -----------------------------------------------------------------------------
 # Public Android targets
 
@@ -1100,9 +1089,9 @@ tf_cuda_library(
 )
 
 tf_cuda_library(
-    name = "debug_session_internal",
-    srcs = ["debug/debug_session.cc"],
-    hdrs = ["debug/debug_session.h"],
+    name = "debug_gateway_internal",
+    srcs = ["debug/debug_gateway.cc"],
+    hdrs = ["debug/debug_gateway.h"],
     copts = tf_copts(),
     linkstatic = 1,
     deps = [
@@ -1572,14 +1561,14 @@ tf_cc_test(
 )
 
 tf_cc_test(
-    name = "debug/debug_session_test",
+    name = "debug/debug_gateway_test",
     size = "small",
     linkstatic = tf_kernel_tests_linkstatic(),
     deps = [
         ":core",
         ":core_cpu",
         ":core_cpu_internal",
-        ":debug_session_internal",
+        ":debug_gateway_internal",
         ":direct_session_internal",
         ":framework",
         ":framework_internal",
@@ -1606,7 +1595,7 @@ tf_cc_test(
 )
 
 tf_cc_test_gpu(
-    name = "debug/debug_session_gpu_test",
+    name = "debug/debug_gateway_gpu_test",
     size = "small",
     args = ["--heap_check=local"],
     linkstatic = tf_kernel_tests_linkstatic(),
@@ -1615,7 +1604,7 @@ tf_cc_test_gpu(
         ":all_kernels",
         ":core_cpu",
         ":core_cpu_internal",
-        ":debug_session",
+        ":debug_gateway_internal",
         ":direct_session",
         ":direct_session_internal",
         ":framework",

@@ -15,7 +15,7 @@ limitations under the License.
 
 #if GOOGLE_CUDA
 
-#include "tensorflow/core/debug/debug_session.h"
+#include "tensorflow/core/debug/debug_gateway.h"
 
 #include <algorithm>
 #include <unordered_map>
@@ -27,11 +27,8 @@ limitations under the License.
 namespace tensorflow {
 namespace {
 
-DebugSession* CreateSession() {
+DirectSession* CreateSession() {
   SessionOptions options;
-  // Specify to use DebugSession.
-  options.target = "debug";
-
   // Turn off graph optimizer so we can observe intermediate node states.
   options.config.mutable_graph_options()
       ->mutable_optimizer_options()
@@ -41,10 +38,10 @@ DebugSession* CreateSession() {
   (*options.config.mutable_device_count())["GPU"] = 1;
   options.config.set_allow_soft_placement(true);
 
-  return dynamic_cast<DebugSession*>(NewSession(options));
+  return dynamic_cast<DirectSession*>(NewSession(options));
 }
 
-class DebugSessionGPUMinusAXTest : public ::testing::Test {
+class SessionDebugGPUMinusAXTest : public ::testing::Test {
  public:
   void Initialize(std::initializer_list<float> a_values) {
     Graph graph(OpRegistry::Global());
@@ -80,10 +77,12 @@ class DebugSessionGPUMinusAXTest : public ::testing::Test {
   GraphDef def_;
 };
 
-TEST_F(DebugSessionGPUMinusAXTest, RunSimpleNetwork) {
+TEST_F(SessionDebugGPUMinusAXTest, RunSimpleNetwork) {
   Initialize({3, 2, -1, 0});
-  std::unique_ptr<DebugSession> session(CreateSession());
+  std::unique_ptr<DirectSession> session(CreateSession());
   ASSERT_TRUE(session != nullptr);
+
+  DebugGateway debug_gateway(session.get());
 
   // Supply completion and value callbacks
   mutex mu;
@@ -93,7 +92,7 @@ TEST_F(DebugSessionGPUMinusAXTest, RunSimpleNetwork) {
   // is_ref values recorded in completion callbacks
   std::vector<bool> is_refs_comp;
 
-  session->SetNodeCompletionCallback(
+  debug_gateway.SetNodeCompletionCallback(
       [&mu, &completed_nodes, &output_slots_comp, &is_refs_comp](
           const string& node_name, const int output_slot, const bool is_ref) {
         mutex_lock l(mu);
@@ -109,7 +108,7 @@ TEST_F(DebugSessionGPUMinusAXTest, RunSimpleNetwork) {
   // is_ref values recorded in value callbacks
   std::vector<bool> is_refs_val;
 
-  session->SetNodeValueCallback(
+  debug_gateway.SetNodeValueCallback(
       [&mu, &tensors_initialized, &tensor_vals, &output_slots_val,
        &is_refs_val](const string& node_name, const int output_slot,
                      const Tensor& tensor_value, const bool is_ref) {
