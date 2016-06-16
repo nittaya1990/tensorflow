@@ -205,7 +205,9 @@ class UnaryOpTest(tf.test.TestCase):
     self._compareBoth(x, np.vectorize(math.erf), tf.erf)
     self._compareBoth(x, np.vectorize(math.erfc), tf.erfc)
 
-    self._compareBothSparse(y, np.log, tf.log)
+    self._compareBothSparse(x, np.abs, tf.abs)
+    self._compareBothSparse(x, np.negative, tf.neg)
+    self._compareBothSparse(y, np.sign, tf.sign)
 
   def testFloatTanhEdge(self):
     x = np.arange(40, 40 + 6).reshape(6).astype(np.float32)
@@ -239,7 +241,9 @@ class UnaryOpTest(tf.test.TestCase):
     self._compareBoth(x, np.arccos, tf.acos)
     self._compareBoth(x, np.arctan, tf.atan)
 
-    self._compareBothSparse(x, np.log, tf.log)
+    self._compareBothSparse(x, np.abs, tf.abs)
+    self._compareBothSparse(x, np.negative, tf.neg)
+    self._compareBothSparse(x, np.sign, tf.sign)
 
   def testDoubleBasic(self):
     x = np.arange(-3, 3).reshape(1, 3, 2).astype(np.float64)
@@ -272,7 +276,9 @@ class UnaryOpTest(tf.test.TestCase):
     self._compareBoth(k, np.arccos, tf.acos)
     self._compareBoth(k, np.tan, tf.tan)
 
-    self._compareBothSparse(y, np.log, tf.log)
+    self._compareBothSparse(x, np.abs, tf.abs)
+    self._compareBothSparse(x, np.negative, tf.neg)
+    self._compareBothSparse(y, np.sign, tf.sign)
 
   def testHalfBasic(self):
     x = np.arange(-3, 3).reshape(1, 3, 2).astype(np.float16)
@@ -300,7 +306,9 @@ class UnaryOpTest(tf.test.TestCase):
     self._compareBoth(x, np.vectorize(math.erf), tf.erf)
     self._compareBoth(x, np.vectorize(math.erfc), tf.erfc)
 
-    self._compareBothSparse(y, np.log, tf.log)
+    self._compareBothSparse(x, np.abs, tf.abs)
+    self._compareBothSparse(x, np.negative, tf.neg)
+    self._compareBothSparse(y, np.sign, tf.sign)
 
   def testInt32Basic(self):
     x = np.arange(-6, 6, 2).reshape(1, 3, 2).astype(np.int32)
@@ -311,6 +319,10 @@ class UnaryOpTest(tf.test.TestCase):
     self._compareBoth(x, np.square, tf.square)
     self._compareCpu(x, np.sign, tf.sign)
 
+    self._compareBothSparse(x, np.abs, tf.abs)
+    self._compareBothSparse(x, np.negative, tf.neg)
+    self._compareBothSparse(x, np.sign, tf.sign)
+
   def testInt64Basic(self):
     x = np.arange(
         -6 << 40, 6 << 40, 2 << 40).reshape(1, 3, 2).astype(np.int64)
@@ -320,6 +332,10 @@ class UnaryOpTest(tf.test.TestCase):
     self._compareCpu(x, np.negative, _NEG)
     self._compareCpu(x, np.square, tf.square)
     self._compareCpu(x, np.sign, tf.sign)
+
+    self._compareBothSparse(x, np.abs, tf.abs)
+    self._compareBothSparse(x, np.negative, tf.neg)
+    self._compareBothSparse(x, np.sign, tf.sign)
 
   def testComplex64Basic(self):
     x = np.complex(1, 1) * np.arange(-3, 3).reshape(1, 3, 2).astype(
@@ -339,12 +355,15 @@ class UnaryOpTest(tf.test.TestCase):
     self._compareCpu(x, self._sigmoid, tf.sigmoid)
     self._compareCpu(x, np.sin, tf.sin)
     self._compareCpu(x, np.cos, tf.cos)
+
+    self._compareBothSparse(x, np.abs, tf.abs)
+    self._compareBothSparse(x, np.negative, tf.neg)
+
     # Numpy uses an incorrect definition of sign; use the right one instead.
     def complex_sign(x):
       return x / np.abs(x)
     self._compareCpu(y, complex_sign, tf.sign)
-
-    self._compareBothSparse(y, np.log, tf.log)
+    self._compareBothSparse(y, complex_sign, tf.sign)
 
   def testComplex128Basic(self):
     x = np.complex(1, 1) * np.arange(-3, 3).reshape(1, 3, 2).astype(
@@ -365,17 +384,19 @@ class UnaryOpTest(tf.test.TestCase):
     self._compareCpu(x, np.sin, tf.sin)
     self._compareCpu(x, np.cos, tf.cos)
 
+    self._compareBothSparse(x, np.abs, tf.abs)
+    self._compareBothSparse(x, np.negative, tf.neg)
+
     # Numpy uses an incorrect definition of sign; use the right one instead.
     def complex_sign(x):
       return x / np.abs(x)
     self._compareCpu(y, complex_sign, tf.sign)
-
-    self._compareBothSparse(y, np.log, tf.log)
+    self._compareBothSparse(y, complex_sign, tf.sign)
 
 
 class BinaryOpTest(tf.test.TestCase):
 
-  def _compareCpu(self, x, y, np_func, tf_func):
+  def _compareCpu(self, x, y, np_func, tf_func, also_compare_variables=False):
     np_ans = np_func(x, y)
     with self.test_session(use_gpu=False):
       inx = tf.convert_to_tensor(x)
@@ -386,10 +407,22 @@ class BinaryOpTest(tf.test.TestCase):
       np_left = tf_func(x, iny).eval()
       np_right = tf_func(inx, y).eval()
 
+      if also_compare_variables:
+        var_x = tf.Variable(x)
+        var_y = tf.Variable(y)
+        tf.initialize_all_variables().run()
+        print(type(x), type(y), type(var_x), type(var_y))
+        print(type(tf_func(x, var_y)), type(tf_func(var_x, y)))
+        np_var_left = tf_func(x, var_y).eval()
+        np_var_right = tf_func(var_x, y).eval()
+
     if np_ans.dtype != np.object:
       self.assertAllClose(np_ans, tf_cpu)
       self.assertAllClose(np_ans, np_left)
       self.assertAllClose(np_ans, np_right)
+      if also_compare_variables:
+        self.assertAllClose(np_ans, np_var_left)
+        self.assertAllClose(np_ans, np_var_right)
     self.assertShapeEqual(np_ans, out)
 
   def _compareGradientX(self, x, y, np_func, tf_func,
@@ -476,8 +509,8 @@ class BinaryOpTest(tf.test.TestCase):
     self.assertShapeEqual(np_ans, out)
     # TODO(zhifengc/ke): make gradient checker work on GPU.
 
-  def _compareBoth(self, x, y, np_func, tf_func):
-    self._compareCpu(x, y, np_func, tf_func)
+  def _compareBoth(self, x, y, np_func, tf_func, also_compare_variables=False):
+    self._compareCpu(x, y, np_func, tf_func, also_compare_variables)
     if x.dtype in (np.float16, np.float32, np.float64):
       if tf_func not in (_FLOORDIV, tf.floordiv, tf.igamma, tf.igammac, tf.zeta, tf.polygamma):
         self._compareGradientX(x, y, np_func, tf_func)
@@ -490,7 +523,7 @@ class BinaryOpTest(tf.test.TestCase):
   def testFloatBasic(self):
     x = np.linspace(-5, 20, 15).reshape(1, 3, 5).astype(np.float32)
     y = np.linspace(20, -5, 15).reshape(1, 3, 5).astype(np.float32)
-    self._compareBoth(x, y, np.add, tf.add)
+    self._compareBoth(x, y, np.add, tf.add, also_compare_variables=True)
     self._compareBoth(x, y, np.subtract, tf.sub)
     self._compareBoth(x, y, np.multiply, tf.mul)
     self._compareBoth(x, y + 0.1, np.true_divide, tf.truediv)
@@ -527,6 +560,19 @@ class BinaryOpTest(tf.test.TestCase):
     # gy is x's column summed up
     self.assertAllEqual(gy, np.array([3, 7]).
                         reshape(2, 1).astype(np.float32))
+
+  def testFloatVariableOverload(self):
+    x = np.array([1, 2, 3, 4]).reshape(2, 2).astype(np.int32)
+    y = np.array([1, 2]).reshape(2, 1).astype(np.int32)
+    var_x = tf.Variable(x)
+    var_y = tf.Variable(y)
+    with self.test_session() as sess:
+      sess.run([var_x.initializer, var_y.initializer])
+      left_result = (var_x * y).eval()
+      right_result = (x * var_y).eval()
+    np_result = x * y
+    self.assertAllEqual(np_result, left_result)
+    self.assertAllEqual(np_result, right_result)
 
   def testDoubleBasic(self):
     x = np.linspace(-5, 20, 15).reshape(1, 3, 5).astype(np.float64)
