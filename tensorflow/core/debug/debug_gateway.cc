@@ -46,6 +46,14 @@ DebugGateway::DebugGateway(DirectSession* session)
   };
 }
 
+DebugGateway::~DebugGateway() {
+  ClearHostTensors();
+
+  if (session_ != nullptr) {
+   session_->node_output_callback_ = nullptr;
+  }
+}
+
 void DebugGateway::SetNodeCompletionCallback(NodeCompletionCallback callback) {
   comp_cb_ = callback;
 }
@@ -69,7 +77,7 @@ void DebugGateway::CopyTensor(const string& node_name, const int output_slot,
   // later.
   {
     mutex_lock l(mu_);
-    host_tensors_.insert(std::make_pair(node_name, cpu_tensor));
+    host_tensors_[node_name] = cpu_tensor;
   }
 
   // Determine if the tensor is initialized properly.

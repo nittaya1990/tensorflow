@@ -26,7 +26,7 @@ namespace tensorflow {
 class DebugGateway {
  public:
   DebugGateway(DirectSession* session);
-  virtual ~DebugGateway() {}
+  virtual ~DebugGateway();
 
   // Callback for node completion. The value of the output tensor is not
   // necessarily available when this callback is invoked. It may need to be
@@ -45,6 +45,9 @@ class DebugGateway {
       NodeValueCallback;
   void SetNodeValueCallback(NodeValueCallback callback);
 
+  // Clear tensor values stored for debugging, on the host.
+  void ClearHostTensors();
+
  private:
   DirectSession* session_;
 
@@ -59,8 +62,6 @@ class DebugGateway {
   void CopyTensor(const string& node_name, const int output_slot,
                   const Tensor* src_tensor, OpKernelContext* ctx,
                   CopyDoneCallback copy_done_cb);
-
-  void ClearHostTensors();
 };
 
 }  // end namespace tensorflow
