@@ -271,6 +271,7 @@ class DirectSession : public Session {
 
   TF_DISALLOW_COPY_AND_ASSIGN(DirectSession);
 
+  std::unique_ptr<DebugGateway> debug_gateway;
   friend class DebugGateway;
 };
 

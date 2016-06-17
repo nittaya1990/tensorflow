@@ -29,6 +29,7 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/session_factory.h"
 #include "tensorflow/core/common_runtime/simple_placer.h"
 #include "tensorflow/core/common_runtime/step_stats_collector.h"
+#include "tensorflow/core/debug/debug_gateway.h"
 #include "tensorflow/core/framework/function.h"
 #include "tensorflow/core/framework/graph.pb.h"
 #include "tensorflow/core/framework/graph.pb_text.h"
@@ -186,6 +187,15 @@ DirectSession::DirectSession(const SessionOptions& options,
     }
     ++devices_added;
   }
+
+  // Create and configure DebugGateway instance
+  debug_gateway.reset(new DebugGateway(this));
+  debug_gateway->SetNodeValueCallback(
+      [](const string& node_name, const int output_slot,
+         const Tensor& tensor_value, const bool is_ref) {
+        std::cout << "||| Value of tensor " << node_name << ": " <<
+                     tensor_value.DebugString() << std::endl;  // DEBUG
+      });
 }
 
 DirectSession::~DirectSession() {

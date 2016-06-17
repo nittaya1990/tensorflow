@@ -992,7 +992,7 @@ tf_cuda_library(
         ":test_ops_kernels",
         "//tensorflow/core",
         "//tensorflow/core:all_kernels",
-        "//tensorflow/core:debug_gateway",
+        # "//tensorflow/core:debug_gateway",
         "//tensorflow/core:direct_session",
         "//tensorflow/core:lib",
         "//tensorflow/core:protos_cc",
