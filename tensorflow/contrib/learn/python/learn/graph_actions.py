@@ -123,7 +123,6 @@ def _run_with_monitors(session, step, tensors, feed_dict, monitors):
   return outputs, should_stop
 
 
-# TODO(ptucker): Add unit test.
 # TODO(wicke): switch to forced named kwargs
 def train(graph,
           output_dir,
@@ -191,14 +190,18 @@ def train(graph,
     The final loss value.
 
   Raises:
-    ValueError: If `global_step_tensor` is not provided. See
-        `tf.contrib.framework.get_global_step` for how we look it up if not
-        provided explicitly.
+    ValueError: If `output_dir`, `train_op`, `loss_op`, or `global_step_tensor`
+      is not provided. See `tf.contrib.framework.get_global_step` for how we
+      look up the latter if not provided explicitly.
     NanLossDuringTrainingError: If `fail_on_nan_loss` is `True`, and loss ever
-        evaluates to `NaN`.
+      evaluates to `NaN`.
   """
   if not output_dir:
-    raise ValueError('Output directory should be non-empty.')
+    raise ValueError('Output directory should be non-empty %s.' % output_dir)
+  if train_op is None:
+    raise ValueError('Missing train_op.')
+  if loss_op is None:
+    raise ValueError('Missing loss_op.')
 
   with graph.as_default():
     global_step_tensor = contrib_variables.assert_or_get_global_step(
@@ -265,8 +268,13 @@ def train(graph,
         start_time = time.time()
         feed_dict = feed_fn() if feed_fn is not None else None
 
-        outputs, should_stop = _run_with_monitors(
-            session, last_step + 1, [train_op, loss_op], feed_dict, monitors)
+        try:
+          outputs, should_stop = _run_with_monitors(
+              session, last_step + 1, [train_op, loss_op], feed_dict, monitors)
+        except errors.AbortedError as e:
+          # Happens when PS restarts, keep training.
+          logging.warning('Training got Aborted error. Keep training.')
+          continue
 
         loss_value = outputs[loss_op.name]
         if np.isnan(loss_value):
@@ -456,7 +464,12 @@ def evaluate(graph,
       that are the result of running eval_dict in the last step. `None` if no
       eval steps were run.
     global_step: The global step this evaluation corresponds to.
+
+  Raises:
+    ValueError: if `output_dir` is empty.
   """
+  if not output_dir:
+    raise ValueError('Output directory should be non-empty %s.' % output_dir)
   with graph.as_default():
     global_step_tensor = contrib_variables.assert_or_get_global_step(
         graph, global_step_tensor)
@@ -520,9 +533,15 @@ def evaluate(graph,
         if eval_results is None or step != eval_step:
           eval_results = session.run(eval_dict, feed_dict=feed_dict)
           eval_step = step
+        # Stop session first, before queue runners.
+        session.close()
+
         # Stop queue runners.
-        coord.request_stop()
-        coord.join(threads, stop_grace_period_secs=120)
+        try:
+          coord.request_stop()
+          coord.join(threads, stop_grace_period_secs=120)
+        except (RuntimeError, errors.CancelledError) as e:
+          logging.warning('Coordinator didn\'t stop cleanly: %s', e)
 
     # catch OutOfRangeError which is thrown when queue is out of data (and for
     # other reasons as well).

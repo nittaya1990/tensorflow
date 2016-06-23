@@ -4,20 +4,23 @@ Train a linear model to classify instances into one of multiple possible
 classes. When number of possible classes is 2, this is binary classification.
 
 Example:
-```python
-installed_app_id = sparse_column_with_hash_bucket("installed_id", 1e6)
-impression_app_id = sparse_column_with_hash_bucket("impression_id", 1e6)
 
-installed_x_impression = crossed_column(
-    [installed_app_id, impression_app_id])
+```python
+education = sparse_column_with_hash_bucket(column_name="education",
+                                           hash_bucket_size=1000)
+occupation = sparse_column_with_hash_bucket(column_name="occupation",
+                                            hash_bucket_size=1000)
+
+education_x_occupation = crossed_column(columns=[education, occupation],
+                                        hash_bucket_size=10000)
 
 # Estimator using the default optimizer.
 estimator = LinearClassifier(
-    feature_columns=[impression_app_id, installed_x_impression])
+    feature_columns=[occupation, education_x_occupation])
 
 # Or estimator using the FTRL optimizer with regularization.
 estimator = LinearClassifier(
-    feature_columns=[impression_app_id, installed_x_impression],
+    feature_columns=[occupation, education_x_occupation],
     optimizer=tf.train.FtrlOptimizer(
       learning_rate=0.1,
       l1_regularization_strength=0.001
@@ -25,15 +28,16 @@ estimator = LinearClassifier(
 
 # Or estimator using the SDCAOptimizer.
 estimator = LinearClassifier(
-   feature_columns=[impression_app_id, installed_x_impression],
+   feature_columns=[occupation, education_x_occupation],
    optimizer=tf.contrib.learn.SDCAOptimizer(
-     example_id_column='example_id', symmetric_l2_regularization=2.0
+     example_id_column='example_id',
+     symmetric_l2_regularization=2.0
    ))
 
 # Input builders
-def input_fn_train: # returns x, y, where y is a tensor of dimension 1
+def input_fn_train: # returns x, y
   ...
-def input_fn_eval: # returns x, y, where y is a tensor of dimension 1
+def input_fn_eval: # returns x, y
   ...
 estimator.fit(input_fn=input_fn_train)
 estimator.evaluate(input_fn=input_fn_eval)
@@ -53,7 +57,7 @@ Input of `fit` and `evaluate` should have following features,
       valued `Tensor`.
 - - -
 
-#### `tf.contrib.learn.LinearClassifier.__init__(feature_columns=None, model_dir=None, n_classes=2, weight_column_name=None, optimizer=None, gradient_clip_norm=None, config=None)` {#LinearClassifier.__init__}
+#### `tf.contrib.learn.LinearClassifier.__init__(feature_columns=None, model_dir=None, n_classes=2, weight_column_name=None, optimizer=None, gradient_clip_norm=None, enable_centered_bias=True, config=None)` {#LinearClassifier.__init__}
 
 Construct a `LinearClassifier` estimator object.
 
@@ -74,6 +78,9 @@ Construct a `LinearClassifier` estimator object.
 *  <b>`gradient_clip_norm`</b>: A `float` > 0. If provided, gradients are clipped
     to their global norm with this clipping ratio. See
     `tf.clip_by_global_norm` for more details.
+*  <b>`enable_centered_bias`</b>: A bool. If True, estimator will learn a centered
+    bias variable for each class. Rest of the model structure learns the
+    residual after centered bias.
 *  <b>`config`</b>: `RunConfig` object to configure the runtime settings.
 
 ##### Returns:
