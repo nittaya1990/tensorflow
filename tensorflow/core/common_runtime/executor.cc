@@ -1300,6 +1300,7 @@ Status ExecutorState::ProcessOutputs(const NodeItem& item, OpKernelContext* ctx,
                                           ctx->step_id(), i, to_log);
           }
 
+          // Experimental: debugger access to intermediate node outputs
           if (impl_->params_.node_outputs_cb != nullptr) {
             impl_->params_.node_outputs_cb(item.node->name(), i, out->ref, true,
                                            ctx);
@@ -1313,6 +1314,7 @@ Status ExecutorState::ProcessOutputs(const NodeItem& item, OpKernelContext* ctx,
                                           ctx->step_id(), i, out->val);
           }
 
+          // Experimental: debugger access to intermediate node outputs
           if (impl_->params_.node_outputs_cb != nullptr) {
             impl_->params_.node_outputs_cb(item.node->name(), i, &out->val,
                                            false, ctx);
