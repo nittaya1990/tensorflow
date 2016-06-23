@@ -203,6 +203,7 @@ import numpy as np
 import six.moves
 
 from tensorflow.python.framework import common_shapes
+from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import graph_util
 from tensorflow.python.framework import ops
@@ -303,6 +304,48 @@ def sign(x, name=None):
       return ops.SparseTensor(indices=x.indices, values=x_sign, shape=x.shape)
     else:
       return gen_math_ops.sign(x, name=name)
+
+
+def square(x, name=None):
+  """Computes square of x element-wise.
+
+  I.e., \\(y = x * x = x^2\\).
+
+  Args:
+    x: A `Tensor` or `SparseTensor`. Must be one of the following types: `half`,
+      `float32`, `float64`, `int32`, `int64`, `complex64`, `complex128`.
+    name: A name for the operation (optional).
+
+  Returns:
+    A `Tensor` or `SparseTensor`. Has the same type as `x`.
+  """
+  with ops.op_scope([x], name, "Square") as name:
+    if isinstance(x, ops.SparseTensor):
+      x_square = gen_math_ops.square(x.values, name=name)
+      return ops.SparseTensor(indices=x.indices, values=x_square, shape=x.shape)
+    else:
+      return gen_math_ops.square(x, name=name)
+
+
+def sqrt(x, name=None):
+  """Computes square root of x element-wise.
+
+  I.e., \\(y = \sqrt{x} = x^{1/2}\\).
+
+  Args:
+    x: A `Tensor` or `SparseTensor`. Must be one of the following types: `half`,
+      `float32`, `float64`, `complex64`, `complex128`.
+    name: A name for the operation (optional).
+
+  Returns:
+    A `Tensor` or `SparseTensor`, respectively. Has the same type as `x`.
+  """
+  with ops.op_scope([x], name, "Sqrt") as name:
+    if isinstance(x, ops.SparseTensor):
+      x_sqrt = gen_math_ops.sqrt(x.values, name=name)
+      return ops.SparseTensor(indices=x.indices, values=x_sqrt, shape=x.shape)
+    else:
+      return gen_math_ops.sqrt(x, name=name)
 
 
 def complex_abs(x, name=None):
@@ -527,9 +570,10 @@ def cast(x, dtype, name=None):
   Raises:
     TypeError: If `x` cannot be cast to the `dtype`.
   """
+  base_type = dtypes.as_dtype(dtype).base_dtype
   with ops.op_scope([x], name, "Cast") as name:
     if isinstance(x, ops.SparseTensor):
-      values_cast = cast(x.values, dtype, name=name)
+      values_cast = cast(x.values, base_type, name=name)
       return ops.SparseTensor(x.indices, values_cast, x.shape)
     else:
       # TODO(touts): Handle what Josh said.
@@ -538,9 +582,9 @@ def cast(x, dtype, name=None):
       # allows some conversions that cast() can't do, e.g.  casting numbers to
       # strings.
       x = ops.convert_to_tensor(x, name="x")
-      if x.dtype.base_dtype == dtype:
+      if x.dtype.base_dtype == base_type:
         return x
-      return gen_math_ops.cast(x, dtype, name=name)
+      return gen_math_ops.cast(x, base_type, name=name)
 
 
 def saturate_cast(value, dtype, name=None):
@@ -924,9 +968,16 @@ def _ReductionDims(x, reduction_indices):
   if reduction_indices is not None:
     return reduction_indices
   else:
-    # TODO(zongheng): remove this once rank() supports SparseTensor.
-    if isinstance(x, ops.SparseTensor):
-      return range(0, array_ops.size(x.shape))
+    # Fast path: avoid creating Rank and Range ops if ndims is known.
+    if isinstance(x, ops.Tensor) and x.get_shape().ndims is not None:
+      return constant_op.constant(np.arange(x.get_shape().ndims),
+                                  dtype=dtypes.int32)
+    if (isinstance(x, ops.SparseTensor) and
+        x.shape.get_shape().is_fully_defined()):
+      rank = x.shape.get_shape()[0].value  # sparse.shape is an 1-D tensor.
+      return constant_op.constant(np.arange(rank), dtype=dtypes.int32)
+
+    # Otherwise, we rely on Range and Rank to do the right thing at run-time.
     return range(0, array_ops.rank(x))
 
 
@@ -1352,6 +1403,35 @@ def _as_indexed_slices_list(inputs):
     else:
       casted_outputs.append(o)
   return casted_outputs
+
+
+def add_n(inputs, name=None):
+  """Adds all input tensors element-wise.
+
+  Args:
+    inputs: A list of `Tensor` objects, each with same shape and type.
+    name: A name for the operation (optional).
+
+  Returns:
+    A `Tensor` of same shape and type as the elements of `inputs`.
+
+  Raises:
+    ValueError: If `inputs` don't all have same shape and dtype or the shape
+    cannot be inferred.
+  """
+  if not inputs or not isinstance(inputs, (list, tuple)):
+    raise ValueError("inputs must be a list of at least one Tensor with the "
+                     "same dtype and shape")
+  inputs = ops.convert_n_to_tensor_or_indexed_slices(inputs)
+  if not all(isinstance(x, ops.Tensor) for x in inputs):
+    raise ValueError("inputs must be a list of at least one Tensor with the "
+                     "same dtype and shape")
+
+  if len(inputs) == 1:
+    if name:
+      return array_ops.identity(inputs[0], name=name)
+    return inputs[0]
+  return gen_math_ops._add_n(inputs, name=name)
 
 
 def accumulate_n(inputs, shape=None, tensor_dtype=None, name=None):

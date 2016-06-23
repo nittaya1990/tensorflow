@@ -36,20 +36,23 @@ class LinearClassifier(dnn_linear_combined.DNNLinearCombinedClassifier):
   classes. When number of possible classes is 2, this is binary classification.
 
   Example:
-  ```python
-  installed_app_id = sparse_column_with_hash_bucket("installed_id", 1e6)
-  impression_app_id = sparse_column_with_hash_bucket("impression_id", 1e6)
 
-  installed_x_impression = crossed_column(
-      [installed_app_id, impression_app_id])
+  ```python
+  education = sparse_column_with_hash_bucket(column_name="education",
+                                             hash_bucket_size=1000)
+  occupation = sparse_column_with_hash_bucket(column_name="occupation",
+                                              hash_bucket_size=1000)
+
+  education_x_occupation = crossed_column(columns=[education, occupation],
+                                          hash_bucket_size=10000)
 
   # Estimator using the default optimizer.
   estimator = LinearClassifier(
-      feature_columns=[impression_app_id, installed_x_impression])
+      feature_columns=[occupation, education_x_occupation])
 
   # Or estimator using the FTRL optimizer with regularization.
   estimator = LinearClassifier(
-      feature_columns=[impression_app_id, installed_x_impression],
+      feature_columns=[occupation, education_x_occupation],
       optimizer=tf.train.FtrlOptimizer(
         learning_rate=0.1,
         l1_regularization_strength=0.001
@@ -57,15 +60,16 @@ class LinearClassifier(dnn_linear_combined.DNNLinearCombinedClassifier):
 
   # Or estimator using the SDCAOptimizer.
   estimator = LinearClassifier(
-     feature_columns=[impression_app_id, installed_x_impression],
+     feature_columns=[occupation, education_x_occupation],
      optimizer=tf.contrib.learn.SDCAOptimizer(
-       example_id_column='example_id', symmetric_l2_regularization=2.0
+       example_id_column='example_id',
+       symmetric_l2_regularization=2.0
      ))
 
   # Input builders
-  def input_fn_train: # returns x, y, where y is a tensor of dimension 1
+  def input_fn_train: # returns x, y
     ...
-  def input_fn_eval: # returns x, y, where y is a tensor of dimension 1
+  def input_fn_eval: # returns x, y
     ...
   estimator.fit(input_fn=input_fn_train)
   estimator.evaluate(input_fn=input_fn_eval)
@@ -92,9 +96,9 @@ class LinearClassifier(dnn_linear_combined.DNNLinearCombinedClassifier):
                weight_column_name=None,
                optimizer=None,
                gradient_clip_norm=None,
+               enable_centered_bias=True,
                config=None):
-    """
-    Construct a `LinearClassifier` estimator object.
+    """Construct a `LinearClassifier` estimator object.
 
     Args:
       feature_columns: An iterable containing all the feature columns used by
@@ -111,6 +115,9 @@ class LinearClassifier(dnn_linear_combined.DNNLinearCombinedClassifier):
       gradient_clip_norm: A `float` > 0. If provided, gradients are clipped
         to their global norm with this clipping ratio. See
         `tf.clip_by_global_norm` for more details.
+      enable_centered_bias: A bool. If True, estimator will learn a centered
+        bias variable for each class. Rest of the model structure learns the
+        residual after centered bias.
       config: `RunConfig` object to configure the runtime settings.
 
     Returns:
@@ -123,6 +130,7 @@ class LinearClassifier(dnn_linear_combined.DNNLinearCombinedClassifier):
         linear_feature_columns=feature_columns,
         linear_optimizer=optimizer,
         gradient_clip_norm=gradient_clip_norm,
+        enable_centered_bias=enable_centered_bias,
         config=config)
 
   def _get_train_ops(self, features, targets):
@@ -171,20 +179,23 @@ class LinearRegressor(dnn_linear_combined.DNNLinearCombinedRegressor):
   observation of feature values.
 
   Example:
-  ```python
-  installed_app_id = sparse_column_with_hash_bucket("installed_id", 1e6)
-  impression_app_id = sparse_column_with_hash_bucket("impression_id", 1e6)
 
-  installed_x_impression = crossed_column(
-      [installed_app_id, impression_app_id])
+  ```python
+  education = sparse_column_with_hash_bucket(column_name="education",
+                                             hash_bucket_size=1000)
+  occupation = sparse_column_with_hash_bucket(column_name="occupation",
+                                              hash_bucket_size=1000)
+
+  education_x_occupation = crossed_column(columns=[education, occupation],
+                                          hash_bucket_size=10000)
 
   estimator = LinearRegressor(
-      feature_columns=[impression_app_id, installed_x_impression])
+      feature_columns=[occupation, education_x_occupation])
 
   # Input builders
-  def input_fn_train: # returns x, y, where y is a tensor of dimension 1
+  def input_fn_train: # returns x, y
     ...
-  def input_fn_eval: # returns x, y, where y is a tensor of dimension 1
+  def input_fn_eval: # returns x, y
     ...
   estimator.fit(input_fn=input_fn_train)
   estimator.evaluate(input_fn=input_fn_eval)
@@ -207,20 +218,18 @@ class LinearRegressor(dnn_linear_combined.DNNLinearCombinedRegressor):
   def __init__(self,
                feature_columns=None,
                model_dir=None,
-               n_classes=2,
                weight_column_name=None,
                optimizer=None,
                gradient_clip_norm=None,
+               enable_centered_bias=True,
                config=None):
-    """
-    Construct a `LinearRegressor` estimator object.
+    """Construct a `LinearRegressor` estimator object.
 
     Args:
       feature_columns: An iterable containing all the feature columns used by
         the model. All items in the set should be instances of classes derived
         from `FeatureColumn`.
-      model_dir: Directory to save model parameters, graph and etc.
-      n_classes: number of target classes. Default is binary classification.
+      model_dir: Directory to save model parameters, graph, etc.
       weight_column_name: A string defining feature column name representing
         weights. It is used to down weight or boost examples during training. It
         will be multiplied by the loss of the example.
@@ -229,6 +238,9 @@ class LinearRegressor(dnn_linear_combined.DNNLinearCombinedRegressor):
       gradient_clip_norm: A `float` > 0. If provided, gradients are clipped
         to their global norm with this clipping ratio. See
         `tf.clip_by_global_norm` for more details.
+      enable_centered_bias: A bool. If True, estimator will learn a centered
+        bias variable for each class. Rest of the model structure learns the
+        residual after centered bias.
       config: `RunConfig` object to configure the runtime settings.
 
     Returns:
@@ -240,6 +252,7 @@ class LinearRegressor(dnn_linear_combined.DNNLinearCombinedRegressor):
         linear_feature_columns=feature_columns,
         linear_optimizer=optimizer,
         gradient_clip_norm=gradient_clip_norm,
+        enable_centered_bias=enable_centered_bias,
         config=config)
 
   def _get_train_ops(self, features, targets):

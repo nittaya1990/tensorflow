@@ -226,12 +226,17 @@ py_binary(
 
 sh_test(
     name = "examples_test",
-    size = "medium",
+    size = "large",
     srcs = ["examples_test.sh"],
     data = [
         ":boston",
         ":iris",
         ":iris_custom_model",
+        ":text_classification",
+        ":text_classification_builtin_rnn_model",
+        ":text_classification_character_cnn",
+        ":text_classification_character_rnn",
+        ":text_classification_cnn",
     ],
 )
 

@@ -220,6 +220,12 @@ Neural Networks.  Most accept an `RNNCell`-subclassed object
 @@state_saving_rnn
 @@bidirectional_rnn
 
+## Conectionist Temporal Classification (CTC)
+
+@@ctc_loss
+@@ctc_greedy_decoder
+@@ctc_beam_search_decoder
+
 ## Evaluation
 
 The evaluation ops are useful for measuring the performance of a network.
@@ -294,6 +300,7 @@ from tensorflow.python.util.all_util import make_all
 # Bring more nn-associated functionality into this package.
 # go/tf-wildcard-import
 # pylint: disable=wildcard-import
+from tensorflow.python.ops.ctc_ops import *
 from tensorflow.python.ops.nn_ops import *
 from tensorflow.python.ops.candidate_sampling_ops import *
 from tensorflow.python.ops.embedding_ops import *
@@ -770,7 +777,8 @@ def moments(x, axes, shift=None, name=None, keep_dims=False):
                                                       shift=shift,
                                                       keep_dims=keep_dims,
                                                       name=name)
-    return normalize_moments(counts, m_ss, v_ss, shift, name=name)
+    with ops.control_dependencies([counts, m_ss, v_ss]):
+      return normalize_moments(counts, m_ss, v_ss, shift, name=name)
 
 
 def batch_normalization(x,
@@ -1186,14 +1194,10 @@ __all__.extend([
     "all_candidate_sampler",
     "batch_norm_with_global_normalization",
     "batch_normalization",
-    "bidirectional_rnn",
     "conv2d_backprop_filter",
     "conv2d_backprop_input",
     "depthwise_conv2d_native",
-    "dynamic_rnn",
     "lrn",
     "relu_layer",
-    "rnn",
-    "state_saving_rnn",
     "xw_plus_b",
 ])
