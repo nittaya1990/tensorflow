@@ -23,6 +23,8 @@ limitations under the License.
 
 namespace tensorflow {
 
+// Experimental. tfdb (TensorFlow Debugger): Gateway to intermediate node
+// outputs during Session Run calls. Currently limited to DirectSession.
 class DebugGateway {
  public:
   DebugGateway(DirectSession* session);
@@ -45,17 +47,25 @@ class DebugGateway {
       NodeValueCallback;
   void SetNodeValueCallback(NodeValueCallback callback);
 
+  // TODO(cais): Add whitelists for ops/tensors (e.g., {"A:0", "B:0"})
+  // for node completion callback (whitelist_comp_) and node value callback
+  // (whitelist_val_). If whitelist_comp_ is non-empty, the gateway will
+  // invoke the NodeCompletionCallback only for the nodes specified in the
+  // whitelist. And so forth for whitelist_val_.
+
   // Clear tensor values stored for debugging, on the host.
   void ClearHostTensors();
 
  private:
   DirectSession* session_;
+  // TODO(cais): DebugGateway currently supports only DirectSession. Add
+  // support for GrpcSession.
 
   NodeCompletionCallback comp_cb_ = nullptr;
   NodeValueCallback val_cb_ = nullptr;
 
   mutex mu_;
-  std::unordered_map<string, const Tensor*> host_tensors_ GUARDED_BY(mu_);
+  std::unordered_map<string, Tensor> host_tensors_ GUARDED_BY(mu_);
 
   typedef std::function<void(const Tensor* dst_tensor)> CopyDoneCallback;
 
@@ -67,3 +77,4 @@ class DebugGateway {
 }  // end namespace tensorflow
 
 #endif  // TENSORFLOW_DEBUG_DEBUG_SESSION_H_
+

@@ -267,7 +267,7 @@ class DirectSession : public Session {
   // Manages all the cost models for the graphs executed in this session.
   CostModelManager cost_model_manager_;
 
-  Executor::Args::NodeOutputsCallback node_output_callback_ = nullptr;
+  Executor::Args::NodeOutputsCallback node_outputs_callback_ = nullptr;
 
   TF_DISALLOW_COPY_AND_ASSIGN(DirectSession);
 
