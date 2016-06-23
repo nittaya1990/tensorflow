@@ -167,16 +167,16 @@ fi
 
 
 # Invoke script to perform distributed census_widendeep training
-CENSUS_WIDENDEEP_TEST_BIN="${DIR}/dist_census_widendeep_test.sh"
-if [[ ! -f "${CENSUS_WIDENDEEP_TEST_BIN}" ]]; then
+CENSUS_WIDENDEEP_DIST_TEST_BIN="${DIR}/dist_census_widendeep_test.sh"
+if [[ ! -f "${CENSUS_WIDENDEEP_DIST_TEST_BIN}" ]]; then
   die "FAILED to find distributed widen&deep client test script at "\
-"${CENSUS_WIDENDEEP_TEST_BIN}"
+"${CENSUS_WIDENDEEP_DIST_TEST_BIN}"
 fi
 
 echo "Performing distributed wide&deep (census) training through grpc "\
 "sessions @ ${GRPC_SERVER_URLS}..."
 
-"${CENSUS_WIDENDEEP_TEST_BIN}" "${GRPC_SERVER_URLS}" \
+"${CENSUS_WIDENDEEP_DIST_TEST_BIN}" "${GRPC_SERVER_URLS}" \
     --num-workers "${NUM_WORKERS}" \
     --num-parameter-servers "${NUM_PARAMETER_SERVERS}"
 

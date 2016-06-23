@@ -83,7 +83,7 @@ rm -rf ${MODEL_DIR} || \
     die "Failed to remove existing model directory: ${MODEL_DIR}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PY_PATH="${SCRIPT_DIR}/../census_widendeep.py"
+PY_PATH="${SCRIPT_DIR}/../python/census_widendeep.py"
 if [[ ! -f "${PY_PATH}" ]]; then
   echo "ERROR: Python file does not exist: ${PY_PATH}"
   exit 1
