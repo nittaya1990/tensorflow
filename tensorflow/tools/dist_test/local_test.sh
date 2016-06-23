@@ -46,7 +46,7 @@
 #
 # In addition, this script obeys the following environment variables:
 # TF_DIST_SERVER_DOCKER_IMAGE:  overrides the default docker image to launch
-#                                 TensorFlow (GRPC) servers with
+#                               TensorFlow (GRPC) servers with
 # TF_DIST_DOCKER_NO_CACHE:      do not use cache when building docker images
 
 

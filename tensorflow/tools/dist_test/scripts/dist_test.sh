@@ -165,6 +165,22 @@ else
   die "MNIST-replica test FAILED"
 fi
 
+
+# Invoke script to perform distributed census_widendeep training
+CENSUS_WIDENDEEP_TEST_BIN="${DIR}/dist_census_widendeep_test.sh"
+if [[ ! -f "${CENSUS_WIDENDEEP_TEST_BIN}" ]]; then
+  die "FAILED to find distributed widen&deep client test script at "\
+"${CENSUS_WIDENDEEP_TEST_BIN}"
+fi
+
+echo "Performing distributed wide&deep (census) training through grpc "\
+"sessions @ ${GRPC_SERVER_URLS}..."
+
+"${CENSUS_WIDENDEEP_TEST_BIN}" "${GRPC_SERVER_URLS}" \
+    --num-workers "${NUM_WORKERS}" \
+    --num-parameter-servers "${NUM_PARAMETER_SERVERS}"
+
+
 # Tear down current k8s TensorFlow cluster
 if [[ "${TEARDOWN_WHEN_DONE}" == "1" ]]; then
   echo "Tearing down k8s TensorFlow cluster..."
@@ -172,4 +188,6 @@ if [[ "${TEARDOWN_WHEN_DONE}" == "1" ]]; then
       echo "Cluster tear-down SUCCEEDED" || \
       die "Cluster tear-down FAILED"
 fi
+
 echo "SUCCESS: Test of distributed TensorFlow runtime PASSED"
+echo ""

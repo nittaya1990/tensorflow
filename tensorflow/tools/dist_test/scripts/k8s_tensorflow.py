@@ -55,6 +55,13 @@ spec:
           - --task_id={worker_id}
         ports:
         - containerPort: {port}
+        volumeMounts:
+        - name: shared
+          mountPath: /shared
+      volumes:
+      - name: shared
+        hostPath:
+          path: /shared
 """)
 WORKER_SVC = (
     """apiVersion: v1

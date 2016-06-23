@@ -108,11 +108,13 @@ echo "Worker URLs: ${WORKER_URLS}"
 export TF_DIST_GRPC_SERVER_URLS="${WORKER_URLS}"
 GRPC_ENV="TF_DIST_GRPC_SERVER_URLS=${TF_DIST_GRPC_SERVER_URLS}"
 
+# Command to launch clients from worker0
 CMD="${GRPC_ENV} /var/tf-k8s/scripts/dist_test.sh "\
 "--num-workers ${NUM_WORKERS} "\
 "--num-parameter-servers ${NUM_PARAMETER_SERVERS} "\
 "${SYNC_REPLICAS_FLAG}"
 
+# Launch clients from worker0
 docker exec ${DOCKER_CONTAINER_ID} /bin/bash -c "${CMD}"
 
 if [[ $? != "0" ]]; then
