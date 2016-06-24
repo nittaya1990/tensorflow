@@ -87,25 +87,28 @@ if [[ ! -f "${PY_PATH}" ]]; then
   exit 1
 fi
 
-# DEBUG(cais)
-CHIEF_GRPC_URL=$(echo "${WORKER_GRPC_URLS}" | awk '{print $1}')
-echo "CHIEF_GRPC_URL = ${CHIEF_GRPC_URL}"
+STAGGERED_START_DELAY_SEC=0
+WKR_LOG_PREFIX="/tmp/worker_"
 
-# Launch master and non-master workers
-echo python ${PY_PATH} \
-    --master_grpc_url="${CHIEF_GRPC_URL}" \
-    --num_parameter_servers="${N_PS}" \
-    --worker_index=0 \
-    --model_dir="${MODEL_DIR}" \
-    --output_dir="/shared/output" \
-    --train_steps=1000 \
-    --eval_steps=2 2>&1 | tee /tmp/worker_0.log
+IDX=0
+for WORKER_GRPC_URL in ${WORKER_GRPC_URLS}; do
+  if [[ ${IDX} != "0" ]]; then
+    sleep ${STAGGERED_START_DELAY_SEC}
+  fi
 
-python ${PY_PATH} \
-    --master_grpc_url="${CHIEF_GRPC_URL}" \
-    --num_parameter_servers="${N_PS}" \
-    --worker_index=0 \
-    --model_dir="${MODEL_DIR}" \
-    --output_dir="/shared/output" \
-    --train_steps=1000 \
-    --eval_steps=2 2>&1 | tee /tmp/worker_0.log
+  LOG_FILE="${WKR_LOG_PREFIX}${IDX}.log"
+  python ${PY_PATH} \
+      --master_grpc_url="${WORKER_GRPC_URL}" \
+      --num_parameter_servers="${N_PS}" \
+      --worker_index="${IDX}" \
+      --model_dir="${MODEL_DIR}" \
+      --output_dir="/shared/output" \
+      --train_steps=1000 \
+      --eval_steps=2 2>&1 | tee "${LOG_FILE}" &
+
+  echo "Worker ${IDX}: "
+  echo "  GRPC URL: ${WORKER_GRPC_URL}"
+  echo "  log file: ${LOG_FILE}"
+done
+
+wait
