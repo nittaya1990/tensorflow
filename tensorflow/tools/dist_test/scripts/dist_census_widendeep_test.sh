@@ -71,8 +71,6 @@ done
 
 echo "N_WORKERS = ${N_WORKERS}"
 echo "N_PS = ${N_PS}"
-echo "SYNC_REPLICAS = ${SYNC_REPLICAS}"
-echo "SYNC_REPLICAS_FLAG = ${SYNC_REPLICAS_FLAG}"
 
 # Dierctory to store the trained model and evaluation results.
 # The root (e.g., /shared) must be a directory shared among the workers.
@@ -94,8 +92,15 @@ CHIEF_GRPC_URL=$(echo "${WORKER_GRPC_URLS}" | awk '{print $1}')
 echo "CHIEF_GRPC_URL = ${CHIEF_GRPC_URL}"
 
 # Launch master and non-master workers
-# TODO(cais): The delay_start_sec=6 is hacky. Let only the master download the
-# data so this can get gotten rid of.
+echo python ${PY_PATH} \
+    --master_grpc_url="${CHIEF_GRPC_URL}" \
+    --num_parameter_servers="${N_PS}" \
+    --worker_index=0 \
+    --model_dir="${MODEL_DIR}" \
+    --output_dir="/shared/output" \
+    --train_steps=1000 \
+    --eval_steps=2 2>&1 | tee /tmp/worker_0.log
+
 python ${PY_PATH} \
     --master_grpc_url="${CHIEF_GRPC_URL}" \
     --num_parameter_servers="${N_PS}" \
@@ -103,4 +108,4 @@ python ${PY_PATH} \
     --model_dir="${MODEL_DIR}" \
     --output_dir="/shared/output" \
     --train_steps=1000 \
-    --eval_steps=2 2>&1 | tee /tmp/worker_0.log & \
+    --eval_steps=2 2>&1 | tee /tmp/worker_0.log

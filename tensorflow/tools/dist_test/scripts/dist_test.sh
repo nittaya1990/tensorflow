@@ -139,31 +139,31 @@ else
   fi
 fi
 
-# Invoke script to perform distributed MNIST training
-MNIST_DIST_TEST_BIN="${DIR}/dist_mnist_test.sh"
-if [[ ! -f "${MNIST_DIST_TEST_BIN}" ]]; then
-  die "FAILED to find distributed mnist client test script at "\
-"${MNIST_DIST_TEST_BIN}"
-fi
+# # Invoke script to perform distributed MNIST training
+# MNIST_DIST_TEST_BIN="${DIR}/dist_mnist_test.sh"
+# if [[ ! -f "${MNIST_DIST_TEST_BIN}" ]]; then
+#   die "FAILED to find distributed mnist client test script at "\
+# "${MNIST_DIST_TEST_BIN}"
+# fi
 
-echo "Performing distributed MNIST training through grpc sessions @ "\
-"${GRPC_SERVER_URLS}..."
+# echo "Performing distributed MNIST training through grpc sessions @ "\
+# "${GRPC_SERVER_URLS}..."
 
-SYNC_REPLICAS_FLAG=""
-if [[ ${SYNC_REPLICAS} == "1" ]]; then
-  SYNC_REPLICAS_FLAG="--sync-replicas"
-fi
+# SYNC_REPLICAS_FLAG=""
+# if [[ ${SYNC_REPLICAS} == "1" ]]; then
+#   SYNC_REPLICAS_FLAG="--sync-replicas"
+# fi
 
-"${MNIST_DIST_TEST_BIN}" "${GRPC_SERVER_URLS}" \
-    --num-workers "${NUM_WORKERS}" \
-    --num-parameter-servers "${NUM_PARAMETER_SERVERS}" \
-    ${SYNC_REPLICAS_FLAG}
+# "${MNIST_DIST_TEST_BIN}" "${GRPC_SERVER_URLS}" \
+#     --num-workers "${NUM_WORKERS}" \
+#     --num-parameter-servers "${NUM_PARAMETER_SERVERS}" \
+#     ${SYNC_REPLICAS_FLAG}
 
-if [[ $? == "0" ]]; then
-  echo "MNIST-replica test PASSED"
-else
-  die "MNIST-replica test FAILED"
-fi
+# if [[ $? == "0" ]]; then
+#   echo "MNIST-replica test PASSED"
+# else
+#   die "MNIST-replica test FAILED"
+# fi
 
 
 # Invoke script to perform distributed census_widendeep training

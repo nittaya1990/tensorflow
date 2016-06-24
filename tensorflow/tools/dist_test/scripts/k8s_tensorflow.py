@@ -112,6 +112,13 @@ spec:
           - --task_id={param_server_id}
         ports:
         - containerPort: {port}
+        volumeMounts:
+        - name: shared
+          mountPath: /shared
+      volumes:
+      - name: shared
+        hostPath:
+          path: /shared
 """)
 PARAM_SERVER_SVC = (
     """apiVersion: v1
