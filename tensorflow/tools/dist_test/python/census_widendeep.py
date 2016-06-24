@@ -21,7 +21,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-# import sys  # TODO(cais): Remove after dev
+import os
 import tempfile
 import urllib
 
@@ -34,7 +34,7 @@ from tensorflow.contrib.learn.python.learn.estimators import run_config
 
 # Define command-line flags
 flags = tf.app.flags
-flags.DEFINE_string("data_dir", "/tmp/census_wide_and_deep",
+flags.DEFINE_string("data_dir", "/tmp/census-data",
                     "Directory for storing the cesnsus data data")
 flags.DEFINE_string("model_dir", "/tmp/census_wide_and_deep_model",
                     "Directory for storing the model")
@@ -122,15 +122,23 @@ CATEGORICAL_COLUMNS = ["workclass", "education", "marital_status",
 CONTINUOUS_COLUMNS = ["age", "education_num", "capital_gain", "capital_loss",
                       "hours_per_week"]
 
-# TODO(cais): Cache file locally using the "maybe_download" approach.
 
-# Download the training and test data to temporary files.
-# Alternatively, you can download them yourself and change train_file and
-# test_file to your own paths.
-train_file = tempfile.NamedTemporaryFile()
-test_file = tempfile.NamedTemporaryFile()
-urllib.urlretrieve(TRAIN_DATA_URL, train_file.name)
-urllib.urlretrieve(TEST_DATA_URL, test_file.name)
+# Retrieve data
+train_file_path = os.path.join(FLAGS.data_dir, "adult.data")
+if os.path.isfile(train_file_path):
+  print("Loading training data from file: %s" % train_file_path)
+  train_file = open(train_file_path)
+else:
+  train_file = tempfile.NamedTemporaryFile()
+  urllib.urlretrieve(TRAIN_DATA_URL, train_file.name)
+
+test_file_path = os.path.join(FLAGS.data_dir, "adult.test")
+if os.path.isfile(test_file_path):
+  print("Loading test data from file: %s" % test_file_path)
+  test_file = open(test_file_path)
+else:
+  test_file = tempfile.NamedTemporaryFile()
+  urllib.urlretrieve(TEST_DATA_URL, test_file.name)
 
 # Read the training and test data sets into Pandas dataframe.
 df_train = pd.read_csv(train_file, names=COLUMNS, skipinitialspace=True)
