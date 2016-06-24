@@ -44,11 +44,13 @@ shift
 shift
 
 # Process optional command-line flags
+MODEL_NAME=""
 MODEL_NAME_FLAG=""
 SYNC_REPLICAS_FLAG=""
 while true; do
   if [[ "$1" == "--model-name" ]]; then
-    MODEL_NAME_FLAG="--model-name $2"
+    MODEL_NAME="$2"
+    MODEL_NAME_FLAG="--model-name ${MODEL_NAME}"
   elif [[ "$1" == "--sync-replicas" ]]; then
     SYNC_REPLICAS_FLAG="--sync-replicas"
   fi
@@ -61,8 +63,9 @@ done
 
 echo "NUM_WORKERS: ${NUM_WORKERS}"
 echo "NUM_PARAMETER_SERVERS: ${NUM_PARAMETER_SERVERS}"
-echo "MODEL_NAME_FLAG: ${MODEL_NAME_FLAG}"
-echo "SYNC_REPLICAS_FLAG: ${SYNC_REPLICAS_FLAG}"
+echo "MODEL_NAME: \"${MODEL_NAME}\""
+echo "MODEL_NAME_FLAG: \"${MODEL_NAME_FLAG}\""
+echo "SYNC_REPLICAS_FLAG: \"${SYNC_REPLICAS_FLAG}\""
 
 # Get current script directory
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
