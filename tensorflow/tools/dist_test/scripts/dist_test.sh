@@ -90,6 +90,7 @@ while true; do
   fi
 done
 
+echo "MODEL_NAME = \"MODEL_NAME\""
 echo "NUM_WORKERS = ${NUM_WORKERS}"
 echo "NUM_PARAMETER_SERVERS = ${NUM_PARAMETER_SERVERS}"
 echo "SETUP_CLUSTER_ONLY = ${SETUP_CLUSTER_ONLY}"
