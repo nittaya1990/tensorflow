@@ -91,12 +91,14 @@ STAGGERED_START_DELAY_SEC=0
 WKR_LOG_PREFIX="/tmp/worker_"
 
 IDX=0
+LOG_FILES=""
 for WORKER_GRPC_URL in ${WORKER_GRPC_URLS}; do
   if [[ ${IDX} != "0" ]]; then
     sleep ${STAGGERED_START_DELAY_SEC}
   fi
 
   LOG_FILE="${WKR_LOG_PREFIX}${IDX}.log"
+  LOG_FILES="${LOG_FILES} ${LOG_FILE}"
   python ${PY_PATH} \
       --master_grpc_url="${WORKER_GRPC_URL}" \
       --num_parameter_servers="${N_PS}" \
@@ -111,4 +113,19 @@ for WORKER_GRPC_URL in ${WORKER_GRPC_URLS}; do
   echo "  log file: ${LOG_FILE}"
 done
 
+# Wait for all concurrent jobs to finish
 wait
+
+# Print logs from the workers
+IDX=0
+for LOG_FILE in ${LOG_FILES}; do
+  echo "==================================================="
+  echo "===        Log file from worker ${IDX} / ${N_WORKERS}          ==="
+  cat "${LOG_FILE}"
+  echo "==================================================="
+  echo ""
+
+  ((IDX++))
+done
+
+echo "Test for distributed training of Census Wide & Deep model PASSED"

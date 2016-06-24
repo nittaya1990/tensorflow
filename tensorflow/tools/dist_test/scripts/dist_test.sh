@@ -195,9 +195,11 @@ test_CENSUS_WIDENDEEP() {
       --num-parameter-servers "${NUM_PARAMETER_SERVERS}"
 
   if [[ $? == "0" ]]; then
-    echo "Census Wide & Deep test PASSED\n"
+    echo "Census Wide & Deep test PASSED"
+    echo ""
   else
-    echo "Census Wide & Deep test FAILED\n"
+    echo "Census Wide & Deep test FAILED"
+    echo ""
     return 1
   fi
 }
