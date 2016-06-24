@@ -54,163 +54,212 @@ FLAGS = flags.FLAGS
 TRAIN_DATA_URL = "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data"
 TEST_DATA_URL = "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test"
 
+
 # Define features for the model
-#   1. Categorical base columns.
-gender = tf.contrib.layers.sparse_column_with_keys(
-    column_name="gender", keys=["female", "male"])
-race = tf.contrib.layers.sparse_column_with_keys(
-    column_name="race",
-    keys=["Amer-Indian-Eskimo",
-          "Asian-Pac-Islander",
-          "Black",
-          "Other",
-          "White"])
-education = tf.contrib.layers.sparse_column_with_hash_bucket(
-    "education", hash_bucket_size=1000)
-marital_status = tf.contrib.layers.sparse_column_with_hash_bucket(
-    "marital_status", hash_bucket_size=100)
-relationship = tf.contrib.layers.sparse_column_with_hash_bucket(
-    "relationship", hash_bucket_size=100)
-workclass = tf.contrib.layers.sparse_column_with_hash_bucket(
-    "workclass", hash_bucket_size=100)
-occupation = tf.contrib.layers.sparse_column_with_hash_bucket(
-    "occupation", hash_bucket_size=1000)
-native_country = tf.contrib.layers.sparse_column_with_hash_bucket(
-    "native_country", hash_bucket_size=1000)
-
-#   2. Continuous base columns.
-age = tf.contrib.layers.real_valued_column("age")
-age_buckets = tf.contrib.layers.bucketized_column(
-    age, boundaries=[18, 25, 30, 35, 40, 45, 50, 55, 60, 65])
-education_num = tf.contrib.layers.real_valued_column("education_num")
-capital_gain = tf.contrib.layers.real_valued_column("capital_gain")
-capital_loss = tf.contrib.layers.real_valued_column("capital_loss")
-hours_per_week = tf.contrib.layers.real_valued_column("hours_per_week")
-
-
-wide_columns = [
-    gender, native_country, education, occupation, workclass,
-    marital_status, relationship, age_buckets,
-    tf.contrib.layers.crossed_column([education, occupation],
-                                     hash_bucket_size=int(1e4)),
-    tf.contrib.layers.crossed_column([native_country, occupation],
-                                     hash_bucket_size=int(1e4)),
-    tf.contrib.layers.crossed_column([age_buckets, race, occupation],
-                                     hash_bucket_size=int(1e6))]
-
-deep_columns = [
-    tf.contrib.layers.embedding_column(workclass, dimension=8),
-    tf.contrib.layers.embedding_column(education, dimension=8),
-    tf.contrib.layers.embedding_column(marital_status, dimension=8),
-    tf.contrib.layers.embedding_column(gender, dimension=8),
-    tf.contrib.layers.embedding_column(relationship, dimension=8),
-    tf.contrib.layers.embedding_column(race, dimension=8),
-    tf.contrib.layers.embedding_column(native_country, dimension=8),
-    tf.contrib.layers.embedding_column(occupation, dimension=8),
-    age, education_num, capital_gain, capital_loss, hours_per_week]
-
-# Define the column names for the data sets.
-COLUMNS = ["age", "workclass", "fnlwgt", "education", "education_num",
-           "marital_status", "occupation", "relationship", "race", "gender",
-           "capital_gain", "capital_loss", "hours_per_week", "native_country",
-           "income_bracket"]
-LABEL_COLUMN = "label"
-CATEGORICAL_COLUMNS = ["workclass", "education", "marital_status",
-                       "occupation", "relationship", "race", "gender",
-                       "native_country"]
-CONTINUOUS_COLUMNS = ["age", "education_num", "capital_gain", "capital_loss",
-                      "hours_per_week"]
-
-
-# Retrieve data
-train_file_path = os.path.join(FLAGS.data_dir, "adult.data")
-if os.path.isfile(train_file_path):
-  print("Loading training data from file: %s" % train_file_path)
-  train_file = open(train_file_path)
-else:
-  train_file = tempfile.NamedTemporaryFile()
-  urllib.urlretrieve(TRAIN_DATA_URL, train_file.name)
-
-test_file_path = os.path.join(FLAGS.data_dir, "adult.test")
-if os.path.isfile(test_file_path):
-  print("Loading test data from file: %s" % test_file_path)
-  test_file = open(test_file_path)
-else:
-  test_file = tempfile.NamedTemporaryFile()
-  urllib.urlretrieve(TEST_DATA_URL, test_file.name)
-
-# Read the training and test data sets into Pandas dataframe.
-df_train = pd.read_csv(train_file, names=COLUMNS, skipinitialspace=True)
-df_test = pd.read_csv(test_file, names=COLUMNS, skipinitialspace=True,
-                      skiprows=1)
-
-# Remove the NaN values in the last rows of the tables
-df_train = df_train[:-1]
-df_test = df_test[:-1]
-
-df_train[LABEL_COLUMN] = (
-    df_train["income_bracket"].apply(lambda x: ">50K" in x)).astype(int)
-df_test[LABEL_COLUMN] = (
-    df_test["income_bracket"].apply(lambda x: ">50K" in x)).astype(int)
-
-
-# TODO(cais): Turn into minibatch feeder
-def input_fn(df):
-  """Input data function.
-
-  Creates a dictionary mapping from each continuous feature column name
-  (k) to the values of that column stored in a constant Tensor.
-
-  Args:
-    df: data feed
+def census_model_config():
+  """Configuration for the census Wide & Deep model.
 
   Returns:
-    feature columns and labels
+    columns: Column names to retrieve from the data source
+    label_column: Name of the label column
+    wide_columns: List of wide columns
+    deep_columns: List of deep columns
+    categorical_column_names: Names of the categorical columns
+    continuous_column_names: Names of the continuous columns
   """
+  # 1. Categorical base columns.
+  gender = tf.contrib.layers.sparse_column_with_keys(
+      column_name="gender", keys=["female", "male"])
+  race = tf.contrib.layers.sparse_column_with_keys(
+      column_name="race",
+      keys=["Amer-Indian-Eskimo",
+            "Asian-Pac-Islander",
+            "Black",
+            "Other",
+            "White"])
+  education = tf.contrib.layers.sparse_column_with_hash_bucket(
+      "education", hash_bucket_size=1000)
+  marital_status = tf.contrib.layers.sparse_column_with_hash_bucket(
+      "marital_status", hash_bucket_size=100)
+  relationship = tf.contrib.layers.sparse_column_with_hash_bucket(
+      "relationship", hash_bucket_size=100)
+  workclass = tf.contrib.layers.sparse_column_with_hash_bucket(
+      "workclass", hash_bucket_size=100)
+  occupation = tf.contrib.layers.sparse_column_with_hash_bucket(
+      "occupation", hash_bucket_size=1000)
+  native_country = tf.contrib.layers.sparse_column_with_hash_bucket(
+      "native_country", hash_bucket_size=1000)
 
-  continuous_cols = {k: tf.constant(df[k].values)
-                     for k in CONTINUOUS_COLUMNS}
-  # Creates a dictionary mapping from each categorical feature column name (k)
-  # to the values of that column stored in a tf.SparseTensor.
-  categorical_cols = {k: tf.SparseTensor(
-      indices=[[i, 0] for i in range(df[k].size)],
-      values=df[k].values,
-      shape=[df[k].size, 1])
-                      for k in CATEGORICAL_COLUMNS}
-  # Merges the two dictionaries into one.
-  feature_cols = dict(continuous_cols.items() + categorical_cols.items())
-  # Converts the label column into a constant Tensor.
-  label = tf.constant(df[LABEL_COLUMN].values)
-  # Returns the feature columns and the label.
-  return feature_cols, label
+  # 2. Continuous base columns.
+  age = tf.contrib.layers.real_valued_column("age")
+  age_buckets = tf.contrib.layers.bucketized_column(
+      age, boundaries=[18, 25, 30, 35, 40, 45, 50, 55, 60, 65])
+  education_num = tf.contrib.layers.real_valued_column("education_num")
+  capital_gain = tf.contrib.layers.real_valued_column("capital_gain")
+  capital_loss = tf.contrib.layers.real_valued_column("capital_loss")
+  hours_per_week = tf.contrib.layers.real_valued_column("hours_per_week")
+
+  wide_columns = [
+      gender, native_country, education, occupation, workclass,
+      marital_status, relationship, age_buckets,
+      tf.contrib.layers.crossed_column([education, occupation],
+                                       hash_bucket_size=int(1e4)),
+      tf.contrib.layers.crossed_column([native_country, occupation],
+                                       hash_bucket_size=int(1e4)),
+      tf.contrib.layers.crossed_column([age_buckets, race, occupation],
+                                       hash_bucket_size=int(1e6))]
+
+  deep_columns = [
+      tf.contrib.layers.embedding_column(workclass, dimension=8),
+      tf.contrib.layers.embedding_column(education, dimension=8),
+      tf.contrib.layers.embedding_column(marital_status, dimension=8),
+      tf.contrib.layers.embedding_column(gender, dimension=8),
+      tf.contrib.layers.embedding_column(relationship, dimension=8),
+      tf.contrib.layers.embedding_column(race, dimension=8),
+      tf.contrib.layers.embedding_column(native_country, dimension=8),
+      tf.contrib.layers.embedding_column(occupation, dimension=8),
+      age, education_num, capital_gain, capital_loss, hours_per_week]
+
+  # Define the column names for the data sets.
+  columns = ["age", "workclass", "fnlwgt", "education", "education_num",
+             "marital_status", "occupation", "relationship", "race", "gender",
+             "capital_gain", "capital_loss", "hours_per_week",
+             "native_country", "income_bracket"]
+  label_column = "label"
+  categorical_columns = ["workclass", "education", "marital_status",
+                         "occupation", "relationship", "race", "gender",
+                         "native_country"]
+  continuous_columns = ["age", "education_num", "capital_gain",
+                        "capital_loss", "hours_per_week"]
+
+  return (columns, label_column, wide_columns, deep_columns,
+          categorical_columns, continuous_columns)
 
 
-def _create_experiment_fn():
+class CensusDataSource(object):
+  """Source of census data."""
+
+  def __init__(self, data_dir, train_data_url, test_data_url,
+               columns, label_column,
+               categorical_columns, continuous_columns):
+    """Constructor of CensusDataSource.
+
+    Args:
+      data_dir: Directory to save/load the data files
+      train_data_url: URL from which the training data can be downloaded
+      test_data_url: URL from which the test data can be downloaded
+      columns: Columns to retrieve from the data files (A list of strings)
+      label_column: Name of the label column
+      categorical_columns: Names of the categorical columns (A list of strings)
+      continuous_columns: Names of the continuous columsn (A list of strings)
+    """
+
+    # Retrieve data, from disk (if available) or through web download.
+    train_file_path = os.path.join(data_dir, "adult.data")
+    if os.path.isfile(train_file_path):
+      print("Loading training data from file: %s" % train_file_path)
+      train_file = open(train_file_path)
+    else:
+      urllib.urlretrieve(train_data_url, train_file_path)
+
+    test_file_path = os.path.join(data_dir, "adult.test")
+    if os.path.isfile(test_file_path):
+      print("Loading test data from file: %s" % test_file_path)
+      test_file = open(test_file_path)
+    else:
+      test_file = tempfile.NamedTemporaryFile()
+      urllib.urlretrieve(test_data_url, test_file_path)
+
+    # Read the training and test data sets into Pandas dataframe.
+    self._df_train = pd.read_csv(train_file, names=columns,
+                                 skipinitialspace=True)
+    self._df_test = pd.read_csv(test_file, names=columns,
+                                skipinitialspace=True, skiprows=1)
+
+    # Remove the NaN values in the last rows of the tables
+    self._df_train = self._df_train[:-1]
+    self._df_test = self._df_test[:-1]
+
+    # Apply the threshold to get the labels.
+    income_thresh = lambda x: ">50K" in x
+    self._df_train[label_column] = (
+        self._df_train["income_bracket"].apply(income_thresh)).astype(int)
+    self._df_test[label_column] = (
+        self._df_test["income_bracket"].apply(income_thresh)).astype(int)
+
+    self.label_column = label_column
+    self.categorical_columns = categorical_columns
+    self.continuous_columns = continuous_columns
+
+  def input_train_fn(self):
+    return self._input_fn(self._df_train)
+
+  def input_test_fn(self):
+    return self._input_fn(self._df_test)
+
+  # TODO(cais): Turn into minibatch feeder
+  def _input_fn(self, df):
+    """Input data function.
+
+    Creates a dictionary mapping from each continuous feature column name
+    (k) to the values of that column stored in a constant Tensor.
+
+    Args:
+      df: data feed
+
+    Returns:
+      feature columns and labels
+    """
+    continuous_cols = {k: tf.constant(df[k].values)
+                       for k in self.continuous_columns}
+    # Creates a dictionary mapping from each categorical feature column name (k)
+    # to the values of that column stored in a tf.SparseTensor.
+    categorical_cols = {k: tf.SparseTensor(
+        indices=[[i, 0] for i in range(df[k].size)],
+        values=df[k].values,
+        shape=[df[k].size, 1])
+                        for k in self.categorical_columns}
+    # Merges the two dictionaries into one.
+    feature_cols = dict(continuous_cols.items() + categorical_cols.items())
+    # Converts the label column into a constant Tensor.
+    label = tf.constant(df[self.label_column].values)
+    # Returns the feature columns and the label.
+    return feature_cols, label
+
+
+def _create_experiment_fn(output_dir):  # pylint: disable=unused-argument
   """Experiment creation function."""
-  # TODO(cais): Sanity check on flags?
+  (columns, label_column, wide_columns, deep_columns, categorical_columns,
+   continuous_columns) = census_model_config()
+
+  census_data_source = CensusDataSource(FLAGS.data_dir,
+                                        TRAIN_DATA_URL, TEST_DATA_URL,
+                                        columns, label_column,
+                                        categorical_columns,
+                                        continuous_columns)
 
   config = run_config.RunConfig(master=FLAGS.master_grpc_url,
                                 num_ps_replicas=FLAGS.num_parameter_servers,
                                 task=FLAGS.worker_index)
 
   estimator = tf.contrib.learn.DNNLinearCombinedClassifier(
-      model_dir=FLAGS.model_dir,  # TODO(cais): How about the OSS distributed?
+      model_dir=FLAGS.model_dir,
       linear_feature_columns=wide_columns,
       dnn_feature_columns=deep_columns,
       dnn_hidden_units=[5],
-      config=config)  # cais: Use very small layer sizes to speed up testing.
+      config=config)
 
   return tf.contrib.learn.Experiment(
       estimator=estimator,
-      train_input_fn=lambda: input_fn(df_train),
-      eval_input_fn=lambda: input_fn(df_test),
+      train_input_fn=census_data_source.input_train_fn,
+      eval_input_fn=census_data_source.input_test_fn,
       train_steps=FLAGS.train_steps,
       eval_steps=FLAGS.eval_steps
   )
 
 
 def main(unused_argv):
-  print("Worker index: %d" % FLAGS.worker_index)  # DEBUG(cais)
+  print("Worker index: %d" % FLAGS.worker_index)
   learn_runner.run(experiment_fn=_create_experiment_fn)
 
 
