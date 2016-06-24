@@ -153,8 +153,9 @@ test_MNIST() {
   # Invoke script to perform distributed MNIST training
   MNIST_DIST_TEST_BIN="${DIR}/dist_mnist_test.sh"
   if [[ ! -f "${MNIST_DIST_TEST_BIN}" ]]; then
-    die "FAILED to find distributed mnist client test script at "\
+    echo "FAILED to find distributed mnist client test script at "\
   "${MNIST_DIST_TEST_BIN}"
+    return 1
   fi
 
   echo "Performing distributed MNIST training through grpc sessions @ "\
@@ -183,8 +184,9 @@ test_CENSUS_WIDENDEEP() {
   # Invoke script to perform distributed census_widendeep training
   CENSUS_WIDENDEEP_DIST_TEST_BIN="${DIR}/dist_census_widendeep_test.sh"
   if [[ ! -f "${CENSUS_WIDENDEEP_DIST_TEST_BIN}" ]]; then
-    die "FAILED to find distributed widen&deep client test script at "\
+    echo "FAILED to find distributed widen&deep client test script at "\
   "${CENSUS_WIDENDEEP_DIST_TEST_BIN}"
+    return 1
   fi
 
   echo "Performing distributed wide&deep (census) training through grpc "\
@@ -210,9 +212,8 @@ if [[ $(type -t "test_${MODEL_NAME}") != "function" ]]; then
 fi
 
 # Invoke test routine according to model name
-"test_${MODEL_NAME}"
-
-# TODO(cais): Check exit code
+"test_${MODEL_NAME}" || \
+    die "Test of distributed training of model ${MODEL_NAME} FAILED"
 
 # Tear down current k8s TensorFlow cluster
 if [[ "${TEARDOWN_WHEN_DONE}" == "1" ]]; then
