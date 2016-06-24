@@ -93,7 +93,7 @@ echo "CHIEF_GRPC_URL = ${CHIEF_GRPC_URL}"
 
 # DEBUG
 WORKE1_GRPC_URL=$(echo "${WORKER_GRPC_URLS}" | awk '{print $2}')
-echo "WORKE1_GRPC_URL = ${WORKE1_GRPC_URL}"
+echo "WORKER1_GRPC_URL = ${WORKE1_GRPC_URL}"
 
 # Launch master and non-master workers
 echo python ${PY_PATH} \
@@ -113,6 +113,8 @@ python ${PY_PATH} \
     --output_dir="/shared/census-widendeep-output" \
     --train_steps=1000 \
     --eval_steps=2 2>&1 | tee /tmp/worker_0.log &
+
+sleep 3
 python ${PY_PATH} \
     --master_grpc_url="${WORKE1_GRPC_URL}" \
     --num_parameter_servers="${N_PS}" \
@@ -120,4 +122,6 @@ python ${PY_PATH} \
     --model_dir="${MODEL_DIR}" \
     --output_dir="/shared/census-widendeep-output" \
     --train_steps=1000 \
-    --eval_steps=2 2>&1 | tee /tmp/worker_0.log
+    --eval_steps=2 2>&1 | tee /tmp/worker_1.log &
+
+wait
