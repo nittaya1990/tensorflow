@@ -36,7 +36,7 @@ RUN curl -O https://bootstrap.pypa.io/get-pip.py && \
     rm get-pip.py
 
 # Install python panda for the census wide&deep test
-sudo pip install--upgrade pandas==0.18.1
+RUN pip install --upgrade pandas==0.18.1
 
 # Install TensorFlow CPU version.
 RUN pip --no-cache-dir install \
