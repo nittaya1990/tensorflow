@@ -25,6 +25,8 @@ MAINTAINER Shanqing Cai <cais@google.com>
 RUN apt-get update && apt-get install -y \
         curl \
         dnsutils \
+        python \
+        python-dev \
         python-numpy \
         python-pip \
         && \
