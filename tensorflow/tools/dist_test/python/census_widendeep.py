@@ -123,7 +123,7 @@ CONTINUOUS_COLUMNS = ["age", "education_num", "capital_gain", "capital_loss",
                       "hours_per_week"]
 
 
-# Retrieve data
+# Retrieve training and test data
 train_file_path = os.path.join(FLAGS.data_dir, "adult.data")
 if os.path.isfile(train_file_path):
   train_file = open(train_file_path)
