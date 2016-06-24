@@ -95,33 +95,35 @@ echo "CHIEF_GRPC_URL = ${CHIEF_GRPC_URL}"
 WORKE1_GRPC_URL=$(echo "${WORKER_GRPC_URLS}" | awk '{print $2}')
 echo "WORKER1_GRPC_URL = ${WORKE1_GRPC_URL}"
 
-# Launch master and non-master workers
-echo python ${PY_PATH} \
-    --master_grpc_url="${CHIEF_GRPC_URL}" \
+OUTPUT_DIR="/shared/census-widendeep-output"
+mkdir -p ${OUTPUT_DIR} || \
+    die "ERROR: Failed to create output directory: ${OUTPUT_DIR}"
+
+STAGGERED_START_DELAY_SEC=6
+
+WKR_LOG_PREFIX="/tmp/worker_"
+
+# Launch chief and non-chief workers
+IDX=0
+for WORKER_GRPC_URL in ${WORKER_GRPC_URLS}; do
+  if [[ ${IDX} != "0" ]]; then
+    sleep ${STAGGERED_START_DELAY_SEC}
+  fi
+
+  python ${PY_PATH} \
+    --master_grpc_url="${WORKER_GRPC_URL}" \
     --num_parameter_servers="${N_PS}" \
     --worker_index=0 \
     --model_dir="${MODEL_DIR}" \
-    --output_dir="/shared/output" \
+    --output_dir="${OUTPUT_DIR}" \
     --train_steps=1000 \
-    --eval_steps=2 2>&1 | tee /tmp/worker_0.log # DEBUG
+    --eval_steps=2 2>&1 | tee ${WKR_LOG_PREFIX}${IDX}.log &
 
-python ${PY_PATH} \
-    --master_grpc_url="${CHIEF_GRPC_URL}" \
-    --num_parameter_servers="${N_PS}" \
-    --worker_index=0 \
-    --model_dir="${MODEL_DIR}" \
-    --output_dir="/shared/census-widendeep-output" \
-    --train_steps=1000 \
-    --eval_steps=2 2>&1 | tee /tmp/worker_0.log &
+  echo "Worker ${IDX}: "
+  echo "  GRPC URL: ${WORKER_GRPC_URL}"
+  echo "  log file: ${WKR_LOG_PREFIX}${IDX}.log"
 
-sleep 3
-python ${PY_PATH} \
-    --master_grpc_url="${WORKE1_GRPC_URL}" \
-    --num_parameter_servers="${N_PS}" \
-    --worker_index=1 \
-    --model_dir="${MODEL_DIR}" \
-    --output_dir="/shared/census-widendeep-output" \
-    --train_steps=1000 \
-    --eval_steps=2 2>&1 | tee /tmp/worker_1.log &
+  ((IDX++))
+done
 
 wait
