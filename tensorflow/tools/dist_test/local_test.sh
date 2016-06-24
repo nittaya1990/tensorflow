@@ -25,6 +25,7 @@
 #    and run the distributed test suite.
 #
 # Usage: local_test.sh [--leave-container-running]
+#                      [--model-name <MODEL_NAME>]
 #                      [--num-workers <NUM_WORKERS>]
 #                      [--num-parameter-servers <NUM_PARAMETER_SERVERS>]
 #                      [--sync-replicas]
@@ -64,6 +65,7 @@ get_container_id_by_image_name() {
 
 # Parse input arguments
 LEAVE_CONTAINER_RUNNING=0
+MODEL_NAME_FLAG=""
 NUM_WORKERS=2
 NUM_PARAMETER_SERVERS=2
 SYNC_REPLICAS=0
@@ -71,6 +73,8 @@ SYNC_REPLICAS=0
 while true; do
   if [[ $1 == "--leave-container-running" ]]; then
     LEAVE_CONTAINER_RUNNING=1
+  elif [[ $1 == "--model-name" ]]; then
+    MODEL_NAME_FLAG="--model-name $2"
   elif [[ $1 == "--num-workers" ]]; then
     NUM_WORKERS=$2
   elif [[ $1 == "--num-parameter-servers" ]]; then
@@ -175,6 +179,7 @@ fi
 
 docker exec ${DIND_ID} \
        /var/tf-k8s/local/test_local_tf_cluster.sh \
+       ${MODEL_NAME_FLAG} \
        ${NUM_WORKERS} ${NUM_PARAMETER_SERVERS} ${SYNC_REPLICAS_FLAG}
 TEST_RES=$?
 

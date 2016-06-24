@@ -51,7 +51,7 @@ flags.DEFINE_integer("eval_steps", 1, "Number of evaluation steps")
 FLAGS = flags.FLAGS
 
 
-# Constants
+# Constants: Data URLs
 TRAIN_DATA_URL = "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data"
 TEST_DATA_URL = "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test"
 

@@ -26,12 +26,16 @@
 #
 # Usage:
 #   dist_test.sh [--setup-cluster-only]
+#                [--model-name (MNIST | CENSUS_WIDENDEEP)]
 #                [--num-workers <NUM_WORKERS>]
 #                [--num-parameter-servers <NUM_PARAMETER_SERVERS>]
 #                [--sync-replicas]
 #
 # --setup-cluster-only:
 #   Lets the script only set up the k8s container network
+#
+# --model-name
+#   Name of the model to test. Default is MNIST.
 #
 # --num-workers <NUM_WORKERS>:
 #   Specifies the number of worker pods to start
@@ -61,13 +65,16 @@ die() {
 
 # Parse input arguments: number of workers
 # Default values:
+MODEL_NAME="MNIST"  # Model name, default is "MNIST"
 NUM_WORKERS=2  # Number of worker container
 NUM_PARAMETER_SERVERS=2  # Number of parameter servers
 SYNC_REPLICAS=0
 SETUP_CLUSTER_ONLY=0
 
 while true; do
-  if [[ "$1" == "--num-workers" ]]; then
+  if [[ "$1" == "--model-name" ]]; then
+    MODEL_NAME=$2
+  elif [[ "$1" == "--num-workers" ]]; then
     NUM_WORKERS=$2
   elif [[ "$1" == "--num-parameter-servers" ]]; then
     NUM_PARAMETER_SERVERS=$2
@@ -139,47 +146,66 @@ else
   fi
 fi
 
-# # Invoke script to perform distributed MNIST training
-# MNIST_DIST_TEST_BIN="${DIR}/dist_mnist_test.sh"
-# if [[ ! -f "${MNIST_DIST_TEST_BIN}" ]]; then
-#   die "FAILED to find distributed mnist client test script at "\
-# "${MNIST_DIST_TEST_BIN}"
-# fi
 
-# echo "Performing distributed MNIST training through grpc sessions @ "\
-# "${GRPC_SERVER_URLS}..."
+# Test routine for model "MNIST"
+test_MNIST() {
+  # Invoke script to perform distributed MNIST training
+  MNIST_DIST_TEST_BIN="${DIR}/dist_mnist_test.sh"
+  if [[ ! -f "${MNIST_DIST_TEST_BIN}" ]]; then
+    die "FAILED to find distributed mnist client test script at "\
+  "${MNIST_DIST_TEST_BIN}"
+  fi
 
-# SYNC_REPLICAS_FLAG=""
-# if [[ ${SYNC_REPLICAS} == "1" ]]; then
-#   SYNC_REPLICAS_FLAG="--sync-replicas"
-# fi
+  echo "Performing distributed MNIST training through grpc sessions @ "\
+  "${GRPC_SERVER_URLS}..."
 
-# "${MNIST_DIST_TEST_BIN}" "${GRPC_SERVER_URLS}" \
-#     --num-workers "${NUM_WORKERS}" \
-#     --num-parameter-servers "${NUM_PARAMETER_SERVERS}" \
-#     ${SYNC_REPLICAS_FLAG}
+  SYNC_REPLICAS_FLAG=""
+  if [[ ${SYNC_REPLICAS} == "1" ]]; then
+    SYNC_REPLICAS_FLAG="--sync-replicas"
+  fi
 
-# if [[ $? == "0" ]]; then
-#   echo "MNIST-replica test PASSED"
-# else
-#   die "MNIST-replica test FAILED"
-# fi
+  "${MNIST_DIST_TEST_BIN}" "${GRPC_SERVER_URLS}" \
+      --num-workers "${NUM_WORKERS}" \
+      --num-parameter-servers "${NUM_PARAMETER_SERVERS}" \
+      ${SYNC_REPLICAS_FLAG}
+
+  if [[ $? == "0" ]]; then
+    echo "MNIST-replica test PASSED\n"
+  else
+    echo "MNIST-replica test FAILED\n"
+    return 1
+  fi
+}
+
+# Test routine for model "CENSUS_WIDENDEEP"
+test_CENSUS_WIDENDEEP() {
+  # Invoke script to perform distributed census_widendeep training
+  CENSUS_WIDENDEEP_DIST_TEST_BIN="${DIR}/dist_census_widendeep_test.sh"
+  if [[ ! -f "${CENSUS_WIDENDEEP_DIST_TEST_BIN}" ]]; then
+    die "FAILED to find distributed widen&deep client test script at "\
+  "${CENSUS_WIDENDEEP_DIST_TEST_BIN}"
+  fi
+
+  echo "Performing distributed wide&deep (census) training through grpc "\
+  "sessions @ ${GRPC_SERVER_URLS}..."
+
+  "${CENSUS_WIDENDEEP_DIST_TEST_BIN}" "${GRPC_SERVER_URLS}" \
+      --num-workers "${NUM_WORKERS}" \
+      --num-parameter-servers "${NUM_PARAMETER_SERVERS}"
+
+  if [[ $? == "0" ]]; then
+    echo "Census Wide & Deep test PASSED\n"
+  else
+    echo "Census Wide & Deep test FAILED\n"
+    return 1
+  fi
+}
 
 
-# Invoke script to perform distributed census_widendeep training
-CENSUS_WIDENDEEP_DIST_TEST_BIN="${DIR}/dist_census_widendeep_test.sh"
-if [[ ! -f "${CENSUS_WIDENDEEP_DIST_TEST_BIN}" ]]; then
-  die "FAILED to find distributed widen&deep client test script at "\
-"${CENSUS_WIDENDEEP_DIST_TEST_BIN}"
-fi
+# Invoke test routine according to model name
+"test_${MODEL_NAME}"
 
-echo "Performing distributed wide&deep (census) training through grpc "\
-"sessions @ ${GRPC_SERVER_URLS}..."
-
-"${CENSUS_WIDENDEEP_DIST_TEST_BIN}" "${GRPC_SERVER_URLS}" \
-    --num-workers "${NUM_WORKERS}" \
-    --num-parameter-servers "${NUM_PARAMETER_SERVERS}"
-
+# TODO(cais): Check exit code
 
 # Tear down current k8s TensorFlow cluster
 if [[ "${TEARDOWN_WHEN_DONE}" == "1" ]]; then
