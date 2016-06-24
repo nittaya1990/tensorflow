@@ -25,7 +25,6 @@ import os
 import tempfile
 import urllib
 
-# import numpy as np  # TODO(cais): Remove if not used
 import pandas as pd
 import tensorflow as tf
 from tensorflow.contrib.learn.python.learn import learn_runner
@@ -51,7 +50,7 @@ flags.DEFINE_integer("eval_steps", 1, "Number of evaluation steps")
 FLAGS = flags.FLAGS
 
 
-# Constants: Data URLs
+# Constants: Data download URLs
 TRAIN_DATA_URL = "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data"
 TEST_DATA_URL = "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test"
 
@@ -186,7 +185,7 @@ def input_fn(df):
   return feature_cols, label
 
 
-def _create_experiment_fn(output_dir):
+def _create_experiment_fn():
   """Experiment creation function."""
   # TODO(cais): Sanity check on flags?
 

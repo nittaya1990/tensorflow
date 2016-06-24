@@ -34,6 +34,9 @@ DEFAULT_DOCKER_IMAGE = 'tensorflow/tf_grpc_test_server'
 DEFAULT_PORT = 2222
 
 # TODO(cais): Consider adding resource requests/limits to the pods.
+
+# Worker pods will mount host volume /shared, as a convenient way to create
+# shared storage among workers during local tests.
 WORKER_RC = (
     """apiVersion: v1
 kind: ReplicationController
@@ -112,13 +115,6 @@ spec:
           - --task_id={param_server_id}
         ports:
         - containerPort: {port}
-        volumeMounts:
-        - name: shared
-          mountPath: /shared
-      volumes:
-      - name: shared
-        hostPath:
-          path: /shared
 """)
 PARAM_SERVER_SVC = (
     """apiVersion: v1
