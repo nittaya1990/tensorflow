@@ -23,10 +23,8 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import tempfile
-import urllib
 
-import pandas as pd
+from six.moves import urllib
 import tensorflow as tf
 from tensorflow.contrib.learn.python.learn import learn_runner
 from tensorflow.contrib.learn.python.learn.estimators import run_config
@@ -168,14 +166,15 @@ class CensusDataSource(object):
       print("Loading test data from file: %s" % test_file_path)
       test_file = open(test_file_path)
     else:
-      test_file = tempfile.NamedTemporaryFile()
+      test_file = open(test_file_path)
       urllib.urlretrieve(test_data_url, test_file_path)
 
     # Read the training and test data sets into Pandas dataframe.
-    self._df_train = pd.read_csv(train_file, names=columns,
-                                 skipinitialspace=True)
-    self._df_test = pd.read_csv(test_file, names=columns,
-                                skipinitialspace=True, skiprows=1)
+    import pandas  # pylint: disable=g-import-not-at-top
+    self._df_train = pandas.read_csv(train_file, names=columns,
+                                     skipinitialspace=True)
+    self._df_test = pandas.read_csv(test_file, names=columns,
+                                    skipinitialspace=True, skiprows=1)
 
     # Remove the NaN values in the last rows of the tables
     self._df_train = self._df_train[:-1]
