@@ -111,21 +111,23 @@ for WORKER_GRPC_URL in ${WORKER_GRPC_URLS}; do
   echo "Worker ${IDX}: "
   echo "  GRPC URL: ${WORKER_GRPC_URL}"
   echo "  log file: ${LOG_FILE}"
+
+  ((IDX++))
 done
 
 # Wait for all concurrent jobs to finish
 wait
 
 # Print logs from the workers
-IDX=0
+ORD=1
 for LOG_FILE in ${LOG_FILES}; do
   echo "==================================================="
-  echo "===        Log file from worker ${IDX} / ${N_WORKERS}          ==="
+  echo "===        Log file from worker ${ORD} / ${N_WORKERS}          ==="
   cat "${LOG_FILE}"
   echo "==================================================="
   echo ""
 
-  ((IDX++))
+  ((ORD++))
 done
 
 echo "Test for distributed training of Census Wide & Deep model PASSED"

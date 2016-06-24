@@ -204,6 +204,10 @@ test_CENSUS_WIDENDEEP() {
   fi
 }
 
+# Validate model name
+if [[ $(type -t "test_${MODEL_NAME}") != "function" ]]; then
+  die "ERROR: Unsupported model name: \"${MODEL_NAME}\""
+fi
 
 # Invoke test routine according to model name
 "test_${MODEL_NAME}"
