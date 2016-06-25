@@ -14,7 +14,7 @@
 # limitations under the License.
 # ==============================================================================
 
-"""Distributed training and evaluation of a tf-learn/wide&deep model.
+"""Distributed training and evaluation of a wide&deep model.
 """
 
 

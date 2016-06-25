@@ -19,6 +19,6 @@ RUN echo 'PATH=/usr/local/go/bin:${PATH}' >> /root/.bashrc
 # Create shared storage on host. k8s pods (docker containers) created on the
 # host can share it and all have read/write access.
 RUN mkdir /shared
-RUN chmod 777 /shared
+RUN chmod 666 /shared
 
 ADD . /var/tf-k8s
