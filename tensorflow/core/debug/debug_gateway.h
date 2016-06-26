@@ -30,18 +30,28 @@ class DebugGateway {
   DebugGateway(DirectSession* session);
   virtual ~DebugGateway();
 
-  // Callback for node completion. The value of the output tensor is not
-  // necessarily available when this callback is invoked. It may need to be
-  // asynchronously copied from device (e.g., GPU) to host, hence the need
-  // for the NodeValueCallback below.
-  typedef std::function<void(const string& node_name, const int output_slot,
-                             const bool is_ref)>
+  // Callback for node completion. This callback is invoked only once for
+  // a node regardless of whether it has one or more outputs. The value(s) of
+  // the output tensor(s) are not necessarily available when this callback is
+  // invoked. They may need to be asynchronously copied from device (e.g.,
+  // GPU) to host, hence the need for the NodeValueCallback below.
+  //
+  // Args:
+  //   node_name: Name of the node that has just completed execution
+  //   any_output: Whether the node has any output(s)
+  typedef std::function<void(const string& node_name, const bool any_output)>
       NodeCompletionCallback;
   void SetNodeCompletionCallback(NodeCompletionCallback callback);
 
   // Callback for node value. This is invoked when the value of a node's
   // output tensor is available on the host, possibly after copying from
   // a device (e.g., GPU).
+  //
+  // Args:
+  //   node_name: Name of the node of which the output has become available
+  //   output_slot: Output slot number of the output Tensor
+  //   tensor_value: Reference to the tensor value
+  //   is_ref: Whether the output of the reference type
   typedef std::function<void(const string& node_name, const int output_slot,
                              const Tensor& tensor_value, const bool is_ref)>
       NodeValueCallback;
@@ -65,7 +75,7 @@ class DebugGateway {
   NodeValueCallback val_cb_ = nullptr;
 
   mutex mu_;
-  std::unordered_map<string, Tensor> host_tensors_ GUARDED_BY(mu_);
+  std::unordered_map<string, const Tensor*> host_tensors_ GUARDED_BY(mu_);
 
   typedef std::function<void(const Tensor* dst_tensor)> CopyDoneCallback;
 

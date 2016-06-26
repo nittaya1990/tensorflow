@@ -28,13 +28,19 @@ DebugGateway::DebugGateway(DirectSession* session)
                                             const Tensor* tensor,
                                             const bool is_ref,
                                             OpKernelContext* ctx) {
-    if (comp_cb_ != nullptr) {
-      comp_cb_(node_name, output_slot, is_ref);
+    if (comp_cb_ != nullptr && output_slot <= 0) {
+      // The node completion callback is invoked once for a node regardless
+      // of whether the node has zero, one or more outputs.
+      // The output_slot can be negative (-1, or kControlSlot) if
+      // node_outputs_callback_ is invoked for a node with no output. If that
+      // is the case, notify the callback that the node in question has no
+      // output.
+      comp_cb_(node_name, output_slot == 0);
     }
 
     // Copy tensor values (e.g., from GPU to host) only if the
     // value callback is not nullptr.
-    if (val_cb_ != nullptr) {
+    if (val_cb_ != nullptr && output_slot >= 0) {
       CopyTensor(
           node_name, output_slot, tensor, ctx,
           [this, node_name, output_slot, is_ref](const Tensor* copied_tensor) {
@@ -76,6 +82,18 @@ void DebugGateway::CopyTensor(const string& node_name, const int output_slot,
 
     string tensor_tag = strings::StrCat(node_name, ":", output_slot);
 
+    // Create copied tensor on host
+    Allocator* cpu_allocator = tensorflow::cpu_allocator();
+    Tensor* cpu_tensor =
+        new Tensor(cpu_allocator, src_tensor->dtype(), src_tensor->shape());
+
+    // Keep track of the host tensors created for copying so that they can
+    // be freed later.
+    {
+      mutex_lock l(mu_);
+      host_tensors_[tensor_tag] = cpu_tensor;
+    }
+
     // Determine if the tensor is on device (GPU) or host (CPU).
     // The second part of the check is necessary because even an OpKernel on
     // may have output tensors allocated on CPU.
@@ -83,18 +101,6 @@ void DebugGateway::CopyTensor(const string& node_name, const int output_slot,
         !ctx->output_alloc_attr(output_slot).on_host()) {
       // GPU tensors: Copy it to host (CPU).
       DeviceContext* device_ctxt = ctx->op_device_context();
-
-      // Create copied tensor on host
-      Allocator* cpu_allocator = tensorflow::cpu_allocator();
-      Tensor* cpu_tensor =
-          new Tensor(cpu_allocator, src_tensor->dtype(), src_tensor->shape());
-
-      // Keep track of the host tensors created for copying so that they can
-      // be freed later.
-      {
-        mutex_lock l(mu_);
-        host_tensors_[tensor_tag] = *cpu_tensor;
-      }
 
       // Copy device (e.g., GPU) tensor to host and when done, invoke the
       // callback.
@@ -109,12 +115,12 @@ void DebugGateway::CopyTensor(const string& node_name, const int output_slot,
             }
           });
     } else {
-      {
-        mutex_lock l(mu_);
-        host_tensors_[tensor_tag] = *src_tensor;
-      }
+      // For CPU tensors, copy the source tensor and own the copy, because the
+      // value callback may outlive the life time of the tensor and the tensor
+      // may shared the underlying buffer with other tensors.
+      cpu_tensor->UnsafeCopyFromInternal(*src_tensor, src_tensor->shape());
 
-      copy_done_cb(src_tensor);
+      copy_done_cb(cpu_tensor);
     }
   } else {
     // Tensor is not initialized: No need to copy.
@@ -124,6 +130,12 @@ void DebugGateway::CopyTensor(const string& node_name, const int output_slot,
 
 void DebugGateway::ClearHostTensors() {
   mutex_lock l(mu_);
+  for (auto it = host_tensors_.begin(); it != host_tensors_.end(); ++it) {
+    if (it->second != nullptr) {
+      delete it->second;
+    }
+  } 
+
   host_tensors_.clear();
 }
 
