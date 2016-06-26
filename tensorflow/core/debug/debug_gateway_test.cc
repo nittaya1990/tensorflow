@@ -81,19 +81,20 @@ TEST_F(SessionDebugMinusAXTest, RunSimpleNetwork) {
 
   // Supply completion and value callbacks
   mutex mu;
-  std::vector<string> completed_nodes;
-  // output_slot values recorded in completion callbacks
-  std::vector<int> output_slots_comp;
-  // is_ref values recorded in completion callbacks
-  std::vector<bool> is_refs_comp;
+  // Completed nodes with and without outputs
+  std::vector<string> completed_nodes_w_outputs;
+  std::vector<string> completed_nodes_wo_outputs;
+
 
   debug_gateway.SetNodeCompletionCallback(
-      [&mu, &completed_nodes, &output_slots_comp, &is_refs_comp](
-          const string& node_name, const int output_slot, const bool is_ref) {
+      [&mu, &completed_nodes_w_outputs, &completed_nodes_wo_outputs](
+          const string& node_name, const bool any_output) {
         mutex_lock l(mu);
-        completed_nodes.push_back(node_name);
-        output_slots_comp.push_back(output_slot);
-        is_refs_comp.push_back(is_ref);
+        if (any_output) {
+          completed_nodes_w_outputs.push_back(node_name);
+        } else {
+          completed_nodes_wo_outputs.push_back(node_name);
+        }
       });
 
   std::vector<bool> tensors_initialized;
@@ -125,6 +126,8 @@ TEST_F(SessionDebugMinusAXTest, RunSimpleNetwork) {
   Status s = session->Run(inputs, output_names, target_nodes, &outputs);
   TF_ASSERT_OK(s);
 
+  Env::Default()->SleepForMicroseconds(10 * 1000);
+
   ASSERT_EQ(1, outputs.size());
   // The first output should be initialized and have the correct
   // output.
@@ -133,38 +136,41 @@ TEST_F(SessionDebugMinusAXTest, RunSimpleNetwork) {
   EXPECT_FLOAT_EQ(5.0, mat(0, 0));
 
   // Verify the calling history of the completion callback
-  ASSERT_GE(completed_nodes.size(), 4);  // There may be added nodes.
-  ASSERT_EQ(completed_nodes.size(), output_slots_comp.size());
-  ASSERT_EQ(completed_nodes.size(), is_refs_comp.size());
+  // The following verifies each node with output(s) invoked the callback
+  // exactly once.
+  ASSERT_GE(completed_nodes_w_outputs.size(), 4);  // There may be added nodes.
 
-  ASSERT_NE(completed_nodes.end(),
-            std::find(completed_nodes.begin(), completed_nodes.end(), a_));
-  ASSERT_NE(completed_nodes.end(),
-            std::find(completed_nodes.begin(), completed_nodes.end(), x_));
-  ASSERT_NE(completed_nodes.end(),
-            std::find(completed_nodes.begin(), completed_nodes.end(), y_));
-  ASSERT_NE(completed_nodes.end(),
-            std::find(completed_nodes.begin(), completed_nodes.end(), y_neg_));
+  ASSERT_EQ(1, std::count(completed_nodes_w_outputs.begin(),
+                          completed_nodes_w_outputs.end(), a_));
+  ASSERT_EQ(1, std::count(completed_nodes_w_outputs.begin(),
+                          completed_nodes_w_outputs.end(), x_));
+  ASSERT_EQ(1, std::count(completed_nodes_w_outputs.begin(),
+                          completed_nodes_w_outputs.end(), y_));
+  ASSERT_EQ(1, std::count(completed_nodes_w_outputs.begin(),
+                          completed_nodes_w_outputs.end(), y_neg_));
 
-  // In this graph, there is no ref-type tensor.
-  ASSERT_EQ(is_refs_comp.end(),
-            std::find(is_refs_comp.begin(), is_refs_comp.end(), true));
+  // Apart from nodes with outputs, there are also no-output (control) nodes.
+  // They ought to be captured by the DebugGateway through
+  // NodeOutputCallback as well.
+  ASSERT_GT(completed_nodes_wo_outputs.size(), 0);
+
+  // The DebugGateway should have captured the _SOURCE and _SINK nodes.
+  ASSERT_LE(1, std::count(completed_nodes_wo_outputs.begin(),
+                          completed_nodes_wo_outputs.end(), "_SOURCE"));
+  ASSERT_LE(1, std::count(completed_nodes_wo_outputs.begin(),
+                          completed_nodes_wo_outputs.end(), "_SINK"));
 
   // Verify the calling history of the value callabck
-  ASSERT_EQ(completed_nodes.size(), tensors_initialized.size());
-
-  ASSERT_EQ(output_slots_comp.size(),
-            std::count_if(output_slots_comp.begin(), output_slots_comp.end(),
-                          [](int slot) { return slot == 0; }));
+  ASSERT_EQ(completed_nodes_w_outputs.size(), tensors_initialized.size());
 
   // In this graph, there is no uninitialized node value.
   ASSERT_EQ(
       tensors_initialized.end(),
       std::find(tensors_initialized.begin(), tensors_initialized.end(), false));
 
-  ASSERT_EQ(completed_nodes.size(), tensor_vals.size());
-  ASSERT_EQ(completed_nodes.size(), output_slots_val.size());
-  ASSERT_EQ(completed_nodes.size(), is_refs_val.size());
+  ASSERT_EQ(completed_nodes_w_outputs.size(), tensor_vals.size());
+  ASSERT_EQ(completed_nodes_w_outputs.size(), output_slots_val.size());
+  ASSERT_EQ(completed_nodes_w_outputs.size(), is_refs_val.size());
 
   // Verify the intermediate tensor values captured through the value callback
   auto mat_a = tensor_vals[a_].matrix<float>();

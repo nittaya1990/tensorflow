@@ -1260,6 +1260,14 @@ Status ExecutorState::ProcessOutputs(const NodeItem& item, OpKernelContext* ctx,
     device_context = dc_it->second;
   }
 
+  // Experimental: debugger (tfdb) access to intermediate node completion.
+  if (item.num_outputs == 0 && impl_->params_.node_outputs_cb != nullptr) {
+    // If the node has no output, invoke the callback with output slot set to
+    // -1, signifying that this is a no-output node.
+    impl_->params_.node_outputs_cb(item.node->name(), -1, nullptr, false,
+                                   ctx);
+  }
+
   for (int i = 0; i < item.num_outputs; ++i) {
     TensorValue val = ctx->release_output(i);
     if (*ctx->is_output_dead() || val.tensor == nullptr) {
@@ -1300,7 +1308,7 @@ Status ExecutorState::ProcessOutputs(const NodeItem& item, OpKernelContext* ctx,
                                           ctx->step_id(), i, to_log);
           }
 
-          // Experimental: debugger access to intermediate node outputs
+          // Experimental: debugger (tfdb) access to intermediate node outputs.
           if (impl_->params_.node_outputs_cb != nullptr) {
             impl_->params_.node_outputs_cb(item.node->name(), i, out->ref, true,
                                            ctx);
@@ -1314,7 +1322,7 @@ Status ExecutorState::ProcessOutputs(const NodeItem& item, OpKernelContext* ctx,
                                           ctx->step_id(), i, out->val);
           }
 
-          // Experimental: debugger access to intermediate node outputs
+          // Experimental: debugger access to intermediate node outputs.
           if (impl_->params_.node_outputs_cb != nullptr) {
             impl_->params_.node_outputs_cb(item.node->name(), i, &out->val,
                                            false, ctx);
