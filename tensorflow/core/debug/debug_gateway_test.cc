@@ -85,7 +85,6 @@ TEST_F(SessionDebugMinusAXTest, RunSimpleNetwork) {
   std::vector<string> completed_nodes_w_outputs;
   std::vector<string> completed_nodes_wo_outputs;
 
-
   debug_gateway.SetNodeCompletionCallback(
       [&mu, &completed_nodes_w_outputs, &completed_nodes_wo_outputs](
           const string& node_name, const bool any_output) {

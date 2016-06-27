@@ -87,4 +87,3 @@ class DebugGateway {
 }  // end namespace tensorflow
 
 #endif  // TENSORFLOW_DEBUG_DEBUG_SESSION_H_
-

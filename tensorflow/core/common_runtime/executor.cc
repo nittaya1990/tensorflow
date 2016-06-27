@@ -1264,8 +1264,7 @@ Status ExecutorState::ProcessOutputs(const NodeItem& item, OpKernelContext* ctx,
   if (item.num_outputs == 0 && impl_->params_.node_outputs_cb != nullptr) {
     // If the node has no output, invoke the callback with output slot set to
     // -1, signifying that this is a no-output node.
-    impl_->params_.node_outputs_cb(item.node->name(), -1, nullptr, false,
-                                   ctx);
+    impl_->params_.node_outputs_cb(item.node->name(), -1, nullptr, false, ctx);
   }
 
   for (int i = 0; i < item.num_outputs; ++i) {
