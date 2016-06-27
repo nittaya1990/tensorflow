@@ -21,13 +21,10 @@ limitations under the License.
 
 namespace tensorflow {
 
-DebugGateway::DebugGateway(DirectSession* session)
-    : session_(session) {
-  session_->node_outputs_callback_ = [this](const string& node_name,
-                                            const int output_slot,
-                                            const Tensor* tensor,
-                                            const bool is_ref,
-                                            OpKernelContext* ctx) {
+DebugGateway::DebugGateway(DirectSession* session) : session_(session) {
+  session_->node_outputs_callback_ = [this](
+      const string& node_name, const int output_slot, const Tensor* tensor,
+      const bool is_ref, OpKernelContext* ctx) {
     if (comp_cb_ != nullptr && output_slot <= 0) {
       // The node completion callback is invoked once for a node regardless
       // of whether the node has zero, one or more outputs.
@@ -134,7 +131,7 @@ void DebugGateway::ClearHostTensors() {
     if (it->second != nullptr) {
       delete it->second;
     }
-  } 
+  }
 
   host_tensors_.clear();
 }
