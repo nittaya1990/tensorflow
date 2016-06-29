@@ -37,6 +37,7 @@ apt-get install -y --no-install-recommends \
     python-virtualenv \
     python3-dev \
     python3-pip \
+    rsync \
     sudo \
     swig \
     unzip \
