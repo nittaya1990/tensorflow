@@ -3,7 +3,7 @@ FROM nvidia/cuda:7.5-cudnn4-devel
 MAINTAINER Craig Citro <craigcitro@google.com>
 
 # Pick up some TF dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         libfreetype6-dev \
         libpng12-dev \

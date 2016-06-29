@@ -22,7 +22,7 @@ FROM ubuntu:14.04
 MAINTAINER Shanqing Cai <cais@google.com>
 
 # Pick up some TF dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         python-numpy \
         python-pip \

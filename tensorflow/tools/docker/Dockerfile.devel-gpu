@@ -2,7 +2,7 @@ FROM nvidia/cuda:7.5-cudnn4-devel
 
 MAINTAINER Craig Citro <craigcitro@google.com>
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         curl \
         git \
@@ -50,7 +50,7 @@ COPY run_jupyter.sh /
 #   https://bugs.launchpad.net/trusty-backports/+bug/1368094
 RUN add-apt-repository -y ppa:openjdk-r/ppa && \
     apt-get update && \
-    apt-get install -y openjdk-8-jdk openjdk-8-jre-headless && \
+    apt-get install -y --no-install-recommends openjdk-8-jdk openjdk-8-jre-headless && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
