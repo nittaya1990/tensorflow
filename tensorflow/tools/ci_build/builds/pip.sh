@@ -194,6 +194,8 @@ for PACKAGE in ${INSTALL_EXTRA_PIP_PACKAGES}; do
       die "pip install ${PACKAGE} FAILED"
 done
 
+exit 0  # DEBUG
+
 # If NO_TEST_ON_INSTALL is set to any non-empty value, skip all Python
 # tests-on-install and exit right away
 if [[ ! -z "${NO_TEST_ON_INSTALL}" ]] &&

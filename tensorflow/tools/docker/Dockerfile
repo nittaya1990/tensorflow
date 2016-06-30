@@ -4,11 +4,14 @@ MAINTAINER Craig Citro <craigcitro@google.com>
 
 # Pick up some TF dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
         curl \
         libfreetype6-dev \
         libpng12-dev \
         libzmq3-dev \
         pkg-config \
+        python \
+        python-dev \
         python-numpy \
         python-pip \
         python-scipy \
