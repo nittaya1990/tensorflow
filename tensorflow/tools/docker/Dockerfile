@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python-numpy \
         python-pip \
         python-scipy \
+        rsync \
+        unzip \
         && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*

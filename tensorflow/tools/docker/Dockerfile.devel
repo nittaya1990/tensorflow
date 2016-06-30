@@ -13,8 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python-dev \
         python-numpy \
         python-pip \
+        rsync \
         software-properties-common \
         swig \
+        unzip \
         zip \
         zlib1g-dev \
         && \
