@@ -205,6 +205,112 @@ TEST_F(SessionDebugGPUMinusAXTest, RunSimpleNetwork) {
             std::find(is_refs_val.begin(), is_refs_val.end(), true));
 }
 
+TEST_F(SessionDebugGPUMinusAXTest, RunSimpleNetworkWithTwoDebugNodesInserted) {
+  // Tensor contains one count of NaN
+  Initialize({3, std::numeric_limits<float>::quiet_NaN(), -1, 0});
+  std::unique_ptr<DirectSession> session(CreateSession());
+  ASSERT_TRUE(session != nullptr);
+
+  DebugGateway debug_gateway(session.get());
+
+  // Create debug tensor watch options with two debug ops:
+  // DebugIdentity and DebugNanCount
+  RunOptions run_opts;
+  const string debug_identity = "DebugIdentity";
+  const string debug_nan_count = "DebugNanCount";
+  DebugTensorWatch* tensor_watch_opts = run_opts.add_debug_tensor_watch_opts();
+  tensor_watch_opts->set_node_name(a_);
+  tensor_watch_opts->set_output_slot(0);
+  tensor_watch_opts->add_debug_ops(debug_identity);
+  tensor_watch_opts->add_debug_ops(debug_nan_count);
+
+  // Expected name of the inserted debug node
+  string debug_identity_node_name =
+      DebugNodeInserter::GetDebugNodeName(a_, 0, 0, debug_identity);
+  string debug_nan_count_node_name =
+      DebugNodeInserter::GetDebugNodeName(a_, 0, 1, debug_nan_count);
+
+  // Supply completion and value callbacks
+  mutex mu;
+  // Completed nodes with and without outputs
+  std::vector<string> completed_debug_nodes;
+
+  debug_gateway.SetNodeCompletionCallback(
+      [&mu, &debug_identity_node_name, &debug_nan_count_node_name,
+       &completed_debug_nodes](const string& node_name, const bool any_output) {
+        mutex_lock l(mu);
+        if (any_output && (node_name == debug_identity_node_name ||
+                           node_name == debug_nan_count_node_name)) {
+          completed_debug_nodes.push_back(node_name);
+        }
+      });
+
+  std::vector<Tensor> watched_tensor_vals;
+  std::vector<Tensor> debug_identity_tensor_vals;
+  std::vector<Tensor> debug_nan_count_tensor_vals;
+
+  debug_gateway.SetNodeValueCallback(
+      [this, &mu, &debug_identity_node_name, &debug_nan_count_node_name,
+       &watched_tensor_vals, &debug_identity_tensor_vals,
+       &debug_nan_count_tensor_vals](
+          const string& node_name, const int output_slot,
+          const Tensor& tensor_value, const bool is_ref) {
+        mutex_lock l(mu);
+        if (node_name == a_) {
+          watched_tensor_vals.push_back(tensor_value);
+        } else if (node_name == debug_identity_node_name) {
+          debug_identity_tensor_vals.push_back(tensor_value);
+        } else if (node_name == debug_nan_count_node_name) {
+          debug_nan_count_tensor_vals.push_back(tensor_value);
+        }
+      });
+
+  TF_ASSERT_OK(session->Create(def_));
+
+  std::vector<std::pair<string, Tensor>> inputs;
+
+  // Request two targets: one fetch output and one non-fetched output.
+  std::vector<string> output_names = {y_ + ":0"};
+  std::vector<string> target_nodes = {y_neg_};
+  std::vector<Tensor> outputs;
+
+  RunMetadata run_metadata;
+  Status s = session->Run(run_opts, inputs, output_names, target_nodes,
+                          &outputs, &run_metadata);
+  TF_ASSERT_OK(s);
+
+  Env::Default()->SleepForMicroseconds(10 * 1000);
+
+  // Verify that each of the two debug nodes has completed exactly once.
+  ASSERT_EQ(2, completed_debug_nodes.size());
+  ASSERT_EQ(
+      1, std::count(completed_debug_nodes.begin(), completed_debug_nodes.end(),
+                    debug_identity_node_name));
+  ASSERT_EQ(
+      1, std::count(completed_debug_nodes.begin(), completed_debug_nodes.end(),
+                    debug_nan_count_node_name));
+
+  // Verify that the tensor values from the watched node and the identity
+  // debug node are received and they are equal (owing to the debug op being
+  // "DebugIdentity")
+  ASSERT_EQ(1, watched_tensor_vals.size());
+  ASSERT_EQ(1, debug_identity_tensor_vals.size());
+
+  auto mat_a = watched_tensor_vals[0].matrix<float>();
+  auto mat_identity = debug_identity_tensor_vals[0].matrix<float>();
+  ASSERT_EQ(mat_a(0, 0), mat_identity(0, 0));
+  // ASSERT_EQ doesn't work for nan == nan
+  ASSERT_TRUE(std::isnan(mat_a(0, 1)));
+  ASSERT_TRUE(std::isnan(mat_identity(0, 1)));
+  ASSERT_EQ(mat_a(1, 0), mat_identity(1, 0));
+  ASSERT_EQ(mat_a(1, 1), mat_identity(1, 1));
+
+  // Verify that the output from the NaN-count debug node indicates exactly
+  // one NaN.
+  ASSERT_EQ(1, debug_nan_count_tensor_vals.size());
+  ASSERT_EQ(1, debug_nan_count_tensor_vals[0].scalar<int64>()());
+}
+
 }  // end namespace
 }  // end namespace tensorflow
 

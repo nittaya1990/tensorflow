@@ -2124,4 +2124,29 @@ input_min: If range is given, this is the min of the range.
 input_max: If range is given, this is the max of the range.
 )doc");
 
+// EXPERIMENTAL: tfdb debugger-inserted ops.
+REGISTER_OP("DebugIdentity")
+    .Input("input: T")
+    .Output("output: T")
+    .Attr("T: type")
+    .Attr("tensor_name: string = ''")
+    .Doc(R"doc(
+Debug Identity Op
+Return a tensor with the same shape and contents as the input tensor or value
+for debugging.
+)doc");
+
+REGISTER_OP("DebugNanCount")
+    .Input("input: T")
+    .Output("output: int64")
+    .Attr("T: type")
+    .Attr("tensor_name: string = ''")
+    .Doc(R"doc(
+Debug NaN Value Counter Op
+Return an int64 value that is the number of NaN values in the input tensor for
+for debugging.
+
+The input must be of a real-number type (e.g., float, double).
+)doc");
+
 }  // namespace tensorflow

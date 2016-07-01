@@ -365,6 +365,7 @@ tf_kernel_libraries(
         "bitcast_op",
         "concat_op",
         "constant_op",
+        "debug_ops",
         "diag_op",
         "batch_matrix_band_part_op",
         "batch_matrix_diag_op",
@@ -507,6 +508,23 @@ tf_cc_test(
     size = "small",
     deps = [
         ":identity_op",
+        ":ops_testutil",
+        ":ops_util",
+        "//tensorflow/core:core_cpu",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:protos_all_cc",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core:testlib",
+    ],
+)
+
+tf_cc_test(
+    name = "debug_ops_test",
+    size = "small",
+    deps = [
+        ":debug_ops",
         ":ops_testutil",
         ":ops_util",
         "//tensorflow/core:core_cpu",
