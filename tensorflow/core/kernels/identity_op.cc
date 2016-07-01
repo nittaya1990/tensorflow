@@ -34,6 +34,9 @@ REGISTER_KERNEL_BUILDER(Name("PlaceholderWithDefault").Device(DEVICE_CPU),
 
 REGISTER_KERNEL_BUILDER(Name("RefIdentity").Device(DEVICE_CPU), IdentityOp);
 
+// tfdb-modgraph
+REGISTER_KERNEL_BUILDER(Name("Debug").Device(DEVICE_CPU), DebugOp);
+
 #define REGISTER_GPU_KERNEL(type)                                        \
   REGISTER_KERNEL_BUILDER(                                               \
       Name("Identity").Device(DEVICE_GPU).TypeConstraint<type>("T"),     \

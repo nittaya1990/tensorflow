@@ -618,6 +618,17 @@ to pretend that the value was a constant. Some examples include:
 )Doc");
 
 // --------------------------------------------------------------------------
+REGISTER_OP("Debug")
+    .Input("input: T")
+    .Output("output: T")
+    .Attr("T: type")
+    .Attr("tensor_name: string = ''")
+    .Doc(R"Doc(
+Debug Op
+
+)Doc");
+
+// --------------------------------------------------------------------------
 REGISTER_OP("CheckNumerics")
     .Input("tensor: T")
     .Output("output: T")

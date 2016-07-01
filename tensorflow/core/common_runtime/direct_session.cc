@@ -34,11 +34,13 @@ limitations under the License.
 #include "tensorflow/core/framework/graph.pb_text.h"
 #include "tensorflow/core/framework/graph_def_util.h"
 #include "tensorflow/core/framework/log_memory.h"
+#include "tensorflow/core/framework/node_def_builder.h"  // tfdb-modgraph
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/graph/algorithm.h"
 #include "tensorflow/core/graph/graph.h"
 #include "tensorflow/core/graph/graph_constructor.h"
 #include "tensorflow/core/graph/graph_partition.h"
+#include "tensorflow/core/graph/node_builder.h"  // tfdb-modgraph
 #include "tensorflow/core/graph/subgraph.h"
 #include "tensorflow/core/graph/tensor_id.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -222,6 +224,7 @@ void DirectSession::MaybeInitializeExecutionState(const GraphDef& graph) {
 }
 
 Status DirectSession::Create(const GraphDef& graph) {
+  std::cout << "In DirectSession::Create()" << std::endl;  // DEBUG
   mutex_lock l(graph_def_lock_);
   if (graph_created_) {
     return errors::AlreadyExists(
@@ -231,8 +234,41 @@ Status DirectSession::Create(const GraphDef& graph) {
 }
 
 Status DirectSession::Extend(const GraphDef& graph) {
+  std::cout << "In DirectSession::Extend()" << std::endl;  // DEBUG
   mutex_lock l(graph_def_lock_);
   return ExtendLocked(graph);
+}
+
+void MakeDebugGraph(const Graph& src, Graph* dest) {
+  std::cout << "** In MakeDebugGraph" << std::endl;  // DEBUG
+  for (Node* n : dest->nodes()) {
+    CHECK(n->IsSource() || n->IsSink()) << "*dest must be empty";
+  }
+
+  std::cout << "** MakeDebugGraph: Copying GraphDef versions" << std::endl;  // DEBUG
+  std::cout << "** MakeDebugGraph:   &src = " << &src
+            << "; dest = " << dest << std::endl;  // DEBUG
+  // Copy GraphDef versions
+  dest->set_versions(src.versions());
+
+  std::cout << "** MakeDebugGraph: Copying GraphDef versions" << std::endl;  // DEBUG
+  // Copy the nodes
+  std::unordered_map<Node*, Node*>
+      node_map;  // "Node in src" -> "Node in *dest"
+  node_map[src.source_node()] = dest->source_node();
+  node_map[src.sink_node()] = dest->sink_node();
+  for (Node* n : src.nodes()) {
+    if (n->IsSource() || n->IsSink()) continue;
+    CHECK(n->IsOp());
+    node_map[n] = dest->CopyNode(n);
+  }
+
+  // Copy the edges
+  for (const Edge* e : src.edges()) {
+    Node* src_copy = node_map[e->src()];
+    Node* dst_copy = node_map[e->dst()];
+    dest->AddEdge(src_copy, e->src_output(), dst_copy, e->dst_input());
+  }
 }
 
 Status DirectSession::ExtendLocked(const GraphDef& graph) {
@@ -244,6 +280,20 @@ Status DirectSession::ExtendLocked(const GraphDef& graph) {
   // Swap out the old state.
   old_state = std::move(execution_state_);
   execution_state_.reset(new_state);
+
+  // // tfdb-modgraph:
+  // GraphDef debug_gd = execution_state_->original_graph_def();
+  // // Try modify
+  // NodeDef* new_node = debug_gd.add_node();
+  // new_node->set_name("asdf");
+
+  // for (NodeDef debug_nd : debug_gd.node()) {
+  //   std::cout << "|| node: " << debug_nd.name() << " (Op: " << debug_nd.op()
+  //             << ")" << std::endl;
+  //   for (string node_input : debug_nd.input()) {
+  //     std::cout << "    Input: " << node_input << std::endl;
+  //   }
+  // }
 
   graph_created_ = true;  // In case this is first call
   return Status::OK();
@@ -791,6 +841,93 @@ Status DirectSession::GetOrCreateExecutors(
     if (!s.ok()) {
       break;
     }
+
+    // tfdb-modgraph:
+    std::cout << "partition_graph = " << partition_graph 
+              << "; num_nodes() = " << partition_graph->num_nodes() << std::endl;  // DEBUG
+    // Iterate through all edges
+    int debug_node_counter = 0;
+    std::vector<const Edge*> edges_to_remove;
+
+    // Create a list of the existing nodes, so that we won't run into infinite loop
+    // when we add new edges in the next loop.
+    std::vector<const Edge*> existing_edges;
+    for (const Edge* edge : partition_graph->edges()) {
+      existing_edges.push_back(edge);
+    }
+
+    for (const Edge* edge : existing_edges) {
+      Node* src_node = edge->src();
+      Node* dst_node = edge->dst();
+
+      if (edge->IsControlEdge()) {
+        std::cout << "  Control edge: " << src_node->name()
+                  << " (" << edge->src_output() << ") --> "
+                  << dst_node->name() << " (" << edge->dst_input() << ")" << std::endl;
+        continue;
+      }
+
+      // if (dst_node->name().find("/Assign") == dst_node->name().size() - 7) {
+      //   continue;
+      // }
+
+      DataType src_dt = src_node->output_type(edge->src_output());
+      DataType dst_dt = src_node->input_type(edge->dst_input());
+      std::cout << "  Edge: " << src_node->name()
+          << " (" << edge->src_output() << ") --> "
+          << dst_node->name() << " (" << edge->dst_input() << "); "
+          << "src.IsRefType = " << IsRefType(src_dt)
+          << "; dst.IsRefType = " << IsRefType(dst_dt)
+          << std::endl;
+      if (IsRefType(src_dt)) {
+        continue;
+      }
+
+      // Create a PrintOp node
+      Node* debug_node;
+
+      // auto builder = NodeDefBuilder(strings::StrCat("__debug_node_", debug_node_counter++), "Print")
+      //                .Input({{src_node->name(), edge->src_output(), src_dt}, 
+      //                        {src_node->name(), edge->src_output(), src_dt}})
+      //                .Attr("message", string("debugger:"))
+      //                .Attr("first_n", -1)
+      //                .Attr("summarize", 3);
+      // string op_name("Identity");
+      string op_name("Debug");
+
+      auto builder = NodeDefBuilder(strings::StrCat("__debug_node_", debug_node_counter++), op_name)
+                     .Input(src_node->name(), edge->src_output(), src_dt)
+                     .Attr("tensor_name", strings::StrCat(src_node->name(), ":", edge->src_output()));
+                     
+      DeviceType device_type = device
+                               ? DeviceType{device->device_type()}
+                               : DEVICE_CPU;
+
+      NodeDef node_def;
+      const KernelDef* kdef;
+      if (builder.Finalize(&node_def).ok() &&
+          FindKernelDef(device_type, node_def, &kdef, nullptr).ok() && 
+          NodeBuilder(builder).Finalize(partition_graph, &debug_node).ok()) {
+        std::cout << "*** Adding debug op (" << op_name << ") to graph: " << src_node->name()
+                  << " - " << dst_node->name() << std::endl;
+
+        // Add new edges
+        partition_graph->AddEdge(src_node, edge->src_output(), debug_node, 0);
+        partition_graph->AddEdge(debug_node, Graph::kControlSlot, dst_node, Graph::kControlSlot);
+
+        // Mark old edge to remove
+        edges_to_remove.push_back(edge);
+      }
+        // 
+        // 
+      // }
+    }
+
+    // std::cout << "*** Removing old edges" << std::endl;
+    // for (const Edge* edge: edges_to_remove) {
+    //   partition_graph->RemoveEdge(edge);
+    // }
+
     // NewLocalExecutor takes ownership of *partition_graph.
     iter->second = nullptr;
     item->graph = partition_graph;
@@ -864,6 +1001,18 @@ Status DirectSession::CreateGraphs(const BuildGraphOptions& options,
   }
 
   TF_RETURN_IF_ERROR(execution_state->BuildGraph(options, &cgraph));
+  // std::cout << "In CreateGraphs: execution_state->full_graph() = "
+  //           << execution_state->full_graph() << std::endl;  // DEBUG
+  // // tfdb-modgraph:
+  // //*execution_state_->full_graph();
+  // if (execution_state->full_graph() != nullptr) {
+  //   Graph* new_graph = new Graph(flib_def_.get());
+  //   std::cout << "Calling MakeDebugGraph: execution_state->full_graph() = "
+  //             << execution_state->full_graph() << std::endl;
+  //   MakeDebugGraph(*execution_state->full_graph(), new_graph);
+  //   // TODO(cais): Avoid memory leak
+  // }
+
   {
     auto current_stateful_placements = execution_state->GetStatefulPlacements();
     mutex_lock l(mu_);

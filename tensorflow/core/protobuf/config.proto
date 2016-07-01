@@ -197,6 +197,11 @@ message RunOptions {
 
   // The thread pool to use, if session_inter_op_thread_pool is configured.
   int32 inter_op_thread_pool = 3;
+
+  // Debugging options
+  // Path for dumping tensor values
+  string dump_path = 4;
+  string tensor_name_whitelist = 5;
 }
 
 // EXPERIMENTAL. Metadata output (i.e., non-Tensor) for a single Run() call.
