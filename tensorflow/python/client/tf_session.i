@@ -238,6 +238,7 @@ tensorflow::ImportNumpy();
 %unignore TF_NewLibrary;
 %unignore TF_LoadLibrary;
 %unignore TF_GetOpList;
+
 %include "tensorflow/core/public/tensor_c_api.h"
 %ignoreall
 
@@ -265,6 +266,11 @@ tensorflow::ImportNumpy();
 %unignore tensorflow;
 %unignore TF_Run;
 %unignore EqualGraphDefWrapper;
+
+// tfdb
+%unignore TF_Debug_Foo;
+
+%rename(TF_LoadTensor) tensorflow::TF_DebugLoadTensorProtoFile_wrapper;
 
 // Include the wrapper for TF_PRunSetup from tf_session_helper.h.
 
@@ -297,6 +303,8 @@ def TF_Reset(target, containers=None, config=None):
   finally:
     TF_DeleteSessionOptions(opts)
 %}
+
+
 
 %include "tensorflow/python/client/tf_session_helper.h"
 

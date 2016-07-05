@@ -18,6 +18,7 @@ limitations under the License.
 #include <memory>
 #include <vector>
 
+#include "tensorflow/core/debug/debug_io_utils.h"
 #include "tensorflow/core/framework/log_memory.h"
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/tensor.h"
@@ -494,6 +495,14 @@ void TF_Run_Helper(TF_Session* s, const char* handle,
 
 extern "C" {
 
+// const char* TF_DebugLoadTensorProtoFile(const char* filename) {
+//   tensorflow::string filename_str(filename);
+//   const tensorflow::Tensor& tensor =
+//     tensorflow::ReadTensorFromProtoFile(filename_str);
+
+//   return tensor.DebugString().c_str();
+// }
+
 void TF_Run(TF_Session* s, const TF_Buffer* run_options,
             // Input tensors
             const char** c_input_names, TF_Tensor** c_inputs, int ninputs,
@@ -569,5 +578,33 @@ TF_Library* TF_LoadLibrary(const char* library_filename, TF_Status* status) {
 }
 
 TF_Buffer TF_GetOpList(TF_Library* lib_handle) { return lib_handle->op_list; }
+
+TF_Tensor* TF_DebugLoadTensorProtoFile(const char* filename) {
+  tensorflow::string filename_str(filename);
+  const Tensor& tensor = tensorflow::ReadTensorFromProtoFile(filename_str);
+  std::cout << "TF_DebugLoadTensorProtoFile: tensor = "
+            << tensor.DebugString() << std::endl;  // DEBUG
+
+  // Get TF_Tensor from Tensor
+  TF_Tensor* tf_tensor = nullptr;
+
+  if (!tensor.IsInitialized() || tensor.NumElements() == 0) {
+    tf_tensor = tensorflow::EmptyTensor(
+        static_cast<TF_DataType>(tensor.dtype()), tensor.shape());
+  } else {
+    if (tensor.dtype() != tensorflow::DT_STRING) {
+      // Share the underlying buffer.
+      TensorBuffer* buf = tensorflow::TensorCApi::Buffer(tensor);
+      buf->Ref();
+      tf_tensor = new TF_Tensor{static_cast<TF_DataType>(tensor.dtype()),
+                                tensor.shape(), buf};
+    } else {
+      tf_tensor = tensorflow::TF_Tensor_EncodeStrings(tensor);
+    }
+  }
+
+  std::cout << "TF_DebugLoadTensorProtoFile: tf_tensor = " << tf_tensor << std::endl;  // DEBUG
+  return tf_tensor;
+}
 
 }  // end extern "C"

@@ -471,6 +471,24 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "debug_io_utils",
+    srcs = ["debug/debug_io_utils.cc"],
+    hdrs = ["debug/debug_io_utils.h"],
+    deps = [
+        "tensorflow",
+    ],
+)
+
+cc_binary(
+    name = "debug_read_tensor",
+    srcs = ["debug/debug_read_tensor.cc"],
+    deps = [
+        "debug_io_utils",
+        "tensorflow",
+    ],
+)
+
 # Test support library needed for higher-level (TensorFlow-specific) tests
 cc_library(
     name = "testlib",
@@ -1030,6 +1048,8 @@ tf_cuda_library(
             "client/**/*.cc",
             "common_runtime/*.h",
             "common_runtime/*.cc",
+            "debug/debug_io_utils.h",
+            "debug/debug_io_utils.cc",
             "framework/versions.h",
             "graph/**/*.h",
             "graph/**/*.cc",

@@ -135,6 +135,7 @@ __all__ = make_all(__name__, [framework_lib, array_ops, client_lib, check_ops,
 __all__.extend([
     'AttrValue',
     'ConfigProto',
+    'DebugTensorWatch',
     'DeviceSpec',
     'Event',
     'GPUOptions',

@@ -315,6 +315,93 @@ static Status CopyStringToPyArrayElement(PyArrayObject* pyarray, void* i_ptr,
 // Converts the given TF_Tensor to a Numpy array.
 // If the returned status is OK, the caller becomes the owner of *out_array.
 Status TF_Tensor_to_PyObject(TF_Tensor* tensor, PyObject** out_array) {
+  // std::cout << "TF_Tensor_to_PyObject: out_array = " << out_array << std::endl;
+  // A fetched operation will correspond to a null tensor, and a None
+  // in Python.
+  if (tensor == nullptr) {
+    Py_INCREF(Py_None);
+    *out_array = Py_None;
+    return Status::OK();
+  }
+
+  const int ndims = TF_NumDims(tensor);
+  // std::cout << "TF_Tensor_to_PyObject: ndims = " << ndims << std::endl;  // DEBUG
+  gtl::InlinedVector<npy_intp, 4> dims(ndims);
+  tensorflow::int64 nelems = 1;
+  for (int i = 0; i < ndims; ++i) {
+    dims[i] = TF_Dim(tensor, i);
+    nelems *= dims[i];
+  }
+  // std::cout << "TF_Tensor_to_PyObject: nelems = " << nelems << std::endl;  // DEBUG
+
+  // Convert TensorFlow dtype to numpy type descriptor.
+  int type_num = -1;
+  TF_RETURN_IF_ERROR(
+      TF_DataType_to_PyArray_TYPE(TF_TensorType(tensor), &type_num));
+  PyArray_Descr* descr = PyArray_DescrFromType(type_num);
+  // std::cout << "TF_Tensor_to_PyObject: type_num = " << type_num << std::endl;  // DEBUG
+  // std::cout << "TF_Tensor_to_PyObject:" << std::endl
+  //     << "  descr->kind = " << descr->kind << std::endl
+  //     << "  descr->byteorder = " << descr->byteorder << std::endl;  // DEBUG
+
+  // Copy the TF_TensorData into a newly-created ndarray and return it.
+  // TODO(mrry): Perhaps investigate zero-copy approaches. This would involve
+  // creating an ndarray-like object that wraps the TF_Tensor buffer, and
+  // maps its destructor to TF_DeleteTensor.
+  Safe_PyObjectPtr safe_out_array =
+      tensorflow::make_safe(PyArray_Empty(ndims, dims.data(), descr, 0));
+  if (!safe_out_array) {
+    return errors::Internal("Could not allocate ndarray");
+  }
+  // std::cout << "TF_Tensor_to_PyObject: allocated safe_out_array" << std::endl;  // DEBUG
+
+  PyArrayObject* py_array =
+      reinterpret_cast<PyArrayObject*>(safe_out_array.get());
+  // std::cout << "TF_Tensor_to_PyObject: py_array = " << py_array << std::endl;  // DEBUG
+
+  // std::cout << "TF_Tensor_to_PyObject:" << std::endl
+  //           << "  PyArray_NBYTES(py_array) = " << PyArray_NBYTES(py_array) << std::endl
+  //           << "  TF_TensorByteSize(tensor) = " << TF_TensorByteSize(tensor) << std::endl
+  //           << "  (TF_TensorType(tensor) == TF_STRING) = "
+  //           << (TF_TensorType(tensor) == TF_STRING) << std::endl
+  if (PyArray_NBYTES(py_array) !=
+      static_cast<int64>(TF_TensorByteSize(tensor))) {
+    if (TF_TensorType(tensor) == TF_STRING) {
+      // Copy element by element.
+      auto iter = tensorflow::make_safe(PyArray_IterNew(safe_out_array.get()));
+      for (tensorflow::int64 i = 0; i < nelems; ++i) {
+        auto s =
+            CopyStringToPyArrayElement(py_array, iter.get(), tensor, nelems, i);
+        if (!s.ok()) {
+          return s;
+        }
+        PyArray_ITER_NEXT(iter.get());
+      }
+    } else {
+      // std::cout << "TF_Tensor_to_PyObject: ERROR: "
+      //           << "ndarray was " << PyArray_NBYTES(py_array)
+      //           << " bytes but TF_Tensor was " << TF_TensorByteSize(tensor)
+      //           << " bytes" << std::endl;  //DEBUG
+      return errors::Internal("ndarray was ", PyArray_NBYTES(py_array),
+                              " bytes but TF_Tensor was ",
+                              TF_TensorByteSize(tensor), " bytes");
+    }
+  } else {
+    // std::cout << "TF_Tensor_to_PyObject: calling memcpy" << std::endl << std::flush;  // DEBUG
+    memcpy(PyArray_DATA(py_array), TF_TensorData(tensor),
+           PyArray_NBYTES(py_array));
+    // std::cout << "TF_Tensor_to_PyObject: Done calling memcpy" << std::endl << std::flush;  // DEBUG
+  }
+
+
+  // std::cout << "TF_Tensor_to_PyObject: Calling PyArray_Return()" << std::endl << std::flush;  // DEBUG
+  *out_array = PyArray_Return(
+      reinterpret_cast<PyArrayObject*>(safe_out_array.release()));
+  // std::cout << "TF_Tensor_to_PyObject: Returning" << std::endl << std::flush;  // DEBUG
+  return Status::OK();
+}
+
+Status TF_Tensor_to_PyObject_2(TF_Tensor* tensor, PyObject** out_array) {
   // A fetched operation will correspond to a null tensor, and a None
   // in Python.
   if (tensor == nullptr) {
@@ -346,8 +433,10 @@ Status TF_Tensor_to_PyObject(TF_Tensor* tensor, PyObject** out_array) {
   if (!safe_out_array) {
     return errors::Internal("Could not allocate ndarray");
   }
+
   PyArrayObject* py_array =
       reinterpret_cast<PyArrayObject*>(safe_out_array.get());
+
   if (PyArray_NBYTES(py_array) !=
       static_cast<int64>(TF_TensorByteSize(tensor))) {
     if (TF_TensorType(tensor) == TF_STRING) {
@@ -370,10 +459,10 @@ Status TF_Tensor_to_PyObject(TF_Tensor* tensor, PyObject** out_array) {
     memcpy(PyArray_DATA(py_array), TF_TensorData(tensor),
            PyArray_NBYTES(py_array));
   }
-
-  // PyArray_Return turns rank 0 arrays into numpy scalars
-  *out_array = PyArray_Return(
-      reinterpret_cast<PyArrayObject*>(safe_out_array.release()));
+  
+  // *out_array = PyArray_Return(
+      // reinterpret_cast<PyArrayObject*>(safe_out_array.release()));
+  *out_array = safe_out_array.release();
   return Status::OK();
 }
 
@@ -578,6 +667,33 @@ void TF_Reset_wrapper(const TF_SessionOptions* opt,
                       const NameVector& containers, TF_Status* out_status) {
   TF_Reset(opt, const_cast<const char**>(containers.data()), containers.size(),
            out_status);
+}
+
+int TF_Debug_Foo() {
+  return 42;
+}
+
+void TF_DebugLoadTensorProtoFile_wrapper(
+    const char* filename, PyObjectVector* out_values) {
+    // const char* filename, PyObject** out_array) {
+  TF_Tensor* tf_tensor = TF_DebugLoadTensorProtoFile(filename);
+
+  // std::cout << "TF_DebugLoadTensorProtoFile_wrapper: tf_tensor = "
+  //           << tf_tensor << std::endl;  // DEBUG
+
+  // Convert the loaded tensors into numpy ndarrays.
+  PyObject* py_array;
+  Status result = TF_Tensor_to_PyObject_2(tf_tensor, &py_array);
+  // std::cout << "TF_DebugLoadTensorProtoFile_wrapper: Done calling TF_Tensor_to_PyObject"
+  //           << std::endl;  // DEBUG
+
+  if (!result.ok()) {
+    return;  // TODO(cais): No silent failure
+  }
+
+  // std::cout << "TF_DebugLoadTensorProtoFile_wrapper: py_array = "
+  //           << py_array << std::endl;  // DEBUG
+  out_values->push_back(py_array);
 }
 
 string EqualGraphDefWrapper(const string& actual, const string& expected) {

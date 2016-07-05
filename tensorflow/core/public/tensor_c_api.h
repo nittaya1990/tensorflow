@@ -29,7 +29,7 @@ limitations under the License.
 // * We use the prefix TF_ for everything in the API.
 // * Objects are always passed around as pointers to opaque structs
 //   and these structs are allocated/deallocated via the API.
-// * TF_Status holds error information.  It is an object type
+// * TF_Status whoholds error information.  It is an object type
 //   and therefore is passed around as a pointer to an opaque
 //   struct as mentioned above.
 // * Every call that has a TF_Status* argument clears it on success
@@ -198,6 +198,8 @@ extern TF_Tensor* TF_NewTensor(TF_DataType, long long* dims, int num_dims,
                                                    void* arg),
                                void* deallocator_arg);
 
+extern TF_Tensor* TF_DebugLoadTensorProtoFile(const char* filename);
+
 // Destroy a tensor.
 extern void TF_DeleteTensor(TF_Tensor*);
 
@@ -269,6 +271,8 @@ extern void TF_Reset(const TF_SessionOptions* opt, const char** containers,
 // add the nodes in that GraphDef to the graph for the session.
 extern void TF_ExtendGraph(TF_Session*, const void* proto, size_t proto_len,
                            TF_Status*);
+
+// extern const char* TF_DebugLoadTensorProtoFile(const char* filename);
 
 // Run the graph associated with the session starting with the
 // supplied inputs (inputs[0,ninputs-1]).  Regardless of success or

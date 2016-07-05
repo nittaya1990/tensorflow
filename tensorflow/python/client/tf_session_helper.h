@@ -100,6 +100,11 @@ void TF_PRun_wrapper(TF_Session* session, const char* handle,
 void TF_Reset_wrapper(const TF_SessionOptions* opt,
                       const NameVector& containers, TF_Status* out_status);
 
+int TF_Debug_Foo();
+
+void TF_DebugLoadTensorProtoFile_wrapper(
+    const char* filename, PyObjectVector* out_values);
+
 // Convenience wrapper around EqualGraphDef to make it easier to wrap.
 // Returns an explanation if a difference is found, or the empty string
 // for no difference.

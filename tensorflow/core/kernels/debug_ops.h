@@ -17,29 +17,122 @@ limitations under the License.
 #define TENSORFLOW_KERNELS_DEBUG_OP_H_
 
 #include "tensorflow/core/framework/op_kernel.h"
+#include "tensorflow/core/lib/io/record_reader.h"
+#include "tensorflow/core/lib/io/record_writer.h"
+#include "tensorflow/core/lib/strings/str_util.h"
 
 namespace tensorflow {
 
 // Identity op for debugging
 class DebugIdentityOp : public OpKernel {
  public:
-  explicit DebugIdentityOp(OpKernelConstruction* context) : OpKernel(context) {
+  explicit DebugIdentityOp(OpKernelConstruction* context) 
+      : OpKernel(context), env_(Env::Default()) {
     OP_REQUIRES_OK(context, context->GetAttr("tensor_name", &tensor_name_));
   }
 
   void Compute(OpKernelContext* context) override {
+    // std::cout << "DebugIdentityOp: tensor_name = " << tensor_name_ << std::endl;  // DEBUG
+    
     if (IsRefType(context->input_dtype(0))) {
+      std::cout << "TODO: Ref input" << std::endl; // DEBUG
       context->forward_ref_input_to_ref_output(0, 0);
     } else {
-      context->set_output(0, context->input(0));
+      const Tensor& input_tensor = context->input(0);
+      
+      string filename = strings::StrCat("/tmp/tfdb1/", tensor_name_);
+      
+      string filedir = GetFileDir(filename);
+      if (!filedir.empty() && !env_->FileExists(filedir)) {
+        RecursiveCreateDir(filedir);
+      }
+      
+      // std::cout << "  filename = " << filename << std::endl;  // DEBUG
+      // std::cout << "  tensor = " << input_tensor.DebugString() << std::endl;  // DEBUG
+      WriteTensorToFile(input_tensor, filename);
+
+      context->set_output(0, input_tensor);
+
     }
   }
 
   bool IsExpensive() override { return false; }
 
  private:
+  void WriteTensorToFile(const Tensor& tensor, const string& filename) {
+    // First, serialize tensor to string
+    TensorProto tensor_proto;
+    string tensor_str;
+
+    tensor.AsProtoField(&tensor_proto);
+    // tensor.AsProtoTensorContent(&tensor_proto);
+    tensor_proto.AppendToString(&tensor_str);
+
+    // std::cout << "Original tensor \"" << tensor_name_
+              // << "\" = " << tensor.DebugString() << std::endl;  // DEBUG
+
+    // Second, open the RecordIO file and write the seralization 
+    Status s = env_->NewWritableFile(filename, &recordio_file_);
+    if (!s.ok()) {
+      std::cerr << "Could not open events file: " << filename << ": " << s << std::endl;
+    }
+    recordio_writer_.reset(new io::RecordWriter(recordio_file_.get()));
+    if (recordio_writer_.get() == NULL) {
+      std::cerr << "Could not create record writer" << std::endl;
+    }
+
+    recordio_writer_->WriteRecord(tensor_str);
+    recordio_file_->Flush();
+
+    // Last, clean up
+    recordio_writer_.reset(NULL);
+    recordio_file_.reset(NULL);
+
+    // // Test reading
+    // std::unique_ptr<RandomAccessFile> ra_file;
+    // env_->NewRandomAccessFile(filename, &ra_file);
+    // io::RecordReader record_reader(ra_file.get());
+
+    // string readout;
+    // uint64 offset = 0;
+    // record_reader.ReadRecord(&offset, &readout);
+
+    // // DEBUG: Parse tensor_str back to Tensor
+    // TensorProto tensor_proto_2;
+    // tensor_proto_2.ParseFromString(readout);
+    // Tensor tensor2; 
+    // tensor2.FromProto(tensor_proto_2);
+
+    // std::cout << "Readout tensor \"" << tensor_name_
+    //           << "\" = " << tensor2.DebugString() << std::endl;  // DEBUG
+  }
+
+  void RecursiveCreateDir(const string& dir) {
+    string parent_dir = GetFileDir(dir);
+    if (!parent_dir.empty() && !env_->FileExists(parent_dir)) {
+      RecursiveCreateDir(parent_dir);  // Recursive call
+    }
+
+    env_->CreateDir(dir);
+  }
+
+  string GetFileDir(const string& filename) {
+    size_t last_delim_idx = filename.rfind("/");  // TODO(cais): 
+    if (last_delim_idx != string::npos && last_delim_idx != 0) {
+      return filename.substr(0, last_delim_idx);
+    } else {
+      return string("");
+    }
+  }
+
   string tensor_name_;
+
+  Env* env_;
+  std::unique_ptr<WritableFile> recordio_file_;
+  std::unique_ptr<io::RecordWriter> recordio_writer_;
 };
+
+
 
 // NaN value counter op for debugging
 template <typename T>
