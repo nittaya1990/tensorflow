@@ -55,58 +55,54 @@ class DebugIdentityOp : public OpKernel {
     const Tensor* debug_input;
     std::unique_ptr<Tensor> host_tensor;
 
-    if (IsRefType(context->input_dtype(0))) {
-      // Input is reference-type: We will make a deep-copy of it.
-      // This deep copy will always be used to produce the second output, i.e.,
-      // the debug signal.
+    const bool is_input_ref = IsRefType(context->input_dtype(0));
+    const Tensor& src_tensor = is_input_ref ? context->mutable_input(0, false)
+        : context->input(0);
+
+    DeviceContext* device_ctxt = context->op_device_context();
+    Device* device = static_cast<Device*>(context->device());
+
+    // Determine if the input tensor is not on CPU (e.g., on GPU).
+    bool off_host_input = device->name().find("gpu:") != string::npos &&
+                          !context->input_alloc_attr(0).on_host();
+
+    if (off_host_input) {
+      // Input is not on host (e.g., on GPU), copy it to host before
+      // generating the debug signal.
+      host_tensor.reset(new Tensor(tensorflow::cpu_allocator(),
+				   src_tensor.dtype(), src_tensor.shape()));
+
+      Notification done_copy_to_cpu;
+      device_ctxt->CopyDeviceTensorToCPU(
+          &src_tensor, "TensorCopy", device, host_tensor.get(),
+	  [&done_copy_to_cpu](const Status& s) {
+	    done_copy_to_cpu.Notify();
+	  });
+      done_copy_to_cpu.WaitForNotification();
+      std::cout << "CopyDeviceTensorToCPU() done: host_tensor = "
+                << host_tensor->DebugString() << std::endl
+                << std::flush;  // DEBUG
+      debug_input = host_tensor.get();
+    } else {
+      // The input tensor is on the host (CPU). No copying is necessary.
+      debug_input = &src_tensor;
+    }
+
+    if (is_input_ref) {
       // If deep_copy == true, we will forward the copy as reference to the
-      // first output (i.e., the pass-through)
+      // first output (i.e., the pass-through).
       // If deep_copy == false, we will forward the original reference.
-      const Tensor& src_tensor = context->mutable_input(0, false);
-
-      DeviceContext* device_ctxt = context->op_device_context();
-      Device* device = static_cast<Device*>(context->device());
-
-      if (tensor_copy_ == nullptr) {
-        // Tensor dtype and shape should not change. So initializing once
-        // is sufficient.
-        Allocator* allocator =
-            device->GetAllocator(context->output_alloc_attr(0));
-        tensor_copy_ =
-            new Tensor(allocator, src_tensor.dtype(), src_tensor.shape());
-      }
-
-      // Determine if the input tensor is not on CPU (e.g., on GPU).
-      bool off_host_input = device->name().find("gpu:") != string::npos &&
-                            !context->input_alloc_attr(0).on_host();
-
-      if (!off_host_input) {
-        // Input tensor is on host (CPU), perform deep copy of it.
-        std::cout << "Deep-copying ref tensor " << tensor_name_
-                  << std::endl;  // DEBUG
-        *tensor_copy_ = tensor::DeepCopy(src_tensor);
-        debug_input = tensor_copy_;
-      } else {
-        // Input is not on host (e.g., on GPU), copy it to host before
-        // generating the debug signal.
-        host_tensor.reset(new Tensor(tensorflow::cpu_allocator(),
-                                     src_tensor.dtype(), src_tensor.shape()));
-
-        Notification done_copy_to_cpu;
-        device_ctxt->CopyDeviceTensorToCPU(
-            &src_tensor, "TensorCopy", device, host_tensor.get(),
-            [&done_copy_to_cpu](const Status& s) {
-              done_copy_to_cpu.Notify();
-            });
-        done_copy_to_cpu.WaitForNotification();
-        std::cout << "CopyDeviceTensorToCPU() done: host_tensor = "
-                  << host_tensor->DebugString() << std::endl
-                  << std::flush;  // DEBUG
-        debug_input = host_tensor.get();
-      }
-
-      // Produce the first output (pass-through)
+      // Produce the first output (the pass-through).
       if (deep_copy_) {
+	if (tensor_copy_ == nullptr) {
+	  // Tensor dtype and shape should not change. So initializing once
+	  // is sufficient.
+	  Allocator* allocator =
+              device->GetAllocator(context->output_alloc_attr(0));
+	  tensor_copy_ =
+	      new Tensor(allocator, src_tensor.dtype(), src_tensor.shape());
+	}
+
         if (off_host_input) {
           // Copy the host copy of the GPU tensor back to GPU
           Notification done_copy_to_device;
@@ -116,7 +112,10 @@ class DebugIdentityOp : public OpKernel {
                 done_copy_to_device.Notify();
               });
           done_copy_to_device.WaitForNotification();
-        }
+        } else {
+	  // Make a deep copy of the tensor on CPU
+	  *tensor_copy_ = tensor::DeepCopy(src_tensor);
+	}
 
         context->set_output_ref(0, &mu_, tensor_copy_);
       } else {
@@ -127,10 +126,11 @@ class DebugIdentityOp : public OpKernel {
       // is produced from the watched node. So there is no need to copy it
       // even if deep_copy_ is true.
       context->set_output(0, context->input(0));
-      debug_input = &context->input(0);
     }
 
-    std::cout << "  tensor_name = " << tensor_name_ << ": debug_input = "
+    std::cout << "  tensor_name = " << tensor_name_ << ": debug_input = " << debug_input
+              << std::endl;
+    std::cout << "  tensor_name = " << tensor_name_ << ": debug_input->DebugString() = "
               << debug_input->DebugString() << std::endl;
 
     // Produce the second output (debug signal), which is identical to the input
