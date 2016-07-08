@@ -25,7 +25,7 @@ namespace tensorflow {
 
 DebugNodeInserter::DebugNodeInserter(
     const protobuf::RepeatedPtrField<DebugTensorWatch>& watches)
-    : tensor_watches_() {
+    : tensor_watches_(), do_deep_copy_() {
   // Cache the proto content for fast lookup later
   for (const DebugTensorWatch& watch : watches) {
     if (watch.output_slot() < 0) {
@@ -50,23 +50,29 @@ DebugNodeInserter::DebugNodeInserter(
     }
 
     tensor_watches_[tensor_name] = debug_ops;
+    do_deep_copy_[tensor_name] = watch.deep_copy();
   }
 }
 
 Status DebugNodeInserter::InsertNodes(Graph* graph) {
-  // Record existing edges in the graph.
+  // 1. Record existing edges in the graph.
   std::vector<const Edge*> existing_edges;
   for (const Edge* edge : graph->edges()) {
     existing_edges.push_back(edge);
   }
 
-  // Iterate through the edges, look for edges that match the tensor watch
+  // A map from tensor names to edges to be removed
+  std::unordered_map<string, std::vector<const Edge*>> edges_to_remove;
+  // A map from tensor names to newly added debug nodes
+  std::unordered_map<string, Node*> added_debug_nodes;
+
+  // 2. Iterate through the edges, look for edges that match the tensor watch
   // list.
   for (const Edge* edge : existing_edges) {
     Node* src_node = edge->src();
     Node* dst_node = edge->dst();
 
-    string tensor_name =
+    const string tensor_name =
         strings::StrCat(src_node->name(), ":", edge->src_output());
     if (tensor_watches_.find(tensor_name) == tensor_watches_.end()) {
       // Add debug nodes only for edges with matching source node and source
@@ -74,49 +80,98 @@ Status DebugNodeInserter::InsertNodes(Graph* graph) {
       continue;
     }
 
-    const DataType src_dt = src_node->output_type(edge->src_output());
+    if (edges_to_remove.find(tensor_name) == edges_to_remove.end()) {
+      // It is the first time edges with this source tensor is encountered:
+      // we will:
+      //   1) Mark this edge as to be removed
+      //   2) Create a new (debug) node
+      //   3) Add a new edge, from the source tensor to the debug node
+      //   4) Add a new edge, from the debug node to the destination node
+      std::vector<const Edge*> node_edges_to_remove;
+      node_edges_to_remove.push_back(edge);
+      edges_to_remove[tensor_name] = node_edges_to_remove;
 
-    for (int i = 0; i < tensor_watches_[tensor_name].size(); ++i) {
-      // Determine the name of the debug node
-      string debug_node_name =
-          GetDebugNodeName(src_node->name(), edge->src_output(), i,
-                           tensor_watches_[tensor_name][i]);
+      const DataType src_dt = src_node->output_type(edge->src_output());
 
-      // Create debug node
-      auto builder =
-          NodeDefBuilder(debug_node_name, tensor_watches_[tensor_name][i])
-              .Input(src_node->name(), edge->src_output(), src_dt)
-              .Attr("tensor_name", tensor_name);
+      // Create debug node(s). Obey the ordering: the first debug op connects
+      // with the watched tensor; the second debug op connects with the first
+      // debug op; and so forth.
+      Node* curr_src_node = src_node;
+      int curr_src_output = edge->src_output();
+      for (int i = 0; i < tensor_watches_[tensor_name].size(); ++i) {
+        string debug_node_name =
+            GetDebugNodeName(src_node->name(), edge->src_output(), i,
+                             tensor_watches_[tensor_name][i]);
 
-      NodeDef node_def;
-      const KernelDef* kdef;
-      Node* debug_node;
+        // Logic for reference- vs. non-reference-type tensors
+        string op_name = tensor_watches_[tensor_name][i];
 
-      if (!builder.Finalize(&node_def).ok()) {
-        return Status(
-            error::FAILED_PRECONDITION,
-            strings::StrCat("Failed to create node definition ",
-                            "for debug op ", tensor_watches_[tensor_name][i]));
+        auto builder = NodeDefBuilder(debug_node_name, op_name)
+                           .Input(src_node->name(), edge->src_output(), src_dt)
+                           .Attr("tensor_name", tensor_name)
+                           .Attr("deep_copy", do_deep_copy_[tensor_name]);
+
+        NodeDef node_def;
+        const KernelDef* kdef;
+        Node* debug_node;
+
+        if (!builder.Finalize(&node_def).ok()) {
+          return Status(error::FAILED_PRECONDITION,
+                        strings::StrCat("Failed to create node definition ",
+                                        "for debug op ", op_name,
+                                        " on watched tensor ", tensor_name));
+        }
+        if (!FindKernelDef(DEVICE_CPU, node_def, &kdef, nullptr).ok()) {
+          return Status(error::FAILED_PRECONDITION,
+                        strings::StrCat("Failed to find kernel definition ",
+                                        "for debug op ", op_name,
+                                        " on watched tensor ", tensor_name));
+        }
+        if (!NodeBuilder(builder).Finalize(graph, &debug_node).ok()) {
+          return Status(error::FAILED_PRECONDITION,
+                        strings::StrCat("Failed to create debug node ", op_name,
+                                        " on watched tensor ", tensor_name));
+        }
+
+        // Record the debug node for later use
+        added_debug_nodes[tensor_name] = debug_node;
+
+        // Add new edges.
+        // The 1st edge is from the watched (source) tensor to the debug op
+        // (in the case of the first debug op), or from the previous debug op
+        // to the current one (in the case of the non-first debug op).
+        graph->AddEdge(curr_src_node, curr_src_output, debug_node, 0);
+        curr_src_node = debug_node;
+        curr_src_output = 0;
+
+        // This edge is a from the output_slot 0 of the debug op to the
+        // destination node (in the case of the last debug op).
+        if (i == tensor_watches_[tensor_name].size() - 1) {
+          graph->AddEdge(debug_node, 0, dst_node, edge->dst_input());
+        }
       }
-      if (!FindKernelDef(DEVICE_CPU, node_def, &kdef, nullptr).ok()) {
-        return Status(
-            error::FAILED_PRECONDITION,
-            strings::StrCat("Failed to find kernel definition ",
-                            "for debug op ", tensor_watches_[tensor_name][i]));
-      }
-      if (!NodeBuilder(builder).Finalize(graph, &debug_node).ok()) {
-        return Status(error::FAILED_PRECONDITION,
-                      strings::StrCat("Failed to create debug node ",
-                                      tensor_watches_[tensor_name][i]));
-      }
+    } else {
+      // This not the first time an edge with this source tensor is seen.
+      // We will:
+      //   1) Mark this edge for removal
+      //   2) Create an edge from the output_slot 0 of the debug op to the
+      //      destination node.
+      edges_to_remove[tensor_name].push_back(edge);
 
-      // Add new edges.
-      // The 1st edge is from the watched node to the debug op.
-      // The 2nd edge is a control edge from the debug op to the destination
+      Node* debug_node = added_debug_nodes[tensor_name];
+
+      // Add new edge: from output_slot 0 of the debug op to the destination
       // node.
-      graph->AddEdge(src_node, edge->src_output(), debug_node, 0);
-      graph->AddEdge(debug_node, Graph::kControlSlot, dst_node,
-                     Graph::kControlSlot);
+      graph->AddEdge(debug_node, 0, dst_node, edge->dst_input());
+    }
+  }
+
+  // Remove all edges marked for removal
+  for (auto it : edges_to_remove) {
+    std::vector<const Edge*> edges = it.second;
+
+    for (const Edge* edge : edges) {
+      graph->RemoveEdge(edge);
     }
   }
 

@@ -199,6 +199,12 @@ message DebugTensorWatch {
   // itself will be watched, without any transform, without any nodes
   // inserted.
   repeated string debug_ops = 3;
+
+  // If deep_copy is true, and if the watched tensor is reference-type, the
+  // watched tensor will forward a deep copy of the watched tensor to its
+  // output, which ensures the debug signal is consistent with the input
+  // received by the destination node.
+  bool deep_copy = 4;
 }
 
 // EXPERIMENTAL. Options for a single Run() call.

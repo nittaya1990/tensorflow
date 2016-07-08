@@ -16,141 +16,164 @@ limitations under the License.
 #ifndef TENSORFLOW_KERNELS_DEBUG_OP_H_
 #define TENSORFLOW_KERNELS_DEBUG_OP_H_
 
+#include "tensorflow/core/common_runtime/device.h"
+#include "tensorflow/core/framework/device_base.h"
 #include "tensorflow/core/framework/op_kernel.h"
-#include "tensorflow/core/lib/io/record_reader.h"
-#include "tensorflow/core/lib/io/record_writer.h"
-#include "tensorflow/core/lib/strings/str_util.h"
+#include "tensorflow/core/framework/tensor_util.h"
+#include "tensorflow/core/lib/core/notification.h"
 
 namespace tensorflow {
 
-// Identity op for debugging
+// Identity op for debugging.
+//
+// The op produces two outputs:
+//   Output slot 0 carries the pass through tensor. If the input tensor is
+//   reference-type, the pass-through output will also be a reference.
+//   Output slot 1 carries the debug signal and is always allocated on the
+//   host (CPU) and is not reference-type. In the case of DebugIdentityOp,
+//   the debug signal is equal to the input tensor. Other debug ops may
+//   inherit from DebugIdentityOp and generate non-trivial transformation
+//   of the input tensor.
+template <typename T>
 class DebugIdentityOp : public OpKernel {
  public:
-  explicit DebugIdentityOp(OpKernelConstruction* context) 
-      : OpKernel(context), env_(Env::Default()) {
+  explicit DebugIdentityOp(OpKernelConstruction* context) : OpKernel(context) {
     OP_REQUIRES_OK(context, context->GetAttr("tensor_name", &tensor_name_));
+    OP_REQUIRES_OK(context, context->GetAttr("deep_copy", &deep_copy_));
+  }
+
+  ~DebugIdentityOp() override {
+    if (tensor_copy_) delete tensor_copy_;
   }
 
   void Compute(OpKernelContext* context) override {
-    // std::cout << "DebugIdentityOp: tensor_name = " << tensor_name_ << std::endl;  // DEBUG
-    
+    std::cout << "In DebugIdentityOp::Compute: tensor_name = " << tensor_name_
+              << std::endl;  // DEBUG
+
+    // Input to the GetDebugSignal method that produces the debug signal on
+    // the second output slot (output1).
+    const Tensor* debug_input;
+    std::unique_ptr<Tensor> host_tensor;
+
     if (IsRefType(context->input_dtype(0))) {
-      std::cout << "TODO: Ref input" << std::endl; // DEBUG
-      context->forward_ref_input_to_ref_output(0, 0);
-    } else {
-      const Tensor& input_tensor = context->input(0);
-      
-      string filename = strings::StrCat("/tmp/tfdb1/", tensor_name_);
-      
-      string filedir = GetFileDir(filename);
-      if (!filedir.empty() && !env_->FileExists(filedir)) {
-        RecursiveCreateDir(filedir);
+      // Input is reference-type: We will make a deep-copy of it.
+      // This deep copy will always be used to produce the second output, i.e.,
+      // the debug signal.
+      // If deep_copy == true, we will forward the copy as reference to the
+      // first output (i.e., the pass-through)
+      // If deep_copy == false, we will forward the original reference.
+      const Tensor& src_tensor = context->mutable_input(0, false);
+
+      DeviceContext* device_ctxt = context->op_device_context();
+      Device* device = static_cast<Device*>(context->device());
+
+      if (tensor_copy_ == nullptr) {
+        // Tensor dtype and shape should not change. So initializing once
+        // is sufficient.
+        Allocator* allocator =
+            device->GetAllocator(context->output_alloc_attr(0));
+        tensor_copy_ =
+            new Tensor(allocator, src_tensor.dtype(), src_tensor.shape());
       }
-      
-      // std::cout << "  filename = " << filename << std::endl;  // DEBUG
-      // std::cout << "  tensor = " << input_tensor.DebugString() << std::endl;  // DEBUG
-      WriteTensorToFile(input_tensor, filename);
 
-      context->set_output(0, input_tensor);
+      // Determine if the input tensor is not on CPU (e.g., on GPU).
+      bool off_host_input = device->name().find("gpu:") != string::npos &&
+                            !context->input_alloc_attr(0).on_host();
 
+      if (!off_host_input) {
+        // Input tensor is on host (CPU), perform deep copy of it.
+        std::cout << "Deep-copying ref tensor " << tensor_name_
+                  << std::endl;  // DEBUG
+        *tensor_copy_ = tensor::DeepCopy(src_tensor);
+        debug_input = tensor_copy_;
+      } else {
+        // Input is not on host (e.g., on GPU), copy it to host before
+        // generating the debug signal.
+        host_tensor.reset(new Tensor(tensorflow::cpu_allocator(),
+                                     src_tensor.dtype(), src_tensor.shape()));
+
+        Notification done_copy_to_cpu;
+        device_ctxt->CopyDeviceTensorToCPU(
+            &src_tensor, "TensorCopy", device, host_tensor.get(),
+            [&done_copy_to_cpu](const Status& s) {
+              done_copy_to_cpu.Notify();
+            });
+        done_copy_to_cpu.WaitForNotification();
+        std::cout << "CopyDeviceTensorToCPU() done: host_tensor = "
+                  << host_tensor->DebugString() << std::endl
+                  << std::flush;  // DEBUG
+        debug_input = host_tensor.get();
+      }
+
+      // Produce the first output (pass-through)
+      if (deep_copy_) {
+        if (off_host_input) {
+          // Copy the host copy of the GPU tensor back to GPU
+          Notification done_copy_to_device;
+          device_ctxt->CopyCPUTensorToDevice(
+              host_tensor.get(), device, tensor_copy_,
+              [&done_copy_to_device](const Status& s) {
+                done_copy_to_device.Notify();
+              });
+          done_copy_to_device.WaitForNotification();
+        }
+
+        context->set_output_ref(0, &mu_, tensor_copy_);
+      } else {
+        context->forward_ref_input_to_ref_output(0, 0);
+      }
+    } else {
+      // Input is not reference-type. The tensor output cannot change after it
+      // is produced from the watched node. So there is no need to copy it
+      // even if deep_copy_ is true.
+      context->set_output(0, context->input(0));
+      debug_input = &context->input(0);
     }
+
+    std::cout << "  tensor_name = " << tensor_name_ << ": debug_input = "
+              << debug_input->DebugString() << std::endl;
+
+    // Produce the second output (debug signal), which is identical to the input
+    // in the case of this kernel.
+    context->set_output(1, GetDebugSignal(*debug_input));
   }
 
   bool IsExpensive() override { return false; }
 
+ protected:
+  // Method that converts the input (i.e., watched) tensor into a debug
+  // signal. The base implementation is the simplest case: identity mapping.
+  // Subclasses may override this method to implement other types of mapping.
+  virtual const Tensor GetDebugSignal(const Tensor& tensor) { return tensor; }
+
  private:
-  void WriteTensorToFile(const Tensor& tensor, const string& filename) {
-    // First, serialize tensor to string
-    TensorProto tensor_proto;
-    string tensor_str;
-
-    tensor.AsProtoField(&tensor_proto);
-    // tensor.AsProtoTensorContent(&tensor_proto);
-    tensor_proto.AppendToString(&tensor_str);
-
-    // std::cout << "Original tensor \"" << tensor_name_
-              // << "\" = " << tensor.DebugString() << std::endl;  // DEBUG
-
-    // Second, open the RecordIO file and write the seralization 
-    Status s = env_->NewWritableFile(filename, &recordio_file_);
-    if (!s.ok()) {
-      std::cerr << "Could not open events file: " << filename << ": " << s << std::endl;
-    }
-    recordio_writer_.reset(new io::RecordWriter(recordio_file_.get()));
-    if (recordio_writer_.get() == NULL) {
-      std::cerr << "Could not create record writer" << std::endl;
-    }
-
-    recordio_writer_->WriteRecord(tensor_str);
-    recordio_file_->Flush();
-
-    // Last, clean up
-    recordio_writer_.reset(NULL);
-    recordio_file_.reset(NULL);
-
-    // // Test reading
-    // std::unique_ptr<RandomAccessFile> ra_file;
-    // env_->NewRandomAccessFile(filename, &ra_file);
-    // io::RecordReader record_reader(ra_file.get());
-
-    // string readout;
-    // uint64 offset = 0;
-    // record_reader.ReadRecord(&offset, &readout);
-
-    // // DEBUG: Parse tensor_str back to Tensor
-    // TensorProto tensor_proto_2;
-    // tensor_proto_2.ParseFromString(readout);
-    // Tensor tensor2; 
-    // tensor2.FromProto(tensor_proto_2);
-
-    // std::cout << "Readout tensor \"" << tensor_name_
-    //           << "\" = " << tensor2.DebugString() << std::endl;  // DEBUG
-  }
-
-  void RecursiveCreateDir(const string& dir) {
-    string parent_dir = GetFileDir(dir);
-    if (!parent_dir.empty() && !env_->FileExists(parent_dir)) {
-      RecursiveCreateDir(parent_dir);  // Recursive call
-    }
-
-    env_->CreateDir(dir);
-  }
-
-  string GetFileDir(const string& filename) {
-    size_t last_delim_idx = filename.rfind("/");  // TODO(cais): 
-    if (last_delim_idx != string::npos && last_delim_idx != 0) {
-      return filename.substr(0, last_delim_idx);
-    } else {
-      return string("");
-    }
-  }
-
   string tensor_name_;
+  bool deep_copy_;
 
-  Env* env_;
-  std::unique_ptr<WritableFile> recordio_file_;
-  std::unique_ptr<io::RecordWriter> recordio_writer_;
+  // Deep-copied tensor from input. This is used if deep_copy is true and if
+  // the input is a reference-type tensor, in which case this OpKernel has
+  // ownership of the deep-copied tensor.
+  Tensor* tensor_copy_ = nullptr;
+  mutex mu_;
 };
-
-
 
 // NaN value counter op for debugging
 template <typename T>
-class DebugNanCountOp : public OpKernel {
+class DebugNanCountOp : public DebugIdentityOp<T> {
  public:
-  explicit DebugNanCountOp(OpKernelConstruction* context) : OpKernel(context) {
-    OP_REQUIRES_OK(context, context->GetAttr("tensor_name", &tensor_name_));
-  }
+  explicit DebugNanCountOp(OpKernelConstruction* context)
+      : DebugIdentityOp<T>(context) {}
 
-  void Compute(OpKernelContext* context) override {
-    const Tensor& input = context->input(0);
-    const TensorShape& input_shape = input.shape();
-    const T* input_flat = input.template flat<T>().data();
+ protected:
+  const Tensor GetDebugSignal(const Tensor& tensor) override {
+    const TensorShape& input_shape = tensor.shape();
+    const T* input_flat = tensor.template flat<T>().data();
 
-    int64 output = 0;
+    // Count NaNs
+    int64 nan_count = 0;
     for (int64 i = 0; i < input_shape.num_elements(); ++i) {
       if (Eigen::numext::isnan(input_flat[i])) {
-        output++;
+        nan_count++;
       }
     }
 
@@ -158,17 +181,11 @@ class DebugNanCountOp : public OpKernel {
     DataType dtype = DataType::DT_INT64;
     TensorShape shape({1});
 
-    Allocator* allocator = tensorflow::cpu_allocator();
-    Tensor output_tensor(allocator, dtype, shape);
-    output_tensor.vec<int64>()(0) = output;
+    Tensor debug_signal(tensorflow::cpu_allocator(), dtype, shape);
+    debug_signal.vec<int64>()(0) = nan_count;
 
-    context->set_output(0, output_tensor);
+    return debug_signal;
   }
-
-  bool IsExpensive() override { return false; }
-
- private:
-  string tensor_name_;
 };
 
 // TODO(cais): Add DebugInfinityCount

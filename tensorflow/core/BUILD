@@ -1610,6 +1610,7 @@ tf_cc_test(
         "//tensorflow/cc:cc_ops",
         "//tensorflow/core/kernels:cwise_op",
         "//tensorflow/core/kernels:debug_ops",
+        "//tensorflow/core/kernels:dense_update_ops",
         "//tensorflow/core/kernels:identity_op",
         "//tensorflow/core/kernels:matmul_op",
         "//tensorflow/core/kernels:ops_util",
@@ -1643,6 +1644,7 @@ tf_cc_test_gpu(
         ":test_main",
         ":testlib",
         "//tensorflow/cc:cc_ops",
+        "//tensorflow/core/kernels:debug_ops",
         "//tensorflow/core/kernels:ops_util",
     ],
 )

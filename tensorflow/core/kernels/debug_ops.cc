@@ -23,14 +23,56 @@ limitations under the License.
 
 namespace tensorflow {
 
-REGISTER_KERNEL_BUILDER(Name("DebugIdentity").Device(DEVICE_CPU),
-                        DebugIdentityOp);
+// Register debug identity (non-ref and ref) ops.
+// For the ref op, also, register on CPU.
+#define REGISTER_DEBUG_IDENTITY(type)                                     \
+  REGISTER_KERNEL_BUILDER(                                                \
+      Name("DebugIdentity").Device(DEVICE_CPU).TypeConstraint<type>("T"), \
+      DebugIdentityOp<type>);
 
+#define REGISTER_DEBUG_REF_IDENTITY(type)                                    \
+  REGISTER_KERNEL_BUILDER(                                                   \
+      Name("DebugRefIdentity").Device(DEVICE_CPU).TypeConstraint<type>("T"), \
+      DebugIdentityOp<type>);
+
+TF_CALL_ALL_TYPES(REGISTER_DEBUG_IDENTITY);
+TF_CALL_ALL_TYPES(REGISTER_DEBUG_REF_IDENTITY);
+
+#if GOOGLE_CUDA
+#define REGISTER_GPU_DEBUG_REF_IDENTITY(type)             \
+  REGISTER_KERNEL_BUILDER(Name("DebugRefIdentity")        \
+                              .Device(DEVICE_GPU)         \
+                              .HostMemory("debug_signal") \
+                              .TypeConstraint<type>("T"), \
+                          DebugIdentityOp<type>);
+
+TF_CALL_GPU_NUMBER_TYPES(REGISTER_GPU_DEBUG_REF_IDENTITY);
+#endif
+
+// Register debug NaN-counter (non-ref and ref) ops.
+// For the ref op, also, register on CPU.
 #define REGISTER_DEBUG_NAN_COUNT(type)                                    \
   REGISTER_KERNEL_BUILDER(                                                \
       Name("DebugNanCount").Device(DEVICE_CPU).TypeConstraint<type>("T"), \
       DebugNanCountOp<type>);
 
+#define REGISTER_DEBUG_REF_NAN_COUNT(type)                                   \
+  REGISTER_KERNEL_BUILDER(                                                   \
+      Name("DebugRefNanCount").Device(DEVICE_CPU).TypeConstraint<type>("T"), \
+      DebugNanCountOp<type>);
+
 TF_CALL_REAL_NUMBER_TYPES(REGISTER_DEBUG_NAN_COUNT);
+TF_CALL_REAL_NUMBER_TYPES(REGISTER_DEBUG_REF_NAN_COUNT);
+
+#if GOOGLE_CUDA
+#define REGISTER_GPU_DEBUG_REF_NAN_COUNT(type)            \
+  REGISTER_KERNEL_BUILDER(Name("DebugRefNanCount")        \
+                              .Device(DEVICE_GPU)         \
+                              .HostMemory("debug_signal") \
+                              .TypeConstraint<type>("T"), \
+                          DebugNanCountOp<type>);
+
+TF_CALL_GPU_NUMBER_TYPES(REGISTER_GPU_DEBUG_REF_NAN_COUNT);
+#endif
 
 }  // namespace tensorflow

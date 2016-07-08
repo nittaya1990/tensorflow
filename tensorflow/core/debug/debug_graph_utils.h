@@ -70,6 +70,9 @@ class DebugNodeInserter {
   // A map from tensor name (e.g., "node_a:0") to list of debug op names
   // (e.g., {"DebugIdentity", "DebugNanCount"})
   std::unordered_map<string, std::vector<string>> tensor_watches_;
+  // A map from tensor name to bool value indicating whether the debug op
+  // should deep-copy the input tensor.
+  std::unordered_map<string, bool> do_deep_copy_;
 };
 }  // namespace tensorflow
 

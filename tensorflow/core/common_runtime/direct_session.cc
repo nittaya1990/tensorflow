@@ -809,7 +809,7 @@ Status DirectSession::GetOrCreateExecutors(
     optimizer.Optimize(lib, device, &partition_graph);
 
     // EXPERIMENTAL: tfdb inserts debug nodes (i.e., probes) to the graph
-    if (debug_node_inserter_.get() != nullptr) {
+    if (debug_node_inserter_) {
       TF_RETURN_IF_ERROR(debug_node_inserter_->InsertNodes(partition_graph));
     }
 

@@ -2127,24 +2127,72 @@ input_max: If range is given, this is the max of the range.
 // EXPERIMENTAL: tfdb debugger-inserted ops.
 REGISTER_OP("DebugIdentity")
     .Input("input: T")
-    .Output("output: T")
+    .Output("pass_through: T")  // output 0 is the pass-through output
+    .Output("debug_signal: T")  // output 1 is the debug signal
     .Attr("T: type")
     .Attr("tensor_name: string = ''")
+    .Attr("deep_copy: bool = false")
+    .Attr("debug_url: string = ''")
     .Doc(R"doc(
 Debug Identity Op
-Return a tensor with the same shape and contents as the input tensor or value
-for debugging.
+
+Output on slot 0 passes the input tensor through.
+Output on slot 1 is an identity mapping of the input tensor.
+)doc");
+
+// This is variant of DebugIdentity that takes reference tensor as input
+REGISTER_OP("DebugRefIdentity")
+    .Input("input: Ref(T)")
+    .Output("pass_through: Ref(T)")
+    .Output("debug_signal: T")  // The debug signal is always non-reference
+    .Attr("T: type")
+    .Attr("tensor_name: string = ''")
+    .Attr("deep_copy: bool = false")
+    .Attr("debug_url: string = ''")
+    .Doc(R"doc(
+Debug Reference Identity Op
+
+This is the reference-type variant of DebugIdentity.
+Output on slot 0 passes the input tensor through.
+Output on slot 1 is an identity mapping of the input tensor. This output
+is a deep copy of the input tensor if the attribute deep_copy is set as true.
 )doc");
 
 REGISTER_OP("DebugNanCount")
     .Input("input: T")
-    .Output("output: int64")
+    .Output("pass_through: T")      // The pass-through tensor keeps the dtype
+    .Output("debug_signal: int64")  // The debug signal (nan count) is int64
     .Attr("T: type")
     .Attr("tensor_name: string = ''")
+    .Attr("deep_copy: bool = false")
+    .Attr("debug_url: string = ''")
     .Doc(R"doc(
 Debug NaN Value Counter Op
-Return an int64 value that is the number of NaN values in the input tensor for
-for debugging.
+
+Output on slot 0 passes the input tensor through.
+Output on slot 1 is the number of NaN values in the input tensor for
+debugging.
+
+The input must be of a real-number type (e.g., float, double).
+)doc");
+
+// This is variant of DebugNanCount that takes reference tensor as input
+REGISTER_OP("DebugRefNanCount")
+    .Input("input: Ref(T)")
+    .Output("pass_through: Ref(T)")
+    .Output("debug_signal: int64")
+    .Attr("T: type")
+    .Attr("tensor_name: string = ''")
+    .Attr("deep_copy: bool = false")
+    .Attr("debug_url: string = ''")
+    .Doc(R"doc(
+Debug Reference NaN Value Counter Op
+
+This is the reference-type variant of DebugNanCount.
+Output on slot 0 passes the input tensor through.
+Output on slot 1 is the number of NaN values in the input tensor for
+debugging. This count is based on a deep copy of the input tensor if
+the attribute deep_copy is set as true.
 
 The input must be of a real-number type (e.g., float, double).
 )doc");
