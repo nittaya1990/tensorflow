@@ -52,7 +52,7 @@
 # Constants:
 # Fixed naming patterns for wheel (.whl) files given different python versions
 declare -A WHL_TAGS
-WHL_TAGS=(["2.7"]="cp27-none" ["3.4"]="cp34-cp34m" ["3.5"]="py3-none")
+WHL_TAGS=(["2.7"]="cp27-none" ["3.4"]="cp34-cp34m" ["3.5"]="cp35-cp35m")
 
 
 INSTALL_EXTRA_PIP_PACKAGES=${TF_BUILD_INSTALL_EXTRA_PIP_PACKAGES}
