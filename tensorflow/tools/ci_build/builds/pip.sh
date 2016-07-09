@@ -169,10 +169,9 @@ if [[ $(uname) == "Linux" ]]; then
     NEW_WHL_BASE_NAME=$(echo ${WHL_BASE_NAME} | cut -d \- -f 1)-\
 $(echo ${WHL_BASE_NAME} | cut -d \- -f 2)-${PY_TAGS}-${PLATFORM_TAG}.whl
 
-    mv "${WHL_DIR}/${WHL_BASE_NAME}" "${WHL_DIR}/${NEW_WHL_BASE_NAME}" && \
-      echo "Renamed wheel file: ${WHL_BASE_NAME} --> ${NEW_WHL_BASE_NAME}" || \
-      die "ERROR: Failed to rename wheel file to ${NEW_WHL_BASE_NAME}"
-    WHL_PATH="${WHL_DIR}/${NEW_WHL_BASE_NAME}"
+    cp "${WHL_DIR}/${WHL_BASE_NAME}" "${WHL_DIR}/${NEW_WHL_BASE_NAME}" && \
+      echo "Copied wheel file: ${WHL_BASE_NAME} --> ${NEW_WHL_BASE_NAME}" || \
+      die "ERROR: Failed to copy wheel file to ${NEW_WHL_BASE_NAME}"
   fi
 fi
 
