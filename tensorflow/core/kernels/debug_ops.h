@@ -93,6 +93,9 @@ class DebugIdentityOp : public OpKernel {
   }
 
   void Compute(OpKernelContext* context) override {
+    std::cout << "DebugIdentityOp::Compute(): input = "
+              << context->input(0).DebugString() << std::endl;  // DEBUG
+
     context->set_output(0, context->input(0));
   }
 
