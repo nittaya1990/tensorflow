@@ -426,4 +426,62 @@ uint64 GPUUtil::Checksum(const Tensor& tensor) {
                 tensor.TotalBytes(), 0);
 }
 
+// static
+void GPUUtil::CopyGPUTensorToSameGPU(Device* gpu_device,
+                                     const DeviceContext* device_context,
+                                     const Tensor* src_gpu_tensor,
+                                     Tensor* dst_gpu_tensor,
+                                     StatusCallback done) {
+  VLOG(1) << "CopyGPUTensorToSameGPU";
+  const DeviceBase::GpuDeviceInfo* dev_info = nullptr;
+  gpu::Stream* send_stream = nullptr;
+  Status s = PrepareCopy(gpu_device, device_context, *src_gpu_tensor,
+                         dst_gpu_tensor, &dev_info, &send_stream);
+  if (!s.ok()) {
+    done(s);
+    return;
+  }
+
+  // TODO(cais): Remove
+  // auto send_device_to_device_stream =
+  //     static_cast<const GPUDeviceContext*>(device_context)
+  //         ->device_to_device_stream();
+  // if (send_device_to_device_stream == nullptr) {
+  //   done(errors::Internal("No send gpu-to-gpu stream is available."));
+  //   return;
+  // }
+
+  // Wait for the sender's main stream to make sure the data are available.
+  // send_device_to_device_stream->ThenWaitFor(send_stream);
+
+  const int64 total_bytes = src_gpu_tensor->TotalBytes();
+  if (total_bytes > 0) {
+    void* src_ptr = GetBase(src_gpu_tensor);
+    DeviceMemoryBase gpu_src_ptr(src_ptr, total_bytes);
+    void* dst_ptr = GetBase(dst_gpu_tensor);
+    DeviceMemoryBase gpu_dst_ptr(dst_ptr, total_bytes);
+    send_stream->ThenMemcpy(&gpu_dst_ptr, gpu_src_ptr, total_bytes);
+  }
+
+  // TODO(cais): Remove
+  // Use of the input may outlive stack scope, so keep a ref.
+  // TensorReference input_ref(*dst_gpu_tensor);
+  // dev_info->event_mgr->ThenExecute(
+  //     send_device_to_device_stream,
+  //     [send_device_to_device_stream, done, input_ref]() {
+  //       if (!send_device_to_device_stream->ok()) {
+  //         LOG(FATAL) << "GPU->SameGPU Memcpy failed";
+  //       }
+  //       input_ref.Unref();
+  //       done(Status::OK());
+  //     });
+
+  dev_info->event_mgr->ThenExecute(send_stream, [send_stream, done]() {
+    if (!send_stream->ok()) {
+      LOG(FATAL) << "GPU->SameGPU Memcpy failed";
+    }
+    done(Status::OK());
+  });
+}
+
 }  // namespace tensorflow
