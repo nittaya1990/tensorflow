@@ -88,7 +88,7 @@ void DebugGateway::CopyTensor(const string& node_name, const int output_slot,
     // be freed later.
     {
       mutex_lock l(mu_);
-      host_tensors_[tensor_tag] = cpu_tensor;
+      host_tensors_.push_back(cpu_tensor);
     }
 
     // Determine if the tensor is on device (GPU) or host (CPU).
@@ -128,8 +128,8 @@ void DebugGateway::CopyTensor(const string& node_name, const int output_slot,
 void DebugGateway::ClearHostTensors() {
   mutex_lock l(mu_);
   for (auto it = host_tensors_.begin(); it != host_tensors_.end(); ++it) {
-    if (it->second != nullptr) {
-      delete it->second;
+    if (*it != nullptr) {
+      delete *it;
     }
   }
 

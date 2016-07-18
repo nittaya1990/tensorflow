@@ -75,7 +75,7 @@ class DebugGateway {
   NodeValueCallback val_cb_ = nullptr;
 
   mutex mu_;
-  std::unordered_map<string, const Tensor*> host_tensors_ GUARDED_BY(mu_);
+  std::vector<const Tensor*> host_tensors_ GUARDED_BY(mu_);
 
   typedef std::function<void(const Tensor* dst_tensor)> CopyDoneCallback;
 
