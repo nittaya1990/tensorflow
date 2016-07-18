@@ -71,12 +71,15 @@ class CopyOp : public OpKernel {
 //   the debug signal is equal to the input tensor.
 class DebugIdentityOp : public OpKernel {
  public:
-  explicit DebugIdentityOp(OpKernelConstruction* context) : OpKernel(context) {
+  explicit DebugIdentityOp(OpKernelConstruction* context) : OpKernel(context) {    
     OP_REQUIRES_OK(context, context->GetAttr("tensor_name", &tensor_name_));
     // TODO(cais): Add debug_url
   }
 
   void Compute(OpKernelContext* context) override {
+    std::cout << "DebugIdentityOp::Compute(): input = "
+              << context->input(0).DebugString() << std::endl;  // DEBUG
+
     context->set_output(0, context->input(0));
   }
 
