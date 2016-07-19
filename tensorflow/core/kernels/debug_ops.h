@@ -16,13 +16,77 @@ limitations under the License.
 #ifndef TENSORFLOW_KERNELS_DEBUG_OP_H_
 #define TENSORFLOW_KERNELS_DEBUG_OP_H_
 
+#include <fstream>
+
 #include "tensorflow/core/common_runtime/gpu/gpu_util.h"
 #include "tensorflow/core/framework/device_base.h"
 #include "tensorflow/core/framework/op_kernel.h"
+#include "tensorflow/core/framework/summary.pb.h"
 #include "tensorflow/core/framework/tensor_util.h"
 #include "tensorflow/core/lib/core/notification.h"
+#include "tensorflow/core/lib/io/record_writer.h"
+#include "tensorflow/core/platform/env.h"
+#include "tensorflow/core/util/events_writer.h"
+#include "tensorflow/core/util/event.pb.h"
+
+// TODO(cais): Check for unused includes
 
 namespace tensorflow {
+
+// Helper class for debug ops.
+class DebugOpsHelper {
+ public:
+  static void RecursiveCreateDir(Env* env, const string& dir) {
+    string parent_dir = GetFileDir(dir);
+
+    // TODO(cais): what if parent_dir is actually a file (not a dir)?
+    if (!parent_dir.empty() && !env->FileExists(parent_dir)) {
+      RecursiveCreateDir(env, parent_dir);  // Recursive call
+    }
+
+    env->CreateDir(dir);
+  }
+
+  static string GetFileDir(const string& filename) {
+     // TODO(cais): Support other platforms such as Windows?
+    size_t last_delim_idx = filename.rfind("/");
+    if (last_delim_idx != string::npos && last_delim_idx != 0) {
+      return filename.substr(0, last_delim_idx);
+    } else {
+      return string("");
+    }
+  }
+
+  static void WriteTensorToFile(const Tensor& tensor, const string& filename) {
+    Env* env(Env::Default());
+
+    // Create the directory if necessary.
+    string filedir = DebugOpsHelper::GetFileDir(filename);
+    if (!filedir.empty() && !env->FileExists(filedir)) {
+      DebugOpsHelper::RecursiveCreateDir(env, filedir);
+    }
+
+    // Encapsulate the tensor value inside a Summary proto, and then an Event
+    // proto.
+    Event event;
+    event.set_wall_time(Env::Default()->NowMicros());
+    Summary::Value* summ_val = event.mutable_summary()->add_value();
+
+    // TODO(cais): Confusing node name with tensor name may cause problems?
+    summ_val->set_node_name(tensor_name_);
+    if (tensor.dtype() == DT_STRING) {
+      tensor.AsProtoField(summ_val->mutable_tensor());
+    } else {
+      tensor.AsProtoTensorContent(summ_val->mutable_tensor());
+    }
+
+    string event_str;
+    event.AppendToString(&event_str);
+
+    std::fstream ofs(filename, std::ios::out | std::ios::binary);
+    event.SerializeToOstream(&ofs);
+  }
+};
 
 // Copy op for debugging.
 // Performs CPU-to-CPU or GPU-to-GPU deep-copying of tensor, depending on the
@@ -71,14 +135,28 @@ class CopyOp : public OpKernel {
 //   the debug signal is equal to the input tensor.
 class DebugIdentityOp : public OpKernel {
  public:
-  explicit DebugIdentityOp(OpKernelConstruction* context) : OpKernel(context) {    
+  explicit DebugIdentityOp(OpKernelConstruction* context)
+      : OpKernel(context) {
     OP_REQUIRES_OK(context, context->GetAttr("tensor_name", &tensor_name_));
-    // TODO(cais): Add debug_url
+    OP_REQUIRES_OK(context, context->GetAttr("debug_url", &debug_url_));
   }
 
   void Compute(OpKernelContext* context) override {
-    std::cout << "DebugIdentityOp::Compute(): input = "
-              << context->input(0).DebugString() << std::endl;  // DEBUG
+    const Tensor& input = context->input(0);
+
+    if (!debug_url_.empty()) {
+      const string kProtocolPrefixFile = "file:/";
+
+      // Require support protocols.
+      OP_REQUIRES(context, debug_url_.find(kProtocolPrefixFile) == 0,
+                  errors::InvalidArgument(strings::StrCat("Unsupported debug URL protocol in ", debug_url_)));
+
+      // TODO(cais): Create directory if it does not exist.
+      string file_path(debug_url_);
+      file_path.replace(0, kProtocolPrefixFile.size(), "");
+
+      DebugOpsHelper::WriteTensorToFile(input, file_path);
+    }
 
     context->set_output(0, context->input(0));
   }
@@ -87,6 +165,7 @@ class DebugIdentityOp : public OpKernel {
 
  private:
   string tensor_name_;
+  string debug_url_;
 };
 
 // NaN-counter op for debugging.

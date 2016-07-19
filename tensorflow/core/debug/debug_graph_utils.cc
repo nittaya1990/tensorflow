@@ -35,7 +35,11 @@ Status DebugNodeInserter::InsertNodes(
 
   // A map from tensor name (e.g., "node_a:0") to list of debug op names
   // (e.g., {"DebugIdentity", "DebugNanCount"})
-  std::unordered_map<string, std::vector<string>> tensor_watches_;
+  std::unordered_map<string, std::vector<string>> tensor_watches;
+
+  // A map from tensor name (e.g., "node_a:0") to list of debugger urls
+  // (e.g., {"file://tmp/tfdb_1", "grpc://127.0.0.1:10010"}).
+  std::unordered_map<string, std::vector<string>> tensor_debug_urls;
 
   // Cache the proto content for fast lookup later
   for (const DebugTensorWatch& watch : watches) {
@@ -56,11 +60,24 @@ Status DebugNodeInserter::InsertNodes(
         strings::StrCat(watch.node_name(), ":", watch.output_slot());
 
     std::vector<string> debug_ops;
-    for (const string& debug_op : watch.debug_ops()) {
-      debug_ops.push_back(debug_op);
+    std::vector<string> debug_urls;
+
+    // Check for equal lengths in watch.debug_ops and watch.debug_urls.
+    if (watch.debug_ops().size() != watch.debug_urls(i)) {
+      return Status(
+          error::FAILED_PRECONDITION,
+          strings::StrCat("debug_ops and debug_urls have unequal lengths: ",
+                          watch.debug_ops().size(), " vs. ",
+                          watch.debug_urls(i)));
     }
 
-    tensor_watches_[tensor_name] = debug_ops;
+    for (int i = 0; i < watch.debug_ops().size(); ++i) {
+      debug_ops.push_back(watch.debug_ops(i));
+      debug_urls.push_back(watch.debug_urls(i));
+    }
+
+    tensor_watches[tensor_name] = debug_ops;
+    tensor_debug_urls[tensor_name] = debug_urls;
   }
 
   DeviceType device_type = DeviceType{device->device_type()};
@@ -94,7 +111,7 @@ Status DebugNodeInserter::InsertNodes(
 
     const string tensor_name =
         strings::StrCat(src_node->name(), ":", edge->src_output());
-    if (tensor_watches_.find(tensor_name) == tensor_watches_.end()) {
+    if (tensor_watches.find(tensor_name) == tensor_watches.end()) {
       // Add debug nodes only for edges with matching source node and source
       // output slot.
       continue;
@@ -145,13 +162,14 @@ Status DebugNodeInserter::InsertNodes(
 
       // Create all requested debug nodes and their edges to the Copy node.
       std::vector<Node*> node_added_debug_nodes;
-      for (int i = 0; i < tensor_watches_[tensor_name].size(); ++i) {
-        const string& debug_op_name = tensor_watches_[tensor_name][i];
+      for (int i = 0; i < tensor_watches[tensor_name].size(); ++i) {
+        const string& debug_op_name = tensor_watches[tensor_name][i];
+        const string& debug_url = tensor_debug_urls[tensor_name][i];
 
         Node* debug_node;
         Status debug_s =
             CreateDebugNode(graph, device_type, copy_node->name(), src_dt,
-                            tensor_name, i, debug_op_name, &debug_node);
+                            tensor_name, i, debug_op_name, debug_url, &debug_node);
         if (!debug_s.ok()) {
           return Status(
               error::FAILED_PRECONDITION,
@@ -267,16 +285,16 @@ Status DebugNodeInserter::CreateDebugNode(
     Graph* graph, const DeviceType device_type,
     const string& src_copy_node_name, const DataType src_dt,
     const string& tensor_name, const int debug_op_num,
-    const string& debug_op_name, Node** debug_node) {
+    const string& debug_op_name, const string& debug_url, Node** debug_node) {
   NodeDef node_def;
   const KernelDef* kdef;
 
   const string debug_node_name =
       GetDebugNodeName(tensor_name, debug_op_num, debug_op_name);
-  // TODO(cais): Hook up with DebugTensorWatch proto
   auto builder = NodeDefBuilder(debug_node_name, debug_op_name)
                      .Input(src_copy_node_name, 0, src_dt)
-                     .Attr("tensor_name", tensor_name);
+                     .Attr("tensor_name", tensor_name)
+                     .Attr("debug_url", debug_url);
 
   if (!builder.Finalize(&node_def).ok()) {
     return Status(

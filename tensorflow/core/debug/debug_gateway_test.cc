@@ -356,7 +356,6 @@ TEST_F(SessionDebugMinusAXTest,
       [&mu, &callbacks_done, &comp_callback_count, &debug_identity_node_name](
           const string& node_name, const bool any_output) {
         mutex_lock l(mu);
-        std::cout << "node_name = " << node_name << std::endl;  // DEBUG
         if (node_name == debug_identity_node_name) {
           comp_callback_count++;
         }
@@ -421,14 +420,17 @@ TEST_F(SessionDebugMinusAXTest,
   // Wait for the concurrent functions with Run() calls to finish.
   delete tp;
 
-  ASSERT_EQ(kConcurrentRuns, comp_callback_count);
-  ASSERT_EQ(kConcurrentRuns, val_callback_count);
-  ASSERT_EQ(kConcurrentRuns, debug_identity_tensor_vals.size());
-  for (int i = 0; i < kConcurrentRuns; ++i) {
-    ASSERT_EQ(TensorShape({2, 1}), debug_identity_tensor_vals[i].shape());
-    auto mat_identity = debug_identity_tensor_vals[i].matrix<float>();
-    ASSERT_EQ(5.0, mat_identity(0, 0));
-    ASSERT_EQ(-1.0, mat_identity(1, 0));
+  {
+    mutex_lock l(mu);
+    ASSERT_EQ(kConcurrentRuns, comp_callback_count);
+    ASSERT_EQ(kConcurrentRuns, val_callback_count);
+    ASSERT_EQ(kConcurrentRuns, debug_identity_tensor_vals.size());
+    for (int i = 0; i < kConcurrentRuns; ++i) {
+      ASSERT_EQ(TensorShape({2, 1}), debug_identity_tensor_vals[i].shape());
+      auto mat_identity = debug_identity_tensor_vals[i].matrix<float>();
+      ASSERT_EQ(5.0, mat_identity(0, 0));
+      ASSERT_EQ(-1.0, mat_identity(1, 0));
+    }
   }
 }
 

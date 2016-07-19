@@ -196,6 +196,8 @@ message DebugTensorWatch {
   // One or more than one probes on a tensor.
   // e.g., {"DebugIdentity", "DebugNanCount"}
   repeated string debug_ops = 3;
+
+  repeated string debug_urls = 4;
 }
 
 // EXPERIMENTAL. Options for a single Run() call.

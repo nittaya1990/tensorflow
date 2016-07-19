@@ -99,7 +99,9 @@ class DebugNodeInserter {
                                 const DataType src_dt,
                                 const string& tensor_name,
                                 const int debug_op_num,
-                                const string& debug_op_name, Node** debug_node);
+                                const string& debug_op_name,
+                                const string& debug_url,
+                                Node** debug_node);
 };
 }  // namespace tensorflow
 

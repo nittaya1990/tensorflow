@@ -2349,6 +2349,7 @@ REGISTER_OP("DebugIdentity")
     .Output("output: T")
     .Attr("T: type")
     .Attr("tensor_name: string = ''")
+    .Attr("debug_url: string = ''")
     .Doc(R"doc(
 Debug Identity Op.
 
@@ -2364,6 +2365,7 @@ REGISTER_OP("DebugNanCount")
     .Output("output: int64")  // The debug signal (nan count) is int64
     .Attr("T: type")
     .Attr("tensor_name: string = ''")
+    .Attr("debug_url: string = ''")
     .Doc(R"doc(
 Debug NaN Value Counter Op
 

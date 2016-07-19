@@ -50,8 +50,6 @@ DebugGateway::DebugGateway(DirectSession* session) : session_(session) {
 }
 
 DebugGateway::~DebugGateway() {
-  ClearHostTensors();
-
   if (session_ != nullptr) {
     session_->node_outputs_callback_ = nullptr;
   }
@@ -81,15 +79,8 @@ void DebugGateway::CopyTensor(const string& node_name, const int output_slot,
 
     // Create copied tensor on host
     Allocator* cpu_allocator = tensorflow::cpu_allocator();
-    Tensor* cpu_tensor =
-        new Tensor(cpu_allocator, src_tensor->dtype(), src_tensor->shape());
-
-    // Keep track of the host tensors created for copying so that they can
-    // be freed later.
-    {
-      mutex_lock l(mu_);
-      host_tensors_.push_back(cpu_tensor);
-    }
+    std::shared_ptr<Tensor> cpu_tensor(
+        new Tensor(cpu_allocator, src_tensor->dtype(), src_tensor->shape()));
 
     // Determine if the tensor is on device (GPU) or host (CPU).
     // The second part of the check is necessary because even an OpKernel on
@@ -102,10 +93,10 @@ void DebugGateway::CopyTensor(const string& node_name, const int output_slot,
       // Copy device (e.g., GPU) tensor to host and when done, invoke the
       // callback.
       device_ctxt->CopyDeviceTensorToCPU(
-          src_tensor, "TensorCopy", device, cpu_tensor,
+          src_tensor, "TensorCopy", device, cpu_tensor.get(),
           [node_name, cpu_tensor, copy_done_cb](const Status& s) {
             if (s.ok()) {
-              copy_done_cb(cpu_tensor);
+              copy_done_cb(cpu_tensor.get());
             } else {
               LOG(ERROR) << "Copying of device Tensor " << node_name
                          << " to CPU for debugging failed.";
@@ -117,23 +108,12 @@ void DebugGateway::CopyTensor(const string& node_name, const int output_slot,
       // may shared the underlying buffer with other tensors.
       cpu_tensor->UnsafeCopyFromInternal(*src_tensor, src_tensor->shape());
 
-      copy_done_cb(cpu_tensor);
+      copy_done_cb(cpu_tensor.get());
     }
   } else {
     // Tensor is not initialized: No need to copy.
     copy_done_cb(src_tensor);
   }
-}
-
-void DebugGateway::ClearHostTensors() {
-  mutex_lock l(mu_);
-  for (auto it = host_tensors_.begin(); it != host_tensors_.end(); ++it) {
-    if (*it != nullptr) {
-      delete *it;
-    }
-  }
-
-  host_tensors_.clear();
 }
 
 }  // namespace tensorflow
