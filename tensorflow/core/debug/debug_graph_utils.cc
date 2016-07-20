@@ -63,12 +63,12 @@ Status DebugNodeInserter::InsertNodes(
     std::vector<string> debug_urls;
 
     // Check for equal lengths in watch.debug_ops and watch.debug_urls.
-    if (watch.debug_ops().size() != watch.debug_urls()) {
+    if (watch.debug_ops().size() != watch.debug_urls().size()) {
       return Status(
           error::FAILED_PRECONDITION,
           strings::StrCat("debug_ops and debug_urls have unequal lengths: ",
                           watch.debug_ops().size(), " vs. ",
-                          watch.debug_urls(i)));
+                          watch.debug_urls().size()));
     }
 
     for (int i = 0; i < watch.debug_ops().size(); ++i) {
