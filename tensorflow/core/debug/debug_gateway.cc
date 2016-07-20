@@ -79,8 +79,7 @@ void DebugGateway::CopyTensor(const string& node_name, const int output_slot,
 
     // Create copied tensor on host
     Allocator* cpu_allocator = tensorflow::cpu_allocator();
-    std::shared_ptr<Tensor> cpu_tensor(
-        new Tensor(cpu_allocator, src_tensor->dtype(), src_tensor->shape()));
+    Tensor cpu_tensor(cpu_allocator, src_tensor->dtype(), src_tensor->shape());
 
     // Determine if the tensor is on device (GPU) or host (CPU).
     // The second part of the check is necessary because even an OpKernel on
@@ -93,10 +92,10 @@ void DebugGateway::CopyTensor(const string& node_name, const int output_slot,
       // Copy device (e.g., GPU) tensor to host and when done, invoke the
       // callback.
       device_ctxt->CopyDeviceTensorToCPU(
-          src_tensor, "TensorCopy", device, cpu_tensor.get(),
+          src_tensor, "TensorCopy", device, &cpu_tensor,
           [node_name, cpu_tensor, copy_done_cb](const Status& s) {
             if (s.ok()) {
-              copy_done_cb(cpu_tensor.get());
+              copy_done_cb(&cpu_tensor);
             } else {
               LOG(ERROR) << "Copying of device Tensor " << node_name
                          << " to CPU for debugging failed.";
@@ -106,9 +105,9 @@ void DebugGateway::CopyTensor(const string& node_name, const int output_slot,
       // For CPU tensors, copy the source tensor and own the copy, because the
       // value callback may outlive the life time of the tensor and the tensor
       // may shared the underlying buffer with other tensors.
-      cpu_tensor->UnsafeCopyFromInternal(*src_tensor, src_tensor->shape());
+      cpu_tensor.UnsafeCopyFromInternal(*src_tensor, src_tensor->shape());
 
-      copy_done_cb(cpu_tensor.get());
+      copy_done_cb(&cpu_tensor);
     }
   } else {
     // Tensor is not initialized: No need to copy.
