@@ -57,7 +57,8 @@ class DebugOpsHelper {
     }
   }
 
-  static void WriteTensorToFile(const Tensor& tensor, const string& filename) {
+  static void WriteTensorToFile(const Tensor& tensor, const string& tensor_name,
+                                const string& filename) {
     Env* env(Env::Default());
 
     // Create the directory if necessary.
@@ -73,7 +74,7 @@ class DebugOpsHelper {
     Summary::Value* summ_val = event.mutable_summary()->add_value();
 
     // TODO(cais): Confusing node name with tensor name may cause problems?
-    summ_val->set_node_name(tensor_name_);
+    summ_val->set_node_name(tensor_name);
     if (tensor.dtype() == DT_STRING) {
       tensor.AsProtoField(summ_val->mutable_tensor());
     } else {
@@ -155,7 +156,7 @@ class DebugIdentityOp : public OpKernel {
       string file_path(debug_url_);
       file_path.replace(0, kProtocolPrefixFile.size(), "");
 
-      DebugOpsHelper::WriteTensorToFile(input, file_path);
+      DebugOpsHelper::WriteTensorToFile(input, tensor_name_, file_path);
     }
 
     context->set_output(0, context->input(0));
