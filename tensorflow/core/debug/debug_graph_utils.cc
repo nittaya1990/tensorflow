@@ -50,9 +50,6 @@ Status DebugNodeInserter::InsertNodes(
       continue;
     }
     if (watch.debug_ops().empty()) {
-      // The semantics of debug_ops being an empty list is that the tensor
-      // value _itself_ is watched, i.e., watched without any transformation,
-      // not even identity transformation.
       continue;
     }
 
@@ -78,6 +75,10 @@ Status DebugNodeInserter::InsertNodes(
 
     tensor_watches[tensor_name] = debug_ops;
     tensor_debug_urls[tensor_name] = debug_urls;
+  }
+
+  if (tensor_watches.empty()) {
+    return Status::OK();
   }
 
   DeviceType device_type = DeviceType{device->device_type()};
@@ -212,7 +213,7 @@ Status DebugNodeInserter::InsertNodes(
     }
   }
 
-  // Remove all edges marked for removal
+  // Remove all edges marked for removal.
   for (auto it : edges_to_remove) {
     std::vector<const Edge*> edges = it.second;
 

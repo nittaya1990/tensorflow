@@ -84,10 +84,6 @@ class DebugNodeInserter {
                                        const string& debug_op_name);
 
  private:
-  // A map from tensor name (e.g., "node_a:0") to list of debug op names
-  // (e.g., {"DebugIdentity", "DebugNanCount"})
-  std::unordered_map<string, std::vector<string>> tensor_watches_;
-
   static Status CreateCopyNode(Graph* graph, const DeviceType device_type,
                                const bool is_host_memory,
                                const string& src_node_name,
