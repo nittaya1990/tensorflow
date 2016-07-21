@@ -72,6 +72,7 @@ load(
     "//tensorflow/core:platform/default/build_config.bzl",
     "tf_proto_library",
     "tf_proto_library_cc",
+    "tf_proto_library_py",  # TODO(cais): tfdb: move to core/debug
     "tf_additional_lib_srcs",
     "tf_additional_lib_deps",
     "tf_additional_stream_executor_srcs",
@@ -93,6 +94,8 @@ tf_proto_library(
     srcs = glob(
         ["**/*.proto"],
         exclude = [
+            "protobuf/debugger.proto",
+            "protobuf/debugger_service.proto",
             "protobuf/worker.proto",
             "protobuf/worker_service.proto",
             "protobuf/master.proto",
@@ -1132,6 +1135,44 @@ tf_cuda_library(
         ":protos_all_cc",
     ],
     alwayslink = 1,
+)
+
+# TODO(cais): Move tfdb-related targets to core/debug
+tf_proto_library_cc(
+    name = "debugger_proto",
+    srcs = ["protobuf/debugger.proto"],
+    cc_api_version = 2,
+    cc_libs = [":protos_all_cc"],
+    visibility = [
+        "//tensorflow:internal",
+    ],
+)
+
+tf_proto_library_py(
+    name = "debugger_proto",
+    testonly = 0,
+    srcs = ["protobuf/debugger.proto"],
+)
+
+tf_proto_library_cc(
+    name = "debugger_service_proto",
+    srcs = ["protobuf/debugger_service.proto"],
+    has_services = 1,
+    cc_api_version = 2,
+    cc_libs = [":debugger_proto_cc"],
+    cc_stubby_versions = ["2"],
+    visibility = [
+        "//tensorflow:internal",
+    ],
+)
+
+tf_proto_library_py(
+    name = "debugger_service_proto",
+    testonly = 0,
+    srcs = ["protobuf/debugger_service.proto"],
+    visibility = [
+        "//tensorflow:internal",
+    ],
 )
 
 cc_library(

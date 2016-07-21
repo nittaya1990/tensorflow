@@ -1332,6 +1332,20 @@ py_binary(
     ],
 )
 
+# tfdb: Python debugger server
+py_binary(
+    name = "debugger",
+    srcs = [
+        "debug/debugger.py",
+    ],
+    main = "debug/debugger.py",
+    srcs_version = "PY2AND3",
+    deps = [
+        "//tensorflow:tensorflow_py",
+        # "//tensorflow/core:debugger_service_proto_py",
+    ]
+)
+
 filegroup(
     name = "all_files",
     srcs = glob(
