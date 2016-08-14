@@ -224,6 +224,10 @@ message RunOptions {
 
   // Debugging options
   repeated DebugTensorWatch debug_tensor_watch_opts = 4;
+
+  // Whether the partition graph(s) executed by the executor(s) should be
+  // outputted via RunMetadata.
+  bool output_partition_graphs = 5;
 }
 
 // EXPERIMENTAL. Metadata output (i.e., non-Tensor) for a single Run() call.
@@ -235,4 +239,7 @@ message RunMetadata {
 
   // The cost graph for the computation defined by the run call.
   CostGraphDef cost_graph = 2;
+
+  // Graphs of the partitions executed by executors.
+  repeated GraphDef partition_graphs = 3;
 }

@@ -116,6 +116,7 @@ class SessionDebugTest(test_util.TensorFlowTestCase):
       v.initializer.run()
 
       run_options = config_pb2.RunOptions()
+      run_options.output_partition_graphs = True
       debug_url = "file://%s" % self.dump_root_
 
       # Add debug tensor watch for u.
@@ -129,6 +130,8 @@ class SessionDebugTest(test_util.TensorFlowTestCase):
 
       # Invoke Session.run().
       sess.run(w, options=run_options, run_metadata=run_metadata)
+
+      self.assertEqual(1, len(run_metadata.partition_graphs))
 
       # Verify the dump file for u.
       dump_files = os.listdir(os.path.join(self.dump_root_, u_name))
@@ -167,6 +170,7 @@ class SessionDebugTest(test_util.TensorFlowTestCase):
       str2.initializer.run()
 
       run_options = config_pb2.RunOptions()
+      run_options.output_partition_graphs = True
       debug_url = "file://%s" % self.dump_root_
 
       # Add debug tensor watch for u.
@@ -180,6 +184,8 @@ class SessionDebugTest(test_util.TensorFlowTestCase):
 
       # Invoke Session.run().
       sess.run(str_concat, options=run_options, run_metadata=run_metadata)
+
+      self.assertEqual(1, len(run_metadata.partition_graphs))
 
       # Verify the dump file for str1.
       dump_files = os.listdir(os.path.join(self.dump_root_, str1_name))
@@ -236,6 +242,7 @@ class SessionDebugTest(test_util.TensorFlowTestCase):
 
       # Create RunOptions for debug-watching tensors
       run_options = config_pb2.RunOptions()
+      run_options.output_partition_graphs = True
       debug_url = "file://%s" % self.dump_root_
 
       # Add debug tensor watch for u.
@@ -250,6 +257,8 @@ class SessionDebugTest(test_util.TensorFlowTestCase):
       run_metadata = config_pb2.RunMetadata()
 
       r = sess.run(loop, options=run_options, run_metadata=run_metadata)
+
+      self.assertEqual(1, len(run_metadata.partition_graphs))
 
       self.assertEqual(num_iter, r)
 
