@@ -302,6 +302,40 @@ class SessionDebugTest(test_util.TensorFlowTestCase):
         self._verifyTensorDumpFile(dump_file_path, "while/Identity:0",
                                    "DebugIdentity", 0, np.array(k))
 
+  def testOutputPartitionGraphs(self):
+    if test.is_gpu_available():
+      device = ops.device("/gpu:0")
+    else:
+      device = ops.device("/cpu:0")
+
+    with session.Session() as sess:
+      with device:
+        u_init_val = np.array([[5.0, 3.0], [-1.0, 0.0]])
+        v_init_val = np.array([[2.0], [-1.0]])
+
+        # Use node names with overlapping namespace (i.e., parent directory) to
+        # test concurrent, non-racing directory creation.
+        u_name = "testDumpToFile/u"
+        v_name = "testDumpToFile/v"
+
+        u_init = constant_op.constant(u_init_val, shape=[2, 2])
+        u = variables.Variable(u_init, name=u_name)
+        v_init = constant_op.constant(v_init_val, shape=[2, 1])
+        v = variables.Variable(v_init, name=v_name)
+
+        w = math_ops.matmul(u, v, name="testDumpToFile/matmul")
+
+      u.initializer.run()
+      v.initializer.run()
+
+      run_options = config_pb2.RunOptions()
+      run_options.output_partition_graphs = True
+
+      run_metadata = config_pb2.RunMetadata()
+      sess.run(w, options=run_options, run_metadata=run_metadata)
+
+      self.assertEqual(1, len(run_metadata.partition_graphs))
+      print(run_metadata.partition_graphs)
 
 if __name__ == "__main__":
   googletest.main()
