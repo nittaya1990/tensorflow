@@ -49,8 +49,6 @@
 #   updates.
 #
 # In addition, this script obeys the following environment variables:
-# TF_DIST_SERVER_DOCKER_IMAGE:  overrides the default docker image to launch
-#                               TensorFlow (GRPC) servers with
 # TF_DIST_DOCKER_NO_CACHE:      do not use cache when building docker images
 
 
@@ -122,90 +120,11 @@ if [[ ! -z "${TF_DIST_DOCKER_NO_CACHE}" ]] &&
 fi
 
 docker build ${NO_CACHE_FLAG} -t ${DOCKER_IMG_NAME} \
-   -f ${DIR}/Dockerfile.local ${DIR}
+   -f ${DIR}/Dockerfile.local ${DIR} || \
+   die "Failed to build docker image: ${DOCKER_IMG_NAME}"
 
-
-# Attempt to start the docker container with docker, which will run the k8s
-# cluster inside.
-
-# Get current script directory
-CONTAINER_START_LOG=$(mktemp --suffix=.log)
-echo "Log file for starting cluster container: ${CONTAINER_START_LOG}"
-echo ""
-
-${DIR}/local/start_tf_cluster_container.sh \
-      ${LOCAL_K8S_CACHE} \
-      ${DOCKER_IMG_NAME} | \
-    tee ${CONTAINER_START_LOG} &
-
-# Poll start log until the k8s service is started properly or when maximum
-# attempt count is reached.
-MAX_SERVER_POLLING_ATTEMPTS=600
-
-echo "Waiting for docker-in-docker container for local k8s TensorFlow "\
-"cluster to start and launch Kubernetes..."
-
-COUNTER=0
-while true; do
-  sleep 1
-
-  ((COUNTER++))
-  if [[ "${COUNTER}" -ge "${MAX_SERVER_POLLING_ATTEMPTS}" ]]; then
-    die "Reached maximum number of attempts (${MAX_SERVER_POLLING_ATTEMPTS}) "\
-"while waiting for docker-in-docker for local k8s TensorFlow cluster to start"
-  fi
-
-  # Check for hitting max attempt while trying to start docker-in-docker
-  if [[ $(grep -i "Reached maximum number of attempts" \
-                  "${CONTAINER_START_LOG}" | wc -l) == "1" ]]; then
-    die "Docker-in-docker container for local k8s TensorFlow cluster "\
-"FAILED to start"
-  fi
-
-  if [[ $(grep -i "Local Kubernetes cluster is running" \
-          "${CONTAINER_START_LOG}" | wc -l) == "1" ]]; then
-    break
-  fi
-done
-
-# Determine the id of the docker-in-docker container
-DIND_ID=$(get_container_id_by_image_name ${DOCKER_IMG_NAME})
-
-echo "Docker-in-docker container for local k8s TensorFlow cluster has been "\
-"started successfully."
-echo "Docker-in-docker container ID: ${DIND_ID}"
-echo "Launching k8s tf cluster and tests in container ${DIND_ID} ..."
-echo ""
-
-# Launch k8s tf cluster in the docker-in-docker container and perform tests
-SYNC_REPLICAS_FLAG=""
-if [[ ${SYNC_REPLICAS} == "1" ]]; then
-  SYNC_REPLICAS_FLAG="--sync-replicas"
-fi
-
-docker exec ${DIND_ID} \
-       /var/tf-k8s/local/test_local_tf_cluster.sh \
-       ${NUM_WORKERS} ${NUM_PARAMETER_SERVERS} \
-       ${MODEL_NAME_FLAG} ${SYNC_REPLICAS_FLAG}
-TEST_RES=$?
-
-# Tear down: stop docker-in-docker container
-if [[ ${LEAVE_CONTAINER_RUNNING} == "0" ]]; then
-  echo ""
-  echo "Stopping docker-in-docker container ${DIND_ID}"
-
-  docker stop --time=1 ${DIND_ID} || \
-      echo "WARNING: Failed to stop container ${DIND_ID} !!"
-
-  echo ""
-else
-  echo "Will NOT terminate DIND container ${DIND_ID}"
-fi
-
-if [[ "${TEST_RES}" != "0" ]]; then
-    die "Test of distributed TensorFlow runtime on docker-in-docker local "\
-"k8s cluster FAILED"
-else
-    echo "Test of distributed TensorFlow runtime on docker-in-docker local "\
-"k8s cluster PASSED"
-fi
+docker run ${DOCKER_IMG_NAME} \
+    /var/tf_dist_test/scripts/dist_mnist_test.sh \
+    --ps_hosts "localhost:2000,localhost:2001" \
+    --worker_hosts "localhost:3000,localhost:3001" \
+    --num_gpus 0

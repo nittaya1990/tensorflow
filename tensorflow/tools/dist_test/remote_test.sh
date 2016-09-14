@@ -56,7 +56,7 @@
 #                                 TF_DIST_GRPC_SERVER_URL is empty, same below)
 #   TF_DIST_GCLOUD_COMPUTE_ZONE:  gcloud compute zone.
 #   TF_DIST_CONTAINER_CLUSTER:    name of the GKE cluster
-#   TF_DIST_GCLOUD_KEY_FILE_DIR:  path to the host directory that contains
+#   TF_DIST_GCLOUD_KEY_FILE:      path to the host directory that contains
 #                                 the gloud service key file
 #                                 "tensorflow-testing.json"
 #   TF_DIST_GRPC_PORT:            port on which to create the TensorFlow GRPC
@@ -99,9 +99,9 @@ fi
 
 docker build ${NO_CACHE_FLAG} \
     -t ${DOCKER_IMG_NAME} -f "${DIR}/Dockerfile" "${DIR}"
-KEY_FILE_DIR=${TF_DIST_GCLOUD_KEY_FILE_DIR:-"${HOME}/gcloud-secrets"}
+KEY_FILE=${TF_DIST_GCLOUD_KEY_FILE:-"${HOME}/gcloud-secrets/tensorflow-testing.json"}
 
-docker run --rm -v ${KEY_FILE_DIR}:/var/gcloud/secrets \
+docker run --rm -v ${KEY_FILE}:/var/gcloud/secrets/tensorflow-testing.json \
   ${DOCKER_ENV_FLAGS} \
   ${DOCKER_IMG_NAME} \
   /var/tf-dist-test/scripts/dist_test.sh $@
