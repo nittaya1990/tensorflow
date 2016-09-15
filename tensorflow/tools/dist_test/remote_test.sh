@@ -20,23 +20,23 @@
 # runs from within a container based on the image.
 #
 # Usage:
-#   remote_test.sh [--setup-cluster-only]
-#                  [--num-workers <NUM_WORKERS>]
-#                  [--num-parameter-servers <NUM_PARAMETER_SERVERS>]
-#                  [--sync-replicas]
+#   remote_test.sh [--setup_cluster_only]
+#                  [--num_workers <NUM_WORKERS>]
+#                  [--num_parameter_servers <NUM_PARAMETER_SERVERS>]
+#                  [--sync_replicas]
 #
 # Arguments:
-#   --setup-cluster-only:
+#   --setup_cluster_only:
 #       Setup the TensorFlow k8s cluster only, and do not perform testing of
 #       the distributed runtime.
 #
-# --num-workers <NUM_WORKERS>:
+# --num_workers <NUM_WORKERS>:
 #   Specifies the number of worker pods to start
 #
 # --num-parameter-server <NUM_PARAMETER_SERVERS>:
 #   Specifies the number of parameter servers to start
 #
-# --sync-replicas
+# --sync_replicas
 #   Use the synchronized-replica mode. The parameter updates from the replicas
 #   (workers) will be aggregated before applied, which avoids stale parameter
 #   updates.

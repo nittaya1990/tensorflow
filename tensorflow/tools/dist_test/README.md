@@ -4,18 +4,18 @@ runtime in TensorFlow.
 
 There are three general modes of testing:
 
-**1) Launch a docker container and run parameters and servers as separate
-processes therein.**
+**1) Launch a docker container and run parameters servers and workers as
+ separate processes therein.**
 
 For example:
 
     ./local_test.sh
 
 By default, local_test.sh runs the MNIST-with-replicas model as a test.
-However, you can use the --model-name flag to run the tf-learn/wide&deep
+However, you can use the --model_name flag to run the tf-learn/wide&deep
 cesnsu model:
 
-    ./local_test.sh --model-name CENSUS_WIDENDEEP
+    ./local_test.sh --model_name CENSUS_WIDENDEEP
 
 **2) Launch a remote k8s cluster on Google Container Engine (GKE) and run the
 test suite on it**
@@ -74,10 +74,10 @@ You can specify the number of workers by using the --num-workers option flag,
 e.g.,
 
     # For remote testing
-    ./remote_test.sh --num-workers 4
+    ./remote_test.sh --num_workers 4
 
     # For local testing
-    ./local_test.sh --num-workers 4
+    ./local_test.sh --num_workers 4
 
 
 **Building the GRPC server Docker image**

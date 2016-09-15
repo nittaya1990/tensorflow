@@ -24,26 +24,26 @@
 # 3) Call a script to launch a k8s TensorFlow GRPC cluster inside the container
 #    and run the distributed test suite.
 #
-# Usage: local_test.sh [--leave-container-running]
-#                      [--model-name <MODEL_NAME>]
-#                      [--num-workers <NUM_WORKERS>]
-#                      [--num-parameter-servers <NUM_PARAMETER_SERVERS>]
-#                      [--sync-replicas]
+# Usage: local_test.sh [--leave_container_running]
+#                      [--model_name <MODEL_NAME>]
+#                      [--num_workers <NUM_WORKERS>]
+#                      [--num_parameter_servers <NUM_PARAMETER_SERVERS>]
+#                      [--sync_replicas]
 #
-# E.g., local_test.sh --model-name CENSUS_WIDENDEEP
-#       local_test.sh --num-workers 3 --num-parameter-servers 3
+# E.g., local_test.sh --model_name CENSUS_WIDENDEEP
+#       local_test.sh --num_workers 3 --num_parameter_servers 3
 #
 # Arguments:
-# --leave-container-running:  Do not stop the docker-in-docker container after
+# --leave_container_running:  Do not stop the docker-in-docker container after
 #                             the termination of the tests, e.g., for debugging
 #
-# --num-workers <NUM_WORKERS>:
+# --num_workers <NUM_WORKERS>:
 #   Specifies the number of worker pods to start
 #
 # --num-parameter-server <NUM_PARAMETER_SERVERS>:
 #   Specifies the number of parameter servers to start
 #
-# --sync-replicas
+# --sync_replicas
 #   Use the synchronized-replica mode. The parameter updates from the replicas
 #   (workers) will be aggregated before applied, which avoids stale parameter
 #   updates.
@@ -70,20 +70,20 @@ MODEL_NAME=""
 MODEL_NAME_FLAG=""
 NUM_WORKERS=2
 NUM_PARAMETER_SERVERS=2
-SYNC_REPLICAS=0
+SYNC_REPLICAS_FLAG=""
 
 while true; do
-  if [[ $1 == "--leave-container-running" ]]; then
+  if [[ $1 == "--leave_container_running" ]]; then
     LEAVE_CONTAINER_RUNNING=1
-  elif [[ $1 == "--model-name" ]]; then
+  elif [[ $1 == "--model_name" ]]; then
     MODEL_NAME="$2"
-    MODEL_NAME_FLAG="--model-name ${MODEL_NAME}"
-  elif [[ $1 == "--num-workers" ]]; then
+    MODEL_NAME_FLAG="--model_name ${MODEL_NAME}"
+  elif [[ $1 == "--num_workers" ]]; then
     NUM_WORKERS=$2
-  elif [[ $1 == "--num-parameter-servers" ]]; then
+  elif [[ $1 == "--num_parameter_servers" ]]; then
     NUM_PARAMETER_SERVERS=$2
-  elif [[ $1 == "--sync-replicas" ]]; then
-    SYNC_REPLICAS=1
+  elif [[ $1 == "--sync_replicas" ]]; then
+    SYNC_REPLICAS_FLAG="--sync_replicas"
   fi
 
   shift
@@ -96,7 +96,7 @@ echo "LEAVE_CONTAINER_RUNNING: ${LEAVE_CONTAINER_RUNNING}"
 echo "MODEL_NAME: \"${MODEL_NAME}\""
 echo "NUM_WORKERS: ${NUM_WORKERS}"
 echo "NUM_PARAMETER_SERVERS: ${NUM_PARAMETER_SERVERS}"
-echo "SYNC_REPLICAS: \"${SYNC_REPLICAS}\""
+echo "SYNC_REPLICAS_FLAG: \"${SYNC_REPLICAS_FLAG}\""
 
 # Current script directory
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -127,4 +127,4 @@ docker run ${DOCKER_IMG_NAME} \
     /var/tf_dist_test/scripts/dist_mnist_test.sh \
     --ps_hosts "localhost:2000,localhost:2001" \
     --worker_hosts "localhost:3000,localhost:3001" \
-    --num_gpus 0
+    --num_gpus 0 ${SYNC_REPLICAS_FLAG}

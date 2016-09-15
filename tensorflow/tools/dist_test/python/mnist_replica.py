@@ -107,7 +107,7 @@ def main(unused_argv):
   ps_spec = FLAGS.ps_hosts.split(",")
   worker_spec = FLAGS.worker_hosts.split(",")
 
-  # Get the number of workers 
+  # Get the number of workers.
   num_workers = len(worker_spec)
 
   cluster = tf.train.ClusterSpec({
