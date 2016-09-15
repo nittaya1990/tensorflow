@@ -74,9 +74,9 @@ flags.DEFINE_boolean("sync_replicas", False,
                      "wherein the parameter updates from workers are aggregated "
                      "before applied to avoid stale gradients")
 flags.DEFINE_boolean(
-    "existing_servers", False, "Whether servers already "
-    "exist. If True, will use the servers via their GRPC URLs. "
-    "Otherwise, will create an in-process TensorFlow GRPC "
+    "existing_servers", False, "Whether servers already exists. If True, "
+    "will use the worker hosts via their GRPC URLs (one client process "
+    "per worker host). Otherwise, will create an in-process TensorFlow "
     "server.")
 flags.DEFINE_string("ps_hosts","localhost:2222",
                     "Comma-separated list of hostname:port pairs")
