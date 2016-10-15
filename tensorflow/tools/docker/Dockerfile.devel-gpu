@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         git \
         libfreetype6-dev \
+        libcurl3-dev \
         libpng12-dev \
         libzmq3-dev \
         pkg-config \
@@ -66,7 +67,7 @@ RUN echo "build --spawn_strategy=standalone --genrule_strategy=standalone" \
     >>/root/.bazelrc
 ENV BAZELRC /root/.bazelrc
 # Install the most recent bazel release.
-ENV BAZEL_VERSION 0.3.1
+ENV BAZEL_VERSION 0.3.2
 WORKDIR /
 RUN mkdir /bazel && \
     cd /bazel && \
@@ -79,7 +80,8 @@ RUN mkdir /bazel && \
 
 # Download and build TensorFlow.
 
-RUN git clone -b r0.11 --recursive --recurse-submodules https://github.com/tensorflow/tensorflow.git && \
+RUN git clone --depth 1 \
+    https://github.com/tensorflow/tensorflow.git && \
     cd tensorflow && \
     git checkout r0.11
 WORKDIR /tensorflow
@@ -92,10 +94,13 @@ ENV LD_LIBRARY_PATH /usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64
 ENV TF_NEED_CUDA 1
 ENV TF_CUDA_COMPUTE_CAPABILITIES=3.0,3.5,5.2
 
-RUN ./configure && \
+RUN tensorflow/tools/ci_build/builds/configured GPU \
     bazel build -c opt --config=cuda tensorflow/tools/pip_package:build_pip_package && \
     bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/pip && \
     pip install --upgrade /tmp/pip/tensorflow-*.whl
+
+RUN rm -rf /tmp/pip
+RUN rm -rf /root/.cache
 
 WORKDIR /root
 
