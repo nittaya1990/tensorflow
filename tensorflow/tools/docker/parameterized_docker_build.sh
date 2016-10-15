@@ -128,8 +128,10 @@ else
 fi
 
 if [[ ${TF_DOCKER_BUILD_TYPE} == "cpu" ]]; then
-  :
+  DOCKER_BINARY="docker"
 elif   [[ ${TF_DOCKER_BUILD_TYPE} == "gpu" ]]; then
+  DOCKER_BINARY="nvidia-docker"
+
   FINAL_TAG="${FINAL_TAG}-gpu"
   if [[ ${ORIG_DOCKERFILE} == *"."* ]]; then
     # There is already a dot in the tag, use "-"
@@ -167,7 +169,6 @@ else
     DO_PIP_BUILD=1
   fi
 fi
-
 
 # Create tmp directory for Docker build
 TMP_DIR=$(mktemp -d)
@@ -243,11 +244,11 @@ fi
 IMG="${USER}/tensorflow:${FINAL_TAG}"
 echo "Building docker image with image name and tag: ${IMG}"
 
-docker build --no-cache -t "${IMG}" -f "${DOCKERFILE}" "${TMP_DIR}"
+${DOCKER_BINARY} build --no-cache -t "${IMG}" -f "${DOCKERFILE}" "${TMP_DIR}"
 if [[ $? == "0" ]]; then
-  echo "docker build of ${IMG} succeeded"
+  echo "${DOCKER_BINARY} build of ${IMG} succeeded"
 else
-  die "FAIL: docker build of ${IMG} with Dockerfile ${DOCKERFILE} failed"
+  die "FAIL: ${DOCKER_BINARY} build of ${IMG} with Dockerfile ${DOCKERFILE} failed"
 fi
 
 
@@ -266,7 +267,7 @@ echo "  (Log file is at: ${DOCKER_RUN_LOG}"
 echo ""
 
 if [[ "${TF_DOCKER_BUILD_IS_DEVEL}" == "no" ]]; then
-  docker run --rm -p ${CONTAINER_PORT}:${CONTAINER_PORT} \
+  ${DOCKER_BINARY} run --rm -p ${CONTAINER_PORT}:${CONTAINER_PORT} \
       -v ${TMP_DIR}/notebooks:/root/notebooks "${IMG}" \
       2>&1 > "${DOCKER_RUN_LOG}" &
 
@@ -304,7 +305,7 @@ if [[ "${TF_DOCKER_BUILD_IS_DEVEL}" == "no" ]]; then
   docker stop --time=0 ${CONTAINER_ID}
 
 else
-  docker run --rm -p ${CONTAINER_PORT}:${CONTAINER_PORT} \
+  ${DOCKER_BINARY} run --rm -p ${CONTAINER_PORT}:${CONTAINER_PORT} \
       -v ${TMP_DIR}/notebooks:/root/notebooks "${IMG}" \
       bash -c \
       "cd /tensorflow; tensorflow/tools/ci_build/builds/test_tutorials.sh"
