@@ -6,8 +6,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         curl \
         git \
-        libfreetype6-dev \
         libcurl3-dev \
+        libfreetype6-dev \
         libpng12-dev \
         libzmq3-dev \
         pkg-config \
@@ -80,8 +80,7 @@ RUN mkdir /bazel && \
 
 # Download and build TensorFlow.
 
-RUN git clone --depth 1 \
-    https://github.com/tensorflow/tensorflow.git && \
+RUN git clone https://github.com/tensorflow/tensorflow.git && \
     cd tensorflow && \
     git checkout r0.11
 WORKDIR /tensorflow
@@ -96,6 +95,7 @@ RUN tensorflow/tools/ci_build/builds/configured GPU \
     bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/pip && \
     pip install --upgrade /tmp/pip/tensorflow-*.whl
 
+# Clean up pip wheel and Bazel cache.
 RUN rm -rf /tmp/pip
 RUN rm -rf /root/.cache
 
