@@ -93,11 +93,10 @@ WORKDIR /tensorflow
 RUN tensorflow/tools/ci_build/builds/configured CPU \
     bazel build -c opt tensorflow/tools/pip_package:build_pip_package && \
     bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/pip && \
-    pip install --upgrade /tmp/pip/tensorflow-*.whl
-
-# Clean up pip wheel and Bazel cache.
-RUN rm -rf /tmp/pip
-RUN rm -rf /root/.cache
+    pip install --upgrade /tmp/pip/tensorflow-*.whl && \
+    rm -rf /tmp/pip && \
+    rm -rf /root/.cache
+# Clean up pip wheel and Bazel cache when done.
 
 # TensorBoard
 EXPOSE 6006
