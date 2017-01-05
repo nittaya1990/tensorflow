@@ -43,7 +43,11 @@ class MatchFilenamesOnceTest(test_lib.TestCase):
 
   def test(self):
     temp_dir = self.get_temp_dir()
+    print("temp_dir = %s" % temp_dir)
+
     filenames = [os.path.join(temp_dir, n) for n in os.listdir(temp_dir)]
+    print("filenames = %s" % repr(filenames))
+
     additional = [
         os.path.join(self.get_temp_dir(), "match_filenames.%d" % i)
         for i in range(3)
@@ -51,6 +55,12 @@ class MatchFilenamesOnceTest(test_lib.TestCase):
     for name in additional:
       with open(name, "w") as f:
         f.write("Some contents")
+
+
+    import glob
+    print("glob result:")
+    print(glob.glob(os.path.join(temp_dir, "*")))
+    print(glob.glob(os.path.join(temp_dir, "*", "*")))
 
     filenames = list(set(filenames + additional))
     with self.test_session():
