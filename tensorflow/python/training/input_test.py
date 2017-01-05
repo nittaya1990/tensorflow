@@ -58,6 +58,8 @@ class MatchFilenamesOnceTest(test_lib.TestCase):
       one = inp.match_filenames_once(additional[1])
       variables.global_variables_initializer().run()
       variables.local_variables_initializer().run()
+      print("filenames = %s" % repr(filenames))
+      print(type(map(compat.as_bytes, filenames)))
       print("map(compat.as_bytes, filenames) = %s" %
             repr(map(compat.as_bytes, filenames)))
       print("star.eval() = %s" % repr(star.eval()))
