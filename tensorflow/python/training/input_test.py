@@ -58,8 +58,19 @@ class MatchFilenamesOnceTest(test_lib.TestCase):
       one = inp.match_filenames_once(additional[1])
       variables.global_variables_initializer().run()
       variables.local_variables_initializer().run()
+      print("map(compat.as_bytes, filenames) = %s" %
+            repr(map(compat.as_bytes, filenames)))
+      print("star.eval() = %s" % repr(star.eval()))
       self.assertItemsEqual(map(compat.as_bytes, filenames), star.eval())
+
+      print("map(compat.as_bytes, filenames) = %s" %
+            repr(map(compat.as_bytes, additional)))
+      print("star.eval() = %s" % repr(question.eval()))
       self.assertItemsEqual(map(compat.as_bytes, additional), question.eval())
+
+      print("map(compat.as_bytes, filenames) = %s" %
+            repr([compat.as_bytes(additional[1])]))
+      print("star.eval() = %s" % repr(one.eval()))
       self.assertItemsEqual([compat.as_bytes(additional[1])], one.eval())
 
 
