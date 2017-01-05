@@ -49,7 +49,9 @@ class MatchFilenamesOnceTest(test_lib.TestCase):
         for i in range(3)
     ]
     for name in additional:
-      open(name, "w").write("Some contents")
+      with open(name, "w") as f:
+        f.write("Some contents")
+
     filenames = list(set(filenames + additional))
     with self.test_session():
       star = inp.match_filenames_once(os.path.join(self.get_temp_dir(), "*"))
