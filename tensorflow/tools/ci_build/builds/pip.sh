@@ -215,7 +215,9 @@ if [[ $(uname) == "Linux" ]]; then
   AUDITED_WHL_NAME="${WHL_DIR}/$(echo ${WHL_BASE_NAME} | sed "s/linux/manylinux1/")"
 
   # Repair the wheels for cpu manylinux1
-  if [[ ${CONTAINER_TYPE} == "cpu" ]]; then
+  # Python 3.6 wheels cannot be repaired by auditwheel due to .so file in purelib.
+  if [[ ${CONTAINER_TYPE} == "cpu" ]] && \
+     [[ ${PY_MAJOR_MINOR_VER} != "3.6" ]]; then
     echo "auditwheel repairing ${WHL_PATH}"
     auditwheel repair -w ${WHL_DIR} ${WHL_PATH}
 
