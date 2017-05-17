@@ -790,7 +790,11 @@ def _symlink_genrule_for_dir(repository_ctx, src_dir, dest_dir, genrule_name,
     if dest_files[i] != "":
       # If we have only one file to link we do not want to use the dest_dir, as
       # $(@D) will include the full path to the file.
-      dest = ' $(@D)/' + dest_dir + '/' + '/'.join(dest_files[i].split('/')[1:])
+      if '/' in dest_files[i]:
+        dest = ' $(@D)/' + dest_dir + dest_files[i][dest_files[i].find('/'):]
+      else:
+        dest = ' $(@D)/' + dest_dir + '/' + dest_files[i]
+
       # dest = ' $(@D)/' + dest_dir + dest_files[i] if len(dest_files) != 1 else ' $(@D)' + dest_files[i]
       command.append('ln -s ' + src_files[i] + dest)
       outs.append('      "' + dest_dir + dest_files[i] + '",')
