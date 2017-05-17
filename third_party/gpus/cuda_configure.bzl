@@ -782,8 +782,11 @@ def _symlink_genrule_for_dir(repository_ctx, src_dir, dest_dir, genrule_name,
     dest_files = files.replace(src_dir, '').splitlines()
     src_files = files.splitlines()
   command = []
+  command.append("mkdir -p dest_dir")
   outs = []
+  print("dest_dir = %s" % dest_dir)  # DEBUG
   for i in range(len(dest_files)):
+    print("dest_files[i] = %s" % dest_files[i])  # DEBUG
     if dest_files[i] != "":
       # If we have only one file to link we do not want to use the dest_dir, as
       # $(@D) will include the full path to the file.
