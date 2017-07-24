@@ -38,6 +38,8 @@ REGISTER_KERNEL_BUILDER(Name("PlaceholderWithDefault").Device(DEVICE_CPU),
 
 REGISTER_KERNEL_BUILDER(Name("RefIdentity").Device(DEVICE_CPU), IdentityOp);
 
+REGISTER_KERNEL_BUILDER(Name("DebugGradientIdentity").Device(DEVICE_CPU), IdentityOp);
+
 #if TENSORFLOW_USE_SYCL
 #define REGISTER_SYCL_KERNEL(type)                                           \
   REGISTER_KERNEL_BUILDER(                                                   \

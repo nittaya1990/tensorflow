@@ -1687,6 +1687,17 @@ Return the same ref tensor as the input ref tensor.
 )Doc");
 
 // --------------------------------------------------------------------------
+REGISTER_OP("DebugGradientIdentity")
+    .Input("input: T")
+    .Output("output: T")
+    .Attr("T: type")
+    .SetShapeFn(shape_inference::UnchangedShape)
+    .SetAllowsUninitializedInput()
+    .Doc(R"Doc(
+Identity op for gradient debugging.
+)Doc");
+
+// --------------------------------------------------------------------------
 REGISTER_OP("StopGradient")
     .Input("input: T")
     .Output("output: T")
