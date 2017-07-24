@@ -64,18 +64,13 @@ py_library(
     ],
 )
 
-tf_gen_op_wrapper_py(
-    name = "debug_ops",
-    deps = ["//tensorflow/core:debug_ops_op_lib"],
-)
-
 py_library(
     name = "debug_gradients",
     srcs = ["lib/debug_gradients.py"],
     srcs_version = "PY2AND3",
     deps = [
         ":debug_data",
-        ":debug_ops",
+        "//tensorflow/python:debug_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "@six_archive//:six",
