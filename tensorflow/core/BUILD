@@ -555,10 +555,13 @@ tf_gen_op_libs(
 )
 
 tf_gen_op_libs(
-    op_lib_names = [
-        "debug_ops",
-    ],
+    op_lib_names = ["debug_ops"],
     deps = ["//tensorflow/core/kernels:debug_ops"],
+)
+
+tf_gen_op_libs(
+    op_lib_names = ["debug_gradient_ops"],
+    deps = ["//tensorflow/core/kernels:debug_gradient_ops"],
 )
 
 # cc_library(

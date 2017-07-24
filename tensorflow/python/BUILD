@@ -865,11 +865,6 @@ py_test(
 )
 
 tf_gen_op_wrapper_py(
-    name = "debug_ops",
-    deps = ["//tensorflow/core:debug_ops_op_lib"],
-)
-
-tf_gen_op_wrapper_py(
     name = "test_ops",
     out = "framework/test_ops.py",
     deps = [":test_ops_kernels"],

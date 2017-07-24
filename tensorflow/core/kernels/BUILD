@@ -552,6 +552,12 @@ tf_kernel_library(
     ],
 )
 
+tf_kernel_library(
+    name = "debug_gradient_ops",
+    prefix = "debug_gradient_ops",
+    deps = ARRAY_DEPS,
+)
+
 cc_library(
     name = "array",
     deps = [
