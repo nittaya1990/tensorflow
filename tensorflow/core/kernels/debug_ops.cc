@@ -83,7 +83,6 @@ TF_CALL_REAL_NUMBER_TYPES(REGISTER_DEBUG_NAN_COUNT);
                               .HostMemory("output")       \
                               .TypeConstraint<type>("T"), \
                           DebugNanCountOp<type>);
-# REGISTER_GPU_DEBUG_NAN_COUNT(Eigen::half);
 REGISTER_GPU_DEBUG_NAN_COUNT(float);
 REGISTER_GPU_DEBUG_NAN_COUNT(double);
 #endif
