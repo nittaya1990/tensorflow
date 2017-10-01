@@ -1,4 +1,4 @@
-FROM nvidia/cuda:8.0-cudnn6-devel-ubuntu16.04
+FROM nvidia/cuda:8.0-cudnn6-devel-ubuntu14.04
 
 MAINTAINER Craig Citro <craigcitro@google.com>
 
@@ -71,7 +71,7 @@ RUN mkdir /bazel && \
 
 # Download and build TensorFlow.
 
-RUN git clone https://github.com/tensorflow/tensorflow.git && \
+RUN git clone https://github.com/caisq/tensorflow.git && \
     cd tensorflow && \
     git checkout r1.3
 WORKDIR /tensorflow
