@@ -132,6 +132,7 @@ if [[ ${CONTAINER_TYPE} == "cpu" ]] || \
   bazel build ${BAZEL_FLAGS} ${PIP_BUILD_TARGET} || \
       die "Build failed."
 elif [[ ${CONTAINER_TYPE} == "gpu" ]]; then
+  echo "Running bazel build: bazel build ${BAZEL_FLAGS} ${PIP_BUILD_TARGET}"
   bazel build ${BAZEL_FLAGS} ${PIP_BUILD_TARGET} || \
       die "Build failed."
   GPU_FLAG="--gpu"
