@@ -29,6 +29,7 @@ import numpy as np
 from six.moves import urllib
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
+from tensorflow.python import debug as tf_debug
 
 # Step 1: Download the data.
 url = 'http://mattmahoney.net/dc/'
@@ -207,6 +208,11 @@ with tf.Session(graph=graph) as session:
   # We must initialize all variables before we use them.
   init.run()
   print('Initialized')
+
+  def watch_fn(fetches, feeds):
+    return tf_debug.WatchOptions(debug_ops=["DebugIdentity(gated_grpc=true)"])
+  session = tf_debug.GrpcDebugWrapperSession(
+      session, "localhost:7065", watch_fn=watch_fn)
 
   average_loss = 0
   for step in xrange(num_steps):
