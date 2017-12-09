@@ -303,6 +303,13 @@ create_activate_virtualenv_and_install_tensorflow() {
   else
     # Verify that virtualenv exists
     if [[ -z $(which virtualenv) ]]; then
+      echo "Content of /usr/bin":
+      ls /usr/bin
+      echo
+      echo "Content of /usr/local/bin":
+      ls /usr/local/bin
+      echo
+      
       die "FAILED: virtualenv not available on path"
     fi
     virtualenv ${VIRTUALENV_FLAGS} \
